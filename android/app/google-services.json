@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "972297599118",
+    "project_id": "soloapp-52a6b",
+    "storage_bucket": "soloapp-52a6b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:972297599118:android:c7f4d128ea0e6dd90b31df",
+        "android_client_info": {
+          "package_name": "ph.edu.ssu.caslms"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjPrf1jdHEt1lOTIXLigTDQBNci5HwijI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

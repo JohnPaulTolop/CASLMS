@@ -1,0 +1,2807 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../services/assessment_submission_service.dart';
+
+class StudentModuleDetailScreen extends StatefulWidget {
+  final String courseId;
+  final String courseCode;
+  final String courseTitle;
+  final String moduleId;
+
+  const StudentModuleDetailScreen({
+    super.key,
+    required this.courseId,
+    required this.courseCode,
+    required this.courseTitle,
+    required this.moduleId,
+  });
+
+  @override
+  State<StudentModuleDetailScreen> createState() =>
+      _StudentModuleDetailScreenState();
+}
+
+class _StudentModuleDetailScreenState
+    extends State<StudentModuleDetailScreen> {
+  // ============================================================
+  // DESIGN
+  // ============================================================
+
+  static const Color primaryBlue = Color(0xFF1769FF);
+  static const Color background = Color(0xFFF7F9FC);
+  static const Color textDark = Color(0xFF10182F);
+  static const Color textGrey = Color(0xFF68738A);
+  static const Color borderColor = Color(0xFFE6EAF0);
+
+  static const Color green = Color(0xFF26A65B);
+  static const Color orange = Color(0xFFFF9418);
+  static const Color red = Color(0xFFFF4B4B);
+  static const Color purple = Color(0xFF7B4DFF);
+
+  // ============================================================
+  // FIREBASE
+  // ============================================================
+
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  final AssessmentSubmissionService _submissionService =
+      AssessmentSubmissionService();
+
+  // ============================================================
+  // STATE
+  // ============================================================
+
+  int _selectedTab = 1;
+
+  bool _isLoading = true;
+  bool _isSubmitting = false;
+
+  String? _errorMessage;
+
+  Map<String, dynamic>? _course;
+  Map<String, dynamic>? _module;
+
+  List<Map<String, dynamic>> _assessments = [];
+  List<Map<String, dynamic>> _submissions = [];
+  List<Map<String, dynamic>> _resources = [];
+
+  // ============================================================
+  // INIT
+  // ============================================================
+
+  @override
+  void initState() {
+    super.initState();
+
+    _loadPage();
+  }
+
+  // ============================================================
+  // LOAD PAGE
+  // ============================================================
+
+  Future<void> _loadPage() async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
+
+    try {
+      final String? studentId = _auth.currentUser?.uid;
+
+      if (studentId == null || studentId.isEmpty) {
+        throw Exception(
+          'You must be logged in to open this module.',
+        );
+      }
+
+      // ----------------------------------------------------------
+      // CHECK ENROLLMENT
+      // ----------------------------------------------------------
+
+      final String enrollmentId =
+          '${widget.courseId}_$studentId';
+
+      final DocumentSnapshot<Map<String, dynamic>>
+          enrollmentDocument =
+          await _firestore
+              .collection('enrollments')
+              .doc(enrollmentId)
+              .get();
+
+      if (!enrollmentDocument.exists ||
+          enrollmentDocument.data() == null) {
+        throw Exception(
+          'You are not enrolled in this course.',
+        );
+      }
+
+      final String enrollmentStatus =
+          (enrollmentDocument.data()!['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+
+      if (enrollmentStatus != 'active') {
+        throw Exception(
+          'Your enrollment in this course is not active.',
+        );
+      }
+
+      // ----------------------------------------------------------
+      // COURSE
+      // ----------------------------------------------------------
+
+      final DocumentSnapshot<Map<String, dynamic>>
+          courseDocument =
+          await _firestore
+              .collection('courses')
+              .doc(widget.courseId)
+              .get();
+
+      if (!courseDocument.exists ||
+          courseDocument.data() == null) {
+        throw Exception(
+          'Course could not be found.',
+        );
+      }
+
+      final Map<String, dynamic> courseData =
+          courseDocument.data()!;
+
+      final String courseStatus =
+          (courseData['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+
+      if (courseStatus != 'active') {
+        throw Exception(
+          'This course is not currently active.',
+        );
+      }
+
+      // ----------------------------------------------------------
+      // MODULE
+      // ----------------------------------------------------------
+
+      final DocumentSnapshot<Map<String, dynamic>>
+          moduleDocument =
+          await _firestore
+              .collection('modules')
+              .doc(widget.moduleId)
+              .get();
+
+      if (!moduleDocument.exists ||
+          moduleDocument.data() == null) {
+        throw Exception(
+          'Module could not be found.',
+        );
+      }
+
+      final Map<String, dynamic> moduleData =
+          moduleDocument.data()!;
+
+      final String moduleCourseId =
+          (moduleData['courseId'] ?? '')
+              .toString()
+              .trim();
+
+      if (moduleCourseId != widget.courseId) {
+        throw Exception(
+          'This module does not belong to the selected course.',
+        );
+      }
+
+      final String moduleStatus =
+          (moduleData['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+
+      if (moduleStatus != 'published') {
+        throw Exception(
+          'This module is not currently published.',
+        );
+      }
+
+      // ----------------------------------------------------------
+      // PUBLISHED ASSESSMENTS
+      // ----------------------------------------------------------
+
+      final QuerySnapshot<Map<String, dynamic>>
+          assessmentSnapshot =
+          await _firestore
+              .collection('assessments')
+              .where(
+                'moduleId',
+                isEqualTo: widget.moduleId,
+              )
+              .get();
+
+      final List<Map<String, dynamic>> assessments = [];
+
+      for (final document in assessmentSnapshot.docs) {
+        final Map<String, dynamic> data =
+            document.data();
+
+        final String courseId =
+            (data['courseId'] ?? '')
+                .toString();
+
+        final String status =
+            (data['status'] ?? '')
+                .toString()
+                .toLowerCase();
+
+        if (courseId != widget.courseId) {
+          continue;
+        }
+
+        if (status != 'published') {
+          continue;
+        }
+
+        assessments.add({
+          ...data,
+          'id': document.id,
+          'assessmentId': document.id,
+        });
+      }
+
+      assessments.sort(
+        (a, b) {
+          final DateTime? aDue =
+              _dateFrom(a['dueAt']);
+
+          final DateTime? bDue =
+              _dateFrom(b['dueAt']);
+
+          if (aDue == null && bDue == null) {
+            return 0;
+          }
+
+          if (aDue == null) {
+            return 1;
+          }
+
+          if (bDue == null) {
+            return -1;
+          }
+
+          return aDue.compareTo(bDue);
+        },
+      );
+
+      // ----------------------------------------------------------
+      // CURRENT STUDENT SUBMISSIONS
+      // ----------------------------------------------------------
+
+      final List<Map<String, dynamic>> submissions =
+          await _submissionService
+              .getMyModuleSubmissions(
+        courseId: widget.courseId,
+        moduleId: widget.moduleId,
+      );
+
+      // ----------------------------------------------------------
+      // PUBLISHED LEARNING MATERIALS
+      //
+      // Students must never see instructor draft materials.
+      // ----------------------------------------------------------
+
+      final QuerySnapshot<Map<String, dynamic>>
+          resourceSnapshot =
+          await _firestore
+              .collection('moduleResources')
+              .where(
+                'moduleId',
+                isEqualTo: widget.moduleId,
+              )
+              .get();
+
+      final List<Map<String, dynamic>> resources = [];
+
+      for (final document in resourceSnapshot.docs) {
+        final Map<String, dynamic> data =
+            document.data();
+
+        final String resourceCourseId =
+            (data['courseId'] ?? '')
+                .toString()
+                .trim();
+
+        final String status =
+            (data['status'] ?? '')
+                .toString()
+                .trim()
+                .toLowerCase();
+
+        if (resourceCourseId != widget.courseId) {
+          continue;
+        }
+
+        if (status != 'published') {
+          continue;
+        }
+
+        resources.add({
+          ...data,
+          'id': document.id,
+          'resourceId': document.id,
+        });
+      }
+
+      resources.sort(
+        (a, b) {
+          final DateTime? first =
+              _dateFrom(
+            a['createdAt'],
+          );
+
+          final DateTime? second =
+              _dateFrom(
+            b['createdAt'],
+          );
+
+          if (first == null &&
+              second == null) {
+            return 0;
+          }
+
+          if (first == null) {
+            return 1;
+          }
+
+          if (second == null) {
+            return -1;
+          }
+
+          return second.compareTo(
+            first,
+          );
+        },
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _course = {
+          ...courseData,
+          'id': courseDocument.id,
+        };
+
+        _module = {
+          ...moduleData,
+          'id': moduleDocument.id,
+        };
+
+        _assessments = assessments;
+        _submissions = submissions;
+        _resources = resources;
+
+        _isLoading = false;
+      });
+    } on AssessmentSubmissionException catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e.message;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage = e
+            .toString()
+            .replaceFirst(
+              'Exception: ',
+              '',
+            );
+      });
+    }
+  }
+
+  // ============================================================
+  // DYNAMIC VALUES
+  // ============================================================
+
+  String get _moduleTitle {
+    return (_module?['title'] ?? 'Module')
+        .toString();
+  }
+
+  String get _moduleDescription {
+    return (_module?['description'] ?? '')
+        .toString()
+        .trim();
+  }
+
+  int get _moduleOrder {
+    return (_module?['order'] as num?)
+            ?.toInt() ??
+        0;
+  }
+
+  String get _instructorName {
+    return (_course?['instructorName'] ?? '')
+        .toString()
+        .trim();
+  }
+
+  // ============================================================
+  // SUBMISSION LOOKUP
+  // ============================================================
+
+  Map<String, dynamic>? _submissionFor(
+    String assessmentId,
+  ) {
+    for (final submission in _submissions) {
+      if ((submission['assessmentId'] ?? '')
+              .toString() ==
+          assessmentId) {
+        return submission;
+      }
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // OPEN EXTERNAL LINK
+  // ============================================================
+
+  Future<void> _openAssessment(
+    Map<String, dynamic> assessment,
+  ) async {
+    final String url =
+        (assessment['externalUrl'] ?? '')
+            .toString()
+            .trim();
+
+    if (url.isEmpty) {
+      _showError(
+        'This assessment does not have a valid link.',
+      );
+
+      return;
+    }
+
+    final Uri? uri = Uri.tryParse(url);
+
+    if (uri == null ||
+        !uri.hasScheme ||
+        !uri.hasAuthority ||
+        (uri.scheme != 'http' &&
+            uri.scheme != 'https')) {
+      _showError(
+        'This assessment link is invalid.',
+      );
+
+      return;
+    }
+
+    try {
+      final bool opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!opened && mounted) {
+        _showError(
+          'Unable to open the assessment link.',
+        );
+      }
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      _showError(
+        'Unable to open assessment: $e',
+      );
+    }
+  }
+
+
+  // ============================================================
+  // OPEN LEARNING RESOURCE
+  // ============================================================
+
+  Future<void> _openResource(
+    Map<String, dynamic> resource,
+  ) async {
+    final String deliveryType =
+        (resource['deliveryType'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+
+    String url = '';
+
+    if (deliveryType == 'external_link') {
+      url = (resource['externalUrl'] ?? '')
+          .toString()
+          .trim();
+    } else {
+      url = (resource['fileUrl'] ?? '')
+          .toString()
+          .trim();
+    }
+
+    if (url.isEmpty) {
+      _showError(
+        'This learning material does not have a valid file or link.',
+      );
+
+      return;
+    }
+
+    final Uri? uri = Uri.tryParse(
+      url,
+    );
+
+    if (uri == null ||
+        !uri.hasScheme ||
+        !uri.hasAuthority ||
+        (uri.scheme != 'http' &&
+            uri.scheme != 'https')) {
+      _showError(
+        'This learning material has an invalid URL.',
+      );
+
+      return;
+    }
+
+    try {
+      final bool opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!opened && mounted) {
+        _showError(
+          'Unable to open this learning material.',
+        );
+      }
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      _showError(
+        'Unable to open learning material: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // MARK SUBMITTED
+  // ============================================================
+
+  Future<void> _markSubmitted(
+    Map<String, dynamic> assessment,
+  ) async {
+    if (_isSubmitting) {
+      return;
+    }
+
+    final String assessmentId =
+        (assessment['assessmentId'] ??
+                assessment['id'] ??
+                '')
+            .toString()
+            .trim();
+
+    if (assessmentId.isEmpty) {
+      _showError(
+        'Assessment ID is missing.',
+      );
+
+      return;
+    }
+
+    final String title =
+        (assessment['title'] ??
+                'Assessment')
+            .toString();
+
+    final bool? confirmed =
+        await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text(
+            'Mark as Submitted?',
+          ),
+          content: Text(
+            'Only continue after you have completed "$title" on the external assessment website.\n\n'
+            'CASLMS cannot automatically verify your Google Form answers.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  false,
+                );
+              },
+              child: const Text(
+                'Cancel',
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  true,
+                );
+              },
+              style:
+                  ElevatedButton.styleFrom(
+                backgroundColor:
+                    primaryBlue,
+              ),
+              child: const Text(
+                'Mark Submitted',
+                style: TextStyle(
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    try {
+      await _submissionService
+          .markAsSubmitted(
+        assessmentId: assessmentId,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      await _loadPage();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Assessment marked as submitted.',
+          ),
+          backgroundColor: green,
+          behavior:
+              SnackBarBehavior.floating,
+        ),
+      );
+    } on AssessmentSubmissionException catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      _showError(
+        e.message,
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      _showError(
+        'Unable to submit assessment: $e',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
+  // ERROR
+  // ============================================================
+
+  void _showError(
+    String message,
+  ) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+        .hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+        ),
+        backgroundColor: red,
+        behavior:
+            SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // ============================================================
+  // DATE HELPERS
+  // ============================================================
+
+  DateTime? _dateFrom(
+    dynamic value,
+  ) {
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+
+    if (value is DateTime) {
+      return value;
+    }
+
+    return null;
+  }
+
+  bool _isPastDue(
+    Map<String, dynamic> assessment,
+  ) {
+    final DateTime? dueAt =
+        _dateFrom(
+      assessment['dueAt'],
+    );
+
+    if (dueAt == null) {
+      return false;
+    }
+
+    return DateTime.now()
+        .isAfter(
+      dueAt,
+    );
+  }
+
+  String _formatDate(
+    dynamic value,
+  ) {
+    final DateTime? date =
+        _dateFrom(value);
+
+    if (date == null) {
+      return 'No due date';
+    }
+
+    final DateTime local =
+        date.toLocal();
+
+    const List<String> months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
+    int hour = local.hour;
+
+    final String period =
+        hour >= 12
+            ? 'PM'
+            : 'AM';
+
+    if (hour == 0) {
+      hour = 12;
+    } else if (hour > 12) {
+      hour -= 12;
+    }
+
+    final String minute =
+        local.minute
+            .toString()
+            .padLeft(
+              2,
+              '0',
+            );
+
+    return '${months[local.month - 1]} '
+        '${local.day}, ${local.year} • '
+        '$hour:$minute $period';
+  }
+
+  String _formatSubmittedAt(
+    dynamic value,
+  ) {
+    final DateTime? date =
+        _dateFrom(value);
+
+    if (date == null) {
+      return 'Submitted';
+    }
+
+    return 'Submitted ${_formatDate(value)}';
+  }
+
+  // ============================================================
+  // ASSESSMENT ICON
+  // ============================================================
+
+  IconData _assessmentIcon(
+    String type,
+  ) {
+    switch (type.toLowerCase()) {
+      case 'quiz':
+        return Icons.quiz_outlined;
+
+      case 'activity':
+        return Icons.task_alt_outlined;
+
+      case 'assignment':
+        return Icons.assignment_outlined;
+
+      case 'exam':
+        return Icons.fact_check_outlined;
+
+      default:
+        return Icons.description_outlined;
+    }
+  }
+
+  Color _assessmentColor(
+    String type,
+  ) {
+    switch (type.toLowerCase()) {
+      case 'quiz':
+        return primaryBlue;
+
+      case 'activity':
+        return orange;
+
+      case 'assignment':
+        return purple;
+
+      case 'exam':
+        return red;
+
+      default:
+        return primaryBlue;
+    }
+  }
+
+  String _capitalize(
+    String value,
+  ) {
+    if (value.isEmpty) {
+      return value;
+    }
+
+    return '${value[0].toUpperCase()}'
+        '${value.substring(1)}';
+  }
+
+
+  // ============================================================
+  // RESOURCE HELPERS
+  // ============================================================
+
+  String _resourceType(
+    Map<String, dynamic> resource,
+  ) {
+    return (resource['resourceType'] ??
+            'file')
+        .toString()
+        .trim()
+        .toLowerCase();
+  }
+
+  String _resourceDeliveryType(
+    Map<String, dynamic> resource,
+  ) {
+    return (resource['deliveryType'] ??
+            'uploaded_file')
+        .toString()
+        .trim()
+        .toLowerCase();
+  }
+
+  String _resourceTypeLabel(
+    Map<String, dynamic> resource,
+  ) {
+    final String deliveryType =
+        _resourceDeliveryType(
+      resource,
+    );
+
+    final String type =
+        _resourceType(
+      resource,
+    );
+
+    if (deliveryType ==
+        'external_link') {
+      if (type == 'video') {
+        return 'Video Link';
+      }
+
+      return 'External Link';
+    }
+
+    switch (type) {
+      case 'pdf':
+        return 'PDF Document';
+
+      case 'document':
+        return 'Document';
+
+      case 'presentation':
+        return 'Presentation';
+
+      case 'spreadsheet':
+        return 'Spreadsheet';
+
+      case 'image':
+        return 'Image';
+
+      case 'video':
+        return 'Video';
+
+      case 'link':
+        return 'External Link';
+
+      default:
+        return 'File';
+    }
+  }
+
+  IconData _resourceIcon(
+    Map<String, dynamic> resource,
+  ) {
+    final String deliveryType =
+        _resourceDeliveryType(
+      resource,
+    );
+
+    final String type =
+        _resourceType(
+      resource,
+    );
+
+    if (deliveryType ==
+        'external_link') {
+      if (type == 'video') {
+        return Icons
+            .play_circle_outline_rounded;
+      }
+
+      return Icons.link_rounded;
+    }
+
+    switch (type) {
+      case 'pdf':
+        return Icons
+            .picture_as_pdf_rounded;
+
+      case 'document':
+        return Icons.description_rounded;
+
+      case 'presentation':
+        return Icons.slideshow_rounded;
+
+      case 'spreadsheet':
+        return Icons.table_chart_rounded;
+
+      case 'image':
+        return Icons.image_rounded;
+
+      case 'video':
+        return Icons.video_file_rounded;
+
+      default:
+        return Icons
+            .insert_drive_file_rounded;
+    }
+  }
+
+  Color _resourceColor(
+    Map<String, dynamic> resource,
+  ) {
+    final String deliveryType =
+        _resourceDeliveryType(
+      resource,
+    );
+
+    if (deliveryType ==
+        'external_link') {
+      return primaryBlue;
+    }
+
+    switch (_resourceType(
+      resource,
+    )) {
+      case 'pdf':
+        return red;
+
+      case 'document':
+        return primaryBlue;
+
+      case 'presentation':
+        return orange;
+
+      case 'spreadsheet':
+        return green;
+
+      case 'image':
+        return purple;
+
+      case 'video':
+        return primaryBlue;
+
+      default:
+        return primaryBlue;
+    }
+  }
+
+  String _formatResourceSize(
+    dynamic value,
+  ) {
+    final int bytes =
+        value is num
+            ? value.toInt()
+            : 0;
+
+    if (bytes <= 0) {
+      return '';
+    }
+
+    if (bytes < 1024) {
+      return '$bytes B';
+    }
+
+    final double kb =
+        bytes / 1024;
+
+    if (kb < 1024) {
+      return '${kb.toStringAsFixed(1)} KB';
+    }
+
+    final double mb =
+        kb / 1024;
+
+    return '${mb.toStringAsFixed(1)} MB';
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return Scaffold(
+      backgroundColor: primaryBlue,
+      body: SafeArea(
+        bottom: false,
+        child: Align(
+          alignment:
+              Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints:
+                const BoxConstraints(
+              maxWidth: 1200,
+            ),
+            child: _buildBody(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child:
+            CircularProgressIndicator(
+          color: Colors.white,
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return _buildErrorState();
+    }
+
+    return Column(
+      children: [
+        _buildHeader(),
+
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            decoration:
+                const BoxDecoration(
+              color: background,
+              borderRadius:
+                  BorderRadius.only(
+                topLeft:
+                    Radius.circular(
+                  30,
+                ),
+                topRight:
+                    Radius.circular(
+                  30,
+                ),
+              ),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(
+                  height: 12,
+                ),
+
+                _buildTabs(),
+
+                const SizedBox(
+                  height: 4,
+                ),
+
+                Expanded(
+                  child:
+                      _buildSelectedTab(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // HEADER
+  // ============================================================
+
+  Widget _buildHeader() {
+    return Padding(
+      padding:
+          const EdgeInsets.fromLTRB(
+        16,
+        8,
+        16,
+        26,
+      ),
+      child: Column(
+        children: [
+          Align(
+            alignment:
+                Alignment.centerLeft,
+            child: IconButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                );
+              },
+              icon: const Icon(
+                Icons
+                    .arrow_back_ios_new_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+          ),
+
+          Container(
+            width: 62,
+            height: 62,
+            decoration:
+                BoxDecoration(
+              color: Colors.white
+                  .withValues(
+                alpha: 0.16,
+              ),
+              borderRadius:
+                  BorderRadius.circular(
+                20,
+              ),
+            ),
+            child: const Icon(
+              Icons
+                  .menu_book_rounded,
+              color: Colors.white,
+              size: 31,
+            ),
+          ),
+
+          const SizedBox(
+            height: 13,
+          ),
+
+          Text(
+            widget.courseCode,
+            style:
+                const TextStyle(
+              color: Colors.white70,
+              fontSize: 11,
+              fontWeight:
+                  FontWeight.w800,
+            ),
+          ),
+
+          const SizedBox(
+            height: 5,
+          ),
+
+          Text(
+            _moduleTitle,
+            textAlign:
+                TextAlign.center,
+            style:
+                const TextStyle(
+              color: Colors.white,
+              fontSize: 23,
+              fontWeight:
+                  FontWeight.w800,
+            ),
+          ),
+
+          const SizedBox(
+            height: 5,
+          ),
+
+          Text(
+            widget.courseTitle,
+            textAlign:
+                TextAlign.center,
+            style:
+                const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+            ),
+          ),
+
+          if (_instructorName
+              .isNotEmpty) ...[
+            const SizedBox(
+              height: 4,
+            ),
+
+            Text(
+              'Instructor: $_instructorName',
+              style:
+                  const TextStyle(
+                color:
+                    Colors.white70,
+                fontSize: 11,
+              ),
+            ),
+          ],
+
+          if (_moduleOrder > 0) ...[
+            const SizedBox(
+              height: 7,
+            ),
+
+            Container(
+              padding:
+                  const EdgeInsets
+                      .symmetric(
+                horizontal: 10,
+                vertical: 5,
+              ),
+              decoration:
+                  BoxDecoration(
+                color: Colors.white
+                    .withValues(
+                  alpha: 0.14,
+                ),
+                borderRadius:
+                    BorderRadius
+                        .circular(
+                  8,
+                ),
+              ),
+              child: Text(
+                'MODULE $_moduleOrder',
+                style:
+                    const TextStyle(
+                  color:
+                      Colors.white,
+                  fontSize: 9,
+                  fontWeight:
+                      FontWeight
+                          .w800,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // TABS
+  // ============================================================
+
+  Widget _buildTabs() {
+    return Container(
+      margin:
+          const EdgeInsets.symmetric(
+        horizontal: 18,
+        vertical: 5,
+      ),
+      padding:
+          const EdgeInsets.all(
+        4,
+      ),
+      decoration:
+          BoxDecoration(
+        color:
+            const Color(
+          0xFFEEEFF3,
+        ),
+        borderRadius:
+            BorderRadius.circular(
+          14,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildTab(
+              'Lessons',
+              0,
+            ),
+          ),
+          Expanded(
+            child: _buildTab(
+              'Tasks',
+              1,
+            ),
+          ),
+          Expanded(
+            child: _buildTab(
+              'Resources',
+              2,
+            ),
+          ),
+          Expanded(
+            child: _buildTab(
+              'Grades',
+              3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTab(
+    String title,
+    int index,
+  ) {
+    final bool selected =
+        _selectedTab == index;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedTab = index;
+        });
+      },
+      child:
+          AnimatedContainer(
+        duration:
+            const Duration(
+          milliseconds: 180,
+        ),
+        padding:
+            const EdgeInsets.symmetric(
+          vertical: 9,
+        ),
+        decoration:
+            BoxDecoration(
+          color: selected
+              ? Colors.white
+              : Colors.transparent,
+          borderRadius:
+              BorderRadius.circular(
+            10,
+          ),
+        ),
+        alignment:
+            Alignment.center,
+        child: Text(
+          title,
+          style: TextStyle(
+            color: selected
+                ? primaryBlue
+                : textGrey,
+            fontSize: 11,
+            fontWeight:
+                selected
+                    ? FontWeight
+                        .w800
+                    : FontWeight
+                        .w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectedTab() {
+    switch (_selectedTab) {
+      case 0:
+        return _buildLessons();
+
+      case 1:
+        return _buildTasks();
+
+      case 2:
+        return _buildResources();
+
+      case 3:
+        return _buildGrades();
+
+      default:
+        return _buildTasks();
+    }
+  }
+
+  // ============================================================
+  // LESSONS
+  // ============================================================
+
+  Widget _buildLessons() {
+    return ListView(
+      padding:
+          const EdgeInsets.fromLTRB(
+        22,
+        18,
+        22,
+        40,
+      ),
+      children: [
+        const Text(
+          'Module Overview',
+          style: TextStyle(
+            color: textDark,
+            fontSize: 17,
+            fontWeight:
+                FontWeight.w800,
+          ),
+        ),
+
+        const SizedBox(
+          height: 12,
+        ),
+
+        Container(
+          padding:
+              const EdgeInsets.all(
+            18,
+          ),
+          decoration:
+              BoxDecoration(
+            color: Colors.white,
+            borderRadius:
+                BorderRadius.circular(
+              18,
+            ),
+            border: Border.all(
+              color: borderColor,
+            ),
+          ),
+          child: Text(
+            _moduleDescription
+                    .isNotEmpty
+                ? _moduleDescription
+                : 'No module description has been provided yet.',
+            style:
+                const TextStyle(
+              color: textGrey,
+              fontSize: 12.5,
+              height: 1.6,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // TASKS
+  // ============================================================
+
+  Widget _buildTasks() {
+    return RefreshIndicator(
+      onRefresh: _loadPage,
+      color: primaryBlue,
+      child: ListView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+        padding:
+            const EdgeInsets.fromLTRB(
+          22,
+          18,
+          22,
+          45,
+        ),
+        children: [
+          const Text(
+            'Assessments',
+            style:
+                TextStyle(
+              color: textDark,
+              fontSize: 17,
+              fontWeight:
+                  FontWeight
+                      .w800,
+            ),
+          ),
+
+          const SizedBox(
+            height: 4,
+          ),
+
+          const Text(
+            'Complete the assessment using the external link, then return here to mark it as submitted.',
+            style:
+                TextStyle(
+              color: textGrey,
+              fontSize: 11.5,
+              height: 1.45,
+            ),
+          ),
+
+          const SizedBox(
+            height: 16,
+          ),
+
+          if (_assessments
+              .isEmpty)
+            _buildEmptyState(
+              icon: Icons
+                  .assignment_outlined,
+              title:
+                  'No assessments yet',
+              message:
+                  'Published assessments for this module will appear here.',
+            )
+          else
+            ..._assessments.map(
+              _buildAssessmentCard,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAssessmentCard(
+    Map<String, dynamic> assessment,
+  ) {
+    final String assessmentId =
+        (assessment[
+                    'assessmentId'] ??
+                assessment['id'] ??
+                '')
+            .toString();
+
+    final String title =
+        (assessment['title'] ??
+                'Assessment')
+            .toString();
+
+    final String instructions =
+        (assessment[
+                    'instructions'] ??
+                '')
+            .toString();
+
+    final String type =
+        (assessment[
+                    'assessmentType'] ??
+                'assessment')
+            .toString()
+            .toLowerCase();
+
+    final num points =
+        (assessment[
+                    'totalPoints']
+                as num?) ??
+            0;
+
+    final Map<String, dynamic>?
+        submission =
+        _submissionFor(
+      assessmentId,
+    );
+
+    final String submissionStatus =
+        (submission?['status'] ?? '')
+            .toString()
+            .toLowerCase();
+
+    final bool submitted =
+        submissionStatus ==
+                'submitted' ||
+            submissionStatus ==
+                'graded';
+
+    final bool graded =
+        submissionStatus ==
+            'graded';
+
+    final bool pastDue =
+        _isPastDue(
+      assessment,
+    );
+
+    final Color color =
+        _assessmentColor(type);
+
+    return Container(
+      margin:
+          const EdgeInsets.only(
+        bottom: 14,
+      ),
+      padding:
+          const EdgeInsets.all(
+        17,
+      ),
+      decoration:
+          BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(
+          18,
+        ),
+        border: Border.all(
+          color: borderColor,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration:
+                    BoxDecoration(
+                  color: color
+                      .withValues(
+                    alpha: 0.10,
+                  ),
+                  borderRadius:
+                      BorderRadius
+                          .circular(
+                    14,
+                  ),
+                ),
+                child: Icon(
+                  _assessmentIcon(
+                    type,
+                  ),
+                  color: color,
+                  size: 24,
+                ),
+              ),
+
+              const SizedBox(
+                width: 13,
+              ),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment
+                          .start,
+                  children: [
+                    Text(
+                      title,
+                      style:
+                          const TextStyle(
+                        color:
+                            textDark,
+                        fontSize: 14,
+                        fontWeight:
+                            FontWeight
+                                .w800,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 4,
+                    ),
+
+                    Text(
+                      '${_capitalize(type)} • $points points',
+                      style:
+                          TextStyle(
+                        color: color,
+                        fontSize:
+                            10.5,
+                        fontWeight:
+                            FontWeight
+                                .w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              _buildStatusBadge(
+                submitted:
+                    submitted,
+                graded: graded,
+                pastDue:
+                    pastDue,
+              ),
+            ],
+          ),
+
+          if (instructions
+              .trim()
+              .isNotEmpty) ...[
+            const SizedBox(
+              height: 13,
+            ),
+
+            Text(
+              instructions,
+              style:
+                  const TextStyle(
+                color: textGrey,
+                fontSize: 11.5,
+                height: 1.5,
+              ),
+            ),
+          ],
+
+          const SizedBox(
+            height: 13,
+          ),
+
+          Row(
+            children: [
+              Icon(
+                Icons
+                    .schedule_rounded,
+                color: pastDue
+                    ? red
+                    : textGrey,
+                size: 16,
+              ),
+
+              const SizedBox(
+                width: 6,
+              ),
+
+              Expanded(
+                child: Text(
+                  'Due ${_formatDate(assessment['dueAt'])}',
+                  style:
+                      TextStyle(
+                    color:
+                        pastDue
+                            ? red
+                            : textGrey,
+                    fontSize:
+                        10.5,
+                    fontWeight:
+                        pastDue
+                            ? FontWeight
+                                .w700
+                            : FontWeight
+                                .w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          if (submission !=
+              null) ...[
+            const SizedBox(
+              height: 9,
+            ),
+
+            Row(
+              children: [
+                Icon(
+                  graded
+                      ? Icons
+                          .verified_rounded
+                      : Icons
+                          .check_circle_rounded,
+                  color: green,
+                  size: 16,
+                ),
+
+                const SizedBox(
+                  width: 6,
+                ),
+
+                Expanded(
+                  child: Text(
+                    graded
+                        ? 'Graded'
+                        : _formatSubmittedAt(
+                            submission[
+                                'submittedAt'],
+                          ),
+                    style:
+                        const TextStyle(
+                      color: green,
+                      fontSize:
+                          10.5,
+                      fontWeight:
+                          FontWeight
+                              .w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          const SizedBox(
+            height: 17,
+          ),
+
+          SizedBox(
+            width:
+                double.infinity,
+            height: 48,
+            child:
+                ElevatedButton.icon(
+              onPressed: () {
+                _openAssessment(
+                  assessment,
+                );
+              },
+              icon: const Icon(
+                Icons
+                    .open_in_new_rounded,
+                color: Colors.white,
+                size: 18,
+              ),
+              label: const Text(
+                'Open Assessment',
+                style:
+                    TextStyle(
+                  color:
+                      Colors.white,
+                  fontWeight:
+                      FontWeight
+                          .w800,
+                ),
+              ),
+              style:
+                  ElevatedButton
+                      .styleFrom(
+                backgroundColor:
+                    primaryBlue,
+                elevation: 0,
+                shape:
+                    RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius
+                          .circular(
+                    13,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(
+            height: 9,
+          ),
+
+          SizedBox(
+            width:
+                double.infinity,
+            height: 48,
+            child:
+                OutlinedButton.icon(
+              onPressed:
+                  submitted ||
+                          pastDue ||
+                          _isSubmitting
+                      ? null
+                      : () {
+                          _markSubmitted(
+                            assessment,
+                          );
+                        },
+              icon: Icon(
+                submitted
+                    ? Icons
+                        .check_circle_rounded
+                    : Icons
+                        .upload_file_rounded,
+                size: 18,
+              ),
+              label: Text(
+                graded
+                    ? 'Graded'
+                    : submitted
+                        ? 'Submitted'
+                        : pastDue
+                            ? 'Deadline Passed'
+                            : 'Mark as Submitted',
+                style:
+                    const TextStyle(
+                  fontWeight:
+                      FontWeight
+                          .w800,
+                ),
+              ),
+              style:
+                  OutlinedButton
+                      .styleFrom(
+                foregroundColor:
+                    submitted
+                        ? green
+                        : primaryBlue,
+                side:
+                    BorderSide(
+                  color: submitted
+                      ? green
+                      : primaryBlue,
+                ),
+                shape:
+                    RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius
+                          .circular(
+                    13,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge({
+    required bool submitted,
+    required bool graded,
+    required bool pastDue,
+  }) {
+    String text;
+    Color color;
+
+    if (graded) {
+      text = 'GRADED';
+      color = green;
+    } else if (submitted) {
+      text = 'SUBMITTED';
+      color = green;
+    } else if (pastDue) {
+      text = 'CLOSED';
+      color = red;
+    } else {
+      text = 'TO DO';
+      color = orange;
+    }
+
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 5,
+      ),
+      decoration:
+          BoxDecoration(
+        color: color.withValues(
+          alpha: 0.10,
+        ),
+        borderRadius:
+            BorderRadius.circular(
+          8,
+        ),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 8,
+          fontWeight:
+              FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // RESOURCES
+  // ============================================================
+
+  Widget _buildResources() {
+    return RefreshIndicator(
+      onRefresh: _loadPage,
+      color: primaryBlue,
+      child: ListView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+        padding:
+            const EdgeInsets.fromLTRB(
+          22,
+          18,
+          22,
+          40,
+        ),
+        children: [
+          const Text(
+            'Learning Resources',
+            style:
+                TextStyle(
+              color: textDark,
+              fontSize: 17,
+              fontWeight:
+                  FontWeight
+                      .w800,
+            ),
+          ),
+
+          const SizedBox(
+            height: 16,
+          ),
+
+          if (_resources.isEmpty)
+            _buildEmptyState(
+              icon: Icons
+                  .folder_open_outlined,
+              title:
+                  'No resources yet',
+              message:
+                  'Learning materials added to this module will appear here.',
+            )
+          else
+            ..._resources.map(
+              _buildResourceCard,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResourceCard(
+    Map<String, dynamic> resource,
+  ) {
+    final String title =
+        (resource['title'] ??
+                resource['fileName'] ??
+                'Learning Material')
+            .toString();
+
+    final String description =
+        (resource['description'] ?? '')
+            .toString()
+            .trim();
+
+    final String fileName =
+        (resource['fileName'] ?? '')
+            .toString()
+            .trim();
+
+    final String typeLabel =
+        _resourceTypeLabel(
+      resource,
+    );
+
+    final String size =
+        _formatResourceSize(
+      resource['sizeBytes'],
+    );
+
+    final Color color =
+        _resourceColor(
+      resource,
+    );
+
+    final String deliveryType =
+        _resourceDeliveryType(
+      resource,
+    );
+
+    final List<String> details = [
+      typeLabel,
+      if (size.isNotEmpty)
+        size,
+    ];
+
+    return Container(
+      margin:
+          const EdgeInsets.only(
+        bottom: 12,
+      ),
+      decoration:
+          BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(
+          18,
+        ),
+        border: Border.all(
+          color: borderColor,
+        ),
+      ),
+      clipBehavior:
+          Clip.antiAlias,
+      child: InkWell(
+        onTap: () {
+          _openResource(
+            resource,
+          );
+        },
+        child: Padding(
+          padding:
+              const EdgeInsets.all(
+            16,
+          ),
+          child: Row(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration:
+                    BoxDecoration(
+                  color: color.withValues(
+                    alpha: 0.10,
+                  ),
+                  borderRadius:
+                      BorderRadius.circular(
+                    14,
+                  ),
+                ),
+                child: Icon(
+                  _resourceIcon(
+                    resource,
+                  ),
+                  color: color,
+                  size: 25,
+                ),
+              ),
+              const SizedBox(
+                width: 13,
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow:
+                          TextOverflow.ellipsis,
+                      style:
+                          const TextStyle(
+                        color: textDark,
+                        fontSize: 13.5,
+                        fontWeight:
+                            FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(
+                      height: 5,
+                    ),
+                    Text(
+                      details.join(
+                        ' • ',
+                      ),
+                      style:
+                          TextStyle(
+                        color: color,
+                        fontSize: 10.5,
+                        fontWeight:
+                            FontWeight.w700,
+                      ),
+                    ),
+                    if (description
+                        .isNotEmpty) ...[
+                      const SizedBox(
+                        height: 7,
+                      ),
+                      Text(
+                        description,
+                        maxLines: 2,
+                        overflow:
+                            TextOverflow.ellipsis,
+                        style:
+                            const TextStyle(
+                          color: textGrey,
+                          fontSize: 10.5,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                    if (deliveryType ==
+                            'uploaded_file' &&
+                        fileName
+                            .isNotEmpty) ...[
+                      const SizedBox(
+                        height: 7,
+                      ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons
+                                .attach_file_rounded,
+                            color: textGrey,
+                            size: 13,
+                          ),
+                          const SizedBox(
+                            width: 4,
+                          ),
+                          Expanded(
+                            child: Text(
+                              fileName,
+                              maxLines: 1,
+                              overflow:
+                                  TextOverflow
+                                      .ellipsis,
+                              style:
+                                  const TextStyle(
+                                color:
+                                    textGrey,
+                                fontSize:
+                                    9.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(
+                width: 8,
+              ),
+              Container(
+                width: 36,
+                height: 36,
+                decoration:
+                    BoxDecoration(
+                  color: color.withValues(
+                    alpha: 0.08,
+                  ),
+                  borderRadius:
+                      BorderRadius.circular(
+                    10,
+                  ),
+                ),
+                child: Icon(
+                  deliveryType ==
+                          'external_link'
+                      ? Icons
+                          .open_in_new_rounded
+                      : Icons
+                          .open_in_new_rounded,
+                  color: color,
+                  size: 18,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // GRADES
+  // ============================================================
+
+  Widget _buildGrades() {
+    final List<Map<String, dynamic>>
+        gradedSubmissions =
+        _submissions.where(
+      (submission) {
+        return (submission[
+                    'status'] ??
+                '')
+            .toString()
+            .toLowerCase() ==
+            'graded';
+      },
+    ).toList();
+
+    return RefreshIndicator(
+      onRefresh: _loadPage,
+      color: primaryBlue,
+      child: ListView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+        padding:
+            const EdgeInsets.fromLTRB(
+          22,
+          18,
+          22,
+          40,
+        ),
+        children: [
+          const Text(
+            'Assessment Grades',
+            style:
+                TextStyle(
+              color: textDark,
+              fontSize: 17,
+              fontWeight:
+                  FontWeight
+                      .w800,
+            ),
+          ),
+
+          const SizedBox(
+            height: 4,
+          ),
+
+          const Text(
+            'Only assessments graded by your instructor appear here.',
+            style:
+                TextStyle(
+              color: textGrey,
+              fontSize: 11.5,
+            ),
+          ),
+
+          const SizedBox(
+            height: 16,
+          ),
+
+          if (gradedSubmissions
+              .isEmpty)
+            _buildEmptyState(
+              icon:
+                  Icons.grade_outlined,
+              title:
+                  'No grades yet',
+              message:
+                  'Your instructor has not graded any assessment in this module yet.',
+            )
+          else
+            ...gradedSubmissions.map(
+              _buildGradeCard,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGradeCard(
+    Map<String, dynamic> submission,
+  ) {
+    final String assessmentId =
+        (submission[
+                    'assessmentId'] ??
+                '')
+            .toString();
+
+    Map<String, dynamic>?
+        assessment;
+
+    for (final item
+        in _assessments) {
+      if ((item['assessmentId'] ??
+                  item['id'] ??
+                  '')
+              .toString() ==
+          assessmentId) {
+        assessment = item;
+        break;
+      }
+    }
+
+    final String title =
+        (assessment?['title'] ??
+                'Assessment')
+            .toString();
+
+    final num totalPoints =
+        (assessment?[
+                    'totalPoints']
+                as num?) ??
+            0;
+
+    final num score =
+        (submission['score']
+                as num?) ??
+            0;
+
+    final String feedback =
+        (submission['feedback'] ?? '')
+            .toString()
+            .trim();
+
+    final double percentage =
+        totalPoints > 0
+            ? (score /
+                    totalPoints) *
+                100
+            : 0;
+
+    return Container(
+      margin:
+          const EdgeInsets.only(
+        bottom: 12,
+      ),
+      padding:
+          const EdgeInsets.all(
+        17,
+      ),
+      decoration:
+          BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(
+          18,
+        ),
+        border: Border.all(
+          color: borderColor,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 45,
+                height: 45,
+                decoration:
+                    BoxDecoration(
+                  color: green
+                      .withValues(
+                    alpha: 0.10,
+                  ),
+                  borderRadius:
+                      BorderRadius
+                          .circular(
+                    13,
+                  ),
+                ),
+                child:
+                    const Icon(
+                  Icons
+                      .verified_outlined,
+                  color: green,
+                ),
+              ),
+
+              const SizedBox(
+                width: 12,
+              ),
+
+              Expanded(
+                child: Text(
+                  title,
+                  style:
+                      const TextStyle(
+                    color:
+                        textDark,
+                    fontWeight:
+                        FontWeight
+                            .w800,
+                    fontSize: 13.5,
+                  ),
+                ),
+              ),
+
+              Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '$score / $totalPoints',
+                    style:
+                        const TextStyle(
+                      color: green,
+                      fontSize: 15,
+                      fontWeight:
+                          FontWeight
+                              .w800,
+                    ),
+                  ),
+
+                  const SizedBox(
+                    height: 2,
+                  ),
+
+                  Text(
+                    '${percentage.toStringAsFixed(1)}%',
+                    style:
+                        const TextStyle(
+                      color:
+                          textGrey,
+                      fontSize:
+                          10,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          if (feedback
+              .isNotEmpty) ...[
+            const SizedBox(
+              height: 14,
+            ),
+
+            Container(
+              width:
+                  double.infinity,
+              padding:
+                  const EdgeInsets
+                      .all(
+                13,
+              ),
+              decoration:
+                  BoxDecoration(
+                color:
+                    const Color(
+                  0xFFF7F9FC,
+                ),
+                borderRadius:
+                    BorderRadius
+                        .circular(
+                  12,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment
+                        .start,
+                children: [
+                  const Text(
+                    'Instructor Feedback',
+                    style:
+                        TextStyle(
+                      color:
+                          textDark,
+                      fontSize:
+                          10.5,
+                      fontWeight:
+                          FontWeight
+                              .w800,
+                    ),
+                  ),
+
+                  const SizedBox(
+                    height: 5,
+                  ),
+
+                  Text(
+                    feedback,
+                    style:
+                        const TextStyle(
+                      color:
+                          textGrey,
+                      fontSize:
+                          11,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // EMPTY STATE
+  // ============================================================
+
+  Widget _buildEmptyState({
+    required IconData icon,
+    required String title,
+    required String message,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding:
+          const EdgeInsets.all(
+        27,
+      ),
+      decoration:
+          BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(
+          18,
+        ),
+        border: Border.all(
+          color: borderColor,
+        ),
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 58,
+            height: 58,
+            decoration:
+                BoxDecoration(
+              color: primaryBlue
+                  .withValues(
+                alpha: 0.09,
+              ),
+              shape:
+                  BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              color: primaryBlue,
+              size: 27,
+            ),
+          ),
+
+          const SizedBox(
+            height: 12,
+          ),
+
+          Text(
+            title,
+            textAlign:
+                TextAlign.center,
+            style:
+                const TextStyle(
+              color: textDark,
+              fontSize: 14,
+              fontWeight:
+                  FontWeight.w800,
+            ),
+          ),
+
+          const SizedBox(
+            height: 5,
+          ),
+
+          Text(
+            message,
+            textAlign:
+                TextAlign.center,
+            style:
+                const TextStyle(
+              color: textGrey,
+              fontSize: 11,
+              height: 1.45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // ERROR STATE
+  // ============================================================
+
+  Widget _buildErrorState() {
+    return Container(
+      color: background,
+      child: Center(
+        child: Padding(
+          padding:
+              const EdgeInsets.all(
+            30,
+          ),
+          child: Column(
+            mainAxisSize:
+                MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons
+                    .error_outline_rounded,
+                color: red,
+                size: 48,
+              ),
+
+              const SizedBox(
+                height: 13,
+              ),
+
+              Text(
+                _errorMessage ??
+                    'Unable to load module.',
+                textAlign:
+                    TextAlign.center,
+                style:
+                    const TextStyle(
+                  color: textGrey,
+                  fontWeight:
+                      FontWeight
+                          .w600,
+                ),
+              ),
+
+              const SizedBox(
+                height: 18,
+              ),
+
+              ElevatedButton.icon(
+                onPressed:
+                    _loadPage,
+                icon: const Icon(
+                  Icons
+                      .refresh_rounded,
+                  color:
+                      Colors.white,
+                ),
+                label:
+                    const Text(
+                  'Try Again',
+                  style:
+                      TextStyle(
+                    color:
+                        Colors.white,
+                  ),
+                ),
+                style:
+                    ElevatedButton
+                        .styleFrom(
+                  backgroundColor:
+                      primaryBlue,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
