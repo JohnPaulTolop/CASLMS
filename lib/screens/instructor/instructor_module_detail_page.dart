@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/assessment_service.dart';
@@ -7,6 +8,7 @@ import '../../services/learning_material_service.dart';
 
 import 'instructor_add_learning_material_page.dart';
 import 'instructor_assessment_grading_page.dart';
+import 'instructor_ai_quiz_editor_page.dart';
 import 'instructor_create_assessment_page.dart';
 
 class InstructorModuleDetailScreen extends StatefulWidget {
@@ -473,6 +475,56 @@ class _InstructorModuleDetailScreenState
   }
 
   // ============================================================
+  // PHASE 13C-3: REVIEW / EDIT AI QUIZ
+  // ============================================================
+
+  Future<void> _editAiQuizAssessment(Map<String, dynamic> assessment) async {
+    final String assessmentId =
+        (assessment['assessmentId'] ?? assessment['id'] ?? '')
+            .toString()
+            .trim();
+
+    if (assessmentId.isEmpty) {
+      _showError('Assessment ID is missing.');
+
+      return;
+    }
+
+    final bool? updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => InstructorAiQuizEditorScreen(
+          assessmentId: assessmentId,
+          courseId: widget.courseId,
+          moduleId: widget.moduleId,
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (updated == true) {
+      await _loadPage(showLoading: false);
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('AI quiz draft updated.'),
+          backgroundColor: primaryTeal,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  // ============================================================
   // OPEN GRADING
   // ============================================================
 
@@ -502,6 +554,374 @@ class _InstructorModuleDetailScreenState
     }
 
     await _loadPage();
+  }
+
+  // ============================================================
+  // PHASE 13C-4: VALIDATE AND PUBLISH AI QUIZ
+  // ============================================================
+
+  Future<void> _publishAiQuiz(Map<String, dynamic> assessment) async {
+    final String assessmentId =
+        (assessment['assessmentId'] ?? assessment['id'] ?? '')
+            .toString()
+            .trim();
+
+    if (assessmentId.isEmpty) {
+      _showError('Assessment ID is missing.');
+
+      return;
+    }
+
+    try {
+      // Always re-read the latest Firestore version before publishing.
+      final DocumentSnapshot<Map<String, dynamic>> document = await _firestore
+          .collection('assessments')
+          .doc(assessmentId)
+          .get();
+
+      if (!document.exists || document.data() == null) {
+        throw AssessmentServiceException('AI quiz could not be found.');
+      }
+
+      final Map<String, dynamic> data = document.data()!;
+
+      final String courseId = (data['courseId'] ?? '').toString().trim();
+
+      final String moduleId = (data['moduleId'] ?? '').toString().trim();
+
+      final String assessmentType = (data['assessmentType'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+
+      final String deliveryType = (data['deliveryType'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+
+      final String currentStatus = (data['status'] ?? 'draft')
+          .toString()
+          .trim()
+          .toLowerCase();
+
+      final String title = (data['title'] ?? '').toString().trim();
+
+      final String instructions = (data['instructions'] ?? '')
+          .toString()
+          .trim();
+
+      if (courseId != widget.courseId || moduleId != widget.moduleId) {
+        throw AssessmentServiceException(
+          'This quiz does not belong to the selected module.',
+        );
+      }
+
+      if (assessmentType != 'quiz' || deliveryType != 'ai_generated') {
+        throw AssessmentServiceException(
+          'This publish flow is only for AI-generated quizzes.',
+        );
+      }
+
+      if (currentStatus == 'published') {
+        throw AssessmentServiceException('This AI quiz is already published.');
+      }
+
+      if (currentStatus == 'closed') {
+        throw AssessmentServiceException(
+          'Move this assessment to Draft before publishing it again.',
+        );
+      }
+
+      if (title.isEmpty) {
+        throw AssessmentServiceException(
+          'Quiz title is required before publishing.',
+        );
+      }
+
+      if (instructions.isEmpty) {
+        throw AssessmentServiceException(
+          'Quiz instructions are required before publishing.',
+        );
+      }
+
+      final dynamic rawQuestions = data['questions'];
+
+      if (rawQuestions is! List || rawQuestions.isEmpty) {
+        throw AssessmentServiceException(
+          'Add at least one valid question before publishing.',
+        );
+      }
+
+      int calculatedPoints = 0;
+
+      for (int index = 0; index < rawQuestions.length; index++) {
+        final dynamic rawQuestion = rawQuestions[index];
+
+        if (rawQuestion is! Map) {
+          throw AssessmentServiceException(
+            'Question ${index + 1} has an invalid format.',
+          );
+        }
+
+        final Map<String, dynamic> question = Map<String, dynamic>.from(
+          rawQuestion,
+        );
+
+        final String questionText = (question['question'] ?? '')
+            .toString()
+            .trim();
+
+        final dynamic rawOptions = question['options'];
+
+        final int? correctAnswerIndex = (question['correctAnswerIndex'] as num?)
+            ?.toInt();
+
+        final int points = (question['points'] as num?)?.toInt() ?? 0;
+
+        if (questionText.isEmpty) {
+          throw AssessmentServiceException('Question ${index + 1} is empty.');
+        }
+
+        if (rawOptions is! List || rawOptions.length != 4) {
+          throw AssessmentServiceException(
+            'Question ${index + 1} must have exactly 4 choices.',
+          );
+        }
+
+        final List<String> options = rawOptions
+            .map((dynamic value) => value.toString().trim())
+            .toList();
+
+        if (options.any((String option) => option.isEmpty)) {
+          throw AssessmentServiceException(
+            'Question ${index + 1} contains an empty choice.',
+          );
+        }
+
+        if (options.toSet().length != options.length) {
+          throw AssessmentServiceException(
+            'Question ${index + 1} contains duplicate choices.',
+          );
+        }
+
+        if (correctAnswerIndex == null ||
+            correctAnswerIndex < 0 ||
+            correctAnswerIndex > 3) {
+          throw AssessmentServiceException(
+            'Question ${index + 1} does not have a valid correct answer.',
+          );
+        }
+
+        if (points <= 0) {
+          throw AssessmentServiceException(
+            'Question ${index + 1} must have at least 1 point.',
+          );
+        }
+
+        calculatedPoints += points;
+      }
+
+      // A published quiz should have a future deadline.
+      final dynamic rawDueAt = data['dueAt'];
+
+      DateTime? dueAt;
+
+      if (rawDueAt is Timestamp) {
+        dueAt = rawDueAt.toDate();
+      } else if (rawDueAt is DateTime) {
+        dueAt = rawDueAt;
+      }
+
+      if (dueAt == null) {
+        throw AssessmentServiceException(
+          'Set a due date before publishing the AI quiz.',
+        );
+      }
+
+      if (!dueAt.isAfter(DateTime.now())) {
+        throw AssessmentServiceException(
+          'The quiz due date must be in the future.',
+        );
+      }
+
+      final num storedTotalPoints = (data['totalPoints'] as num?) ?? 0;
+
+      // Keep stored totals consistent with the edited questions.
+      if (storedTotalPoints.toInt() != calculatedPoints) {
+        await document.reference.update({
+          'totalPoints': calculatedPoints,
+          'questionCount': rawQuestions.length,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      final bool? confirmed = await showDialog<bool>(
+        context: context,
+
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            icon: const Icon(
+              Icons.publish_rounded,
+              color: primaryTeal,
+              size: 34,
+            ),
+
+            title: const Text('Publish AI Quiz?'),
+
+            content: SizedBox(
+              width: 430,
+
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+
+                children: [
+                  const Text(
+                    'CASLMS checked the quiz and found no blocking validation errors.',
+                    style: TextStyle(color: textGrey, height: 1.45),
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  _publishSummaryRow('Quiz', title),
+
+                  _publishSummaryRow('Questions', '${rawQuestions.length}'),
+
+                  _publishSummaryRow('Total points', '$calculatedPoints'),
+
+                  _publishSummaryRow(
+                    'Due',
+                    _formatDate(Timestamp.fromDate(dueAt!)),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: primaryTeal.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'After publishing, enrolled students will be able to see this quiz. '
+                      'The student quiz-taking screen is implemented in the next phase.',
+                      style: TextStyle(
+                        color: textDark,
+                        fontSize: 11.5,
+                        height: 1.45,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop(false);
+                },
+
+                child: const Text('Cancel'),
+              ),
+
+              FilledButton.icon(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop(true);
+                },
+
+                icon: const Icon(Icons.publish_rounded),
+
+                label: const Text('Publish Quiz'),
+
+                style: FilledButton.styleFrom(
+                  backgroundColor: primaryTeal,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (!mounted || confirmed != true) {
+        return;
+      }
+
+      await _assessmentService.updateAssessmentStatus(
+        assessmentId: assessmentId,
+        status: 'published',
+      );
+
+      // Store a dedicated publish timestamp for the AI quiz.
+      await _firestore.collection('assessments').doc(assessmentId).update({
+        'publishedAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) {
+        return;
+      }
+
+      await _loadPage(showLoading: false);
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('AI quiz published successfully.'),
+          backgroundColor: primaryTeal,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } on AssessmentServiceException catch (e) {
+      _showError(e.message);
+    } on FirebaseException catch (e) {
+      _showError(e.message ?? 'Unable to publish the AI quiz.');
+    } catch (e) {
+      _showError('Unable to publish the AI quiz: $e');
+    }
+  }
+
+  Widget _publishSummaryRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: textGrey,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: textDark,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ============================================================
@@ -806,6 +1226,592 @@ class _InstructorModuleDetailScreenState
         });
       }
     }
+  }
+
+  // ============================================================
+  // PHASE 13C-1: GENERATE AI QUIZ DRAFT
+  // ============================================================
+
+  Future<void> _generateAiQuizDraft(Map<String, dynamic> material) async {
+    final String materialId = _materialId(material);
+
+    if (materialId.isEmpty) {
+      _showError('Learning material ID is missing.');
+
+      return;
+    }
+
+    if (_busyMaterialIds.contains(materialId)) {
+      return;
+    }
+
+    int questionCount = 5;
+    String difficulty = 'medium';
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+
+      builder: (BuildContext dialogContext) {
+        return StatefulBuilder(
+          builder:
+              (
+                BuildContext context,
+                void Function(void Function()) setDialogState,
+              ) {
+                return AlertDialog(
+                  icon: const Icon(
+                    Icons.quiz_rounded,
+                    color: primaryTeal,
+                    size: 34,
+                  ),
+
+                  title: const Text('Generate AI Quiz Draft'),
+
+                  content: SizedBox(
+                    width: 430,
+
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+
+                      children: [
+                        const Text(
+                          'Gemini will create multiple-choice questions using only this PDF.',
+                          style: TextStyle(color: textGrey, height: 1.45),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        const Text(
+                          'Number of questions',
+                          style: TextStyle(
+                            color: textDark,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        DropdownButtonFormField<int>(
+                          initialValue: questionCount,
+
+                          items: const [
+                            DropdownMenuItem(
+                              value: 5,
+                              child: Text('5 questions'),
+                            ),
+                            DropdownMenuItem(
+                              value: 10,
+                              child: Text('10 questions'),
+                            ),
+                            DropdownMenuItem(
+                              value: 15,
+                              child: Text('15 questions'),
+                            ),
+                          ],
+
+                          onChanged: (int? value) {
+                            if (value == null) {
+                              return;
+                            }
+
+                            setDialogState(() {
+                              questionCount = value;
+                            });
+                          },
+
+                          decoration: const InputDecoration(
+                            prefixIcon: Icon(
+                              Icons.format_list_numbered_rounded,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 18),
+
+                        const Text(
+                          'Difficulty',
+                          style: TextStyle(
+                            color: textDark,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+
+                        const SizedBox(height: 8),
+
+                        DropdownButtonFormField<String>(
+                          initialValue: difficulty,
+
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'easy',
+                              child: Text('Easy'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'medium',
+                              child: Text('Medium'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'hard',
+                              child: Text('Hard'),
+                            ),
+                          ],
+
+                          onChanged: (String? value) {
+                            if (value == null) {
+                              return;
+                            }
+
+                            setDialogState(() {
+                              difficulty = value;
+                            });
+                          },
+
+                          decoration: const InputDecoration(
+                            prefixIcon: Icon(Icons.psychology_alt_outlined),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop(false);
+                      },
+
+                      child: const Text('Cancel'),
+                    ),
+
+                    FilledButton.icon(
+                      onPressed: () {
+                        Navigator.of(dialogContext).pop(true);
+                      },
+
+                      icon: const Icon(Icons.auto_awesome_rounded),
+
+                      label: const Text('Generate'),
+
+                      style: FilledButton.styleFrom(
+                        backgroundColor: primaryTeal,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                );
+              },
+        );
+      },
+    );
+
+    if (!mounted || confirmed != true) {
+      return;
+    }
+
+    setState(() {
+      _busyMaterialIds.add(materialId);
+    });
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Gemini is generating the quiz draft...'),
+        backgroundColor: primaryTeal,
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    try {
+      final AiQuizDraft draft = await _firebaseAiService.generateQuizDraft(
+        material: material,
+        courseTitle: widget.courseTitle,
+        moduleTitle: _moduleTitle,
+        questionCount: questionCount,
+        difficulty: difficulty,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      await _showAiQuizDraft(draft);
+    } on FirebaseAiServiceException catch (e) {
+      _showError(e.message);
+    } catch (e) {
+      _showError('Unable to generate AI quiz: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busyMaterialIds.remove(materialId);
+        });
+      }
+    }
+  }
+
+  // ============================================================
+  // AI QUIZ DRAFT PREVIEW
+  // ============================================================
+
+  // ============================================================
+  // PHASE 13C-2: SAVE AI QUIZ AS A DRAFT ASSESSMENT
+  // ============================================================
+
+  Future<String> _saveAiQuizDraftAsAssessment(AiQuizDraft draft) async {
+    final User? user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      throw AssessmentServiceException('No instructor is currently logged in.');
+    }
+
+    // Verify that the signed-in account is an active instructor.
+    final DocumentSnapshot<Map<String, dynamic>> userDocument = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (!userDocument.exists || userDocument.data() == null) {
+      throw AssessmentServiceException(
+        'Instructor profile could not be found.',
+      );
+    }
+
+    final Map<String, dynamic> userData = userDocument.data()!;
+
+    final String role = (userData['role'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    final String accountStatus = (userData['status'] ?? 'active')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    if (role != 'instructor') {
+      throw AssessmentServiceException(
+        'Only instructors can save AI-generated assessments.',
+      );
+    }
+
+    if (accountStatus != 'active') {
+      throw AssessmentServiceException(
+        'This instructor account is not active.',
+      );
+    }
+
+    // Verify the loaded module still belongs to this course.
+    final String moduleCourseId = (_module?['courseId'] ?? '')
+        .toString()
+        .trim();
+
+    if (moduleCourseId != widget.courseId) {
+      throw AssessmentServiceException(
+        'This module does not belong to the selected course.',
+      );
+    }
+
+    if (draft.title.trim().isEmpty || draft.questions.isEmpty) {
+      throw AssessmentServiceException(
+        'The generated quiz draft is incomplete.',
+      );
+    }
+
+    final List<Map<String, dynamic>> questions = draft.questions
+        .asMap()
+        .entries
+        .map((MapEntry<int, AiQuizQuestion> entry) {
+          final AiQuizQuestion question = entry.value;
+
+          return {
+            'order': entry.key + 1,
+            'questionType': 'multiple_choice',
+            'question': question.question.trim(),
+            'options': question.options
+                .map((String option) => option.trim())
+                .toList(),
+            'correctAnswerIndex': question.correctAnswerIndex,
+            'explanation': question.explanation.trim(),
+            'points': 1,
+          };
+        })
+        .toList();
+
+    final DocumentReference<Map<String, dynamic>> assessmentReference =
+        _firestore.collection('assessments').doc();
+
+    final String assessmentId = assessmentReference.id;
+
+    await assessmentReference.set({
+      'assessmentId': assessmentId,
+      'courseId': widget.courseId,
+      'moduleId': widget.moduleId,
+      'createdBy': user.uid,
+
+      'title': draft.title.trim(),
+      'instructions': draft.instructions.trim(),
+
+      'assessmentType': 'quiz',
+      'deliveryType': 'ai_generated',
+      'externalUrl': null,
+
+      'totalPoints': draft.totalPoints,
+      'dueAt': null,
+
+      // Keep it hidden from students until instructor review.
+      'status': 'draft',
+
+      // AI-generated quiz content.
+      'questions': questions,
+      'questionCount': questions.length,
+      'aiGenerated': true,
+      'aiModel': 'gemini-3.7-flash',
+      'aiDifficulty': draft.difficulty,
+      'aiSourceResourceId': draft.sourceResourceId,
+      'aiSourceFileName': draft.sourceFileName,
+
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    return assessmentId;
+  }
+
+  Future<void> _showAiQuizDraft(AiQuizDraft draft) async {
+    await showDialog<void>(
+      context: context,
+
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded, color: primaryTeal),
+
+              SizedBox(width: 10),
+
+              Expanded(child: Text('AI Quiz Draft')),
+            ],
+          ),
+
+          content: SizedBox(
+            width: 650,
+            height: 580,
+
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+
+              children: [
+                Text(
+                  draft.title,
+
+                  style: const TextStyle(
+                    color: textDark,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+
+                const SizedBox(height: 5),
+
+                Text(
+                  draft.instructions,
+
+                  style: const TextStyle(
+                    color: textGrey,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+
+                const SizedBox(height: 8),
+
+                Text(
+                  '${draft.questions.length} questions • '
+                  '${_capitalize(draft.difficulty)} • '
+                  '${draft.totalPoints} points',
+
+                  style: const TextStyle(
+                    color: primaryTeal,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+
+                const SizedBox(height: 14),
+
+                const Divider(height: 1),
+
+                const SizedBox(height: 12),
+
+                Expanded(
+                  child: ListView.separated(
+                    itemCount: draft.questions.length,
+
+                    separatorBuilder: (BuildContext context, int index) =>
+                        const SizedBox(height: 14),
+
+                    itemBuilder: (BuildContext context, int index) {
+                      final AiQuizQuestion question = draft.questions[index];
+
+                      return Container(
+                        padding: const EdgeInsets.all(14),
+
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+
+                          borderRadius: BorderRadius.circular(14),
+
+                          border: Border.all(color: borderColor),
+                        ),
+
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+
+                          children: [
+                            Text(
+                              '${index + 1}. ${question.question}',
+
+                              style: const TextStyle(
+                                color: textDark,
+                                fontWeight: FontWeight.w800,
+                                height: 1.4,
+                              ),
+                            ),
+
+                            const SizedBox(height: 10),
+
+                            ...List.generate(question.options.length, (
+                              int optionIndex,
+                            ) {
+                              final bool correct =
+                                  optionIndex == question.correctAnswerIndex;
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+
+                                  children: [
+                                    Icon(
+                                      correct
+                                          ? Icons.check_circle_rounded
+                                          : Icons
+                                                .radio_button_unchecked_rounded,
+
+                                      size: 17,
+
+                                      color: correct ? green : textGrey,
+                                    ),
+
+                                    const SizedBox(width: 8),
+
+                                    Expanded(
+                                      child: Text(
+                                        question.options[optionIndex],
+
+                                        style: TextStyle(
+                                          color: correct ? green : textDark,
+
+                                          fontWeight: correct
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }),
+
+                            if (question.explanation.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+
+                              Text(
+                                'Explanation: ${question.explanation}',
+
+                                style: const TextStyle(
+                                  color: textGrey,
+                                  fontSize: 10.5,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+
+              child: const Text('Close'),
+            ),
+
+            FilledButton.icon(
+              onPressed: () async {
+                try {
+                  final String assessmentId =
+                      await _saveAiQuizDraftAsAssessment(draft);
+
+                  if (!mounted) {
+                    return;
+                  }
+
+                  Navigator.of(dialogContext).pop();
+
+                  await _loadPage(showLoading: false);
+
+                  if (!mounted) {
+                    return;
+                  }
+
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'AI quiz saved as Draft Assessment. '
+                        'ID: $assessmentId',
+                      ),
+                      backgroundColor: primaryTeal,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } on AssessmentServiceException catch (e) {
+                  _showError(e.message);
+                } on FirebaseException catch (e) {
+                  _showError(e.message ?? 'Unable to save the AI quiz.');
+                } catch (e) {
+                  _showError('Unable to save the AI quiz: $e');
+                }
+              },
+
+              icon: const Icon(Icons.save_outlined),
+
+              label: const Text('Save as Draft'),
+
+              style: FilledButton.styleFrom(
+                backgroundColor: primaryTeal,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // ============================================================
@@ -1599,6 +2605,9 @@ class _InstructorModuleDetailScreenState
         (typeLabel.toLowerCase() == 'pdf' ||
             fileName.toLowerCase().endsWith('.pdf'));
 
+    final bool canGenerateAiQuiz =
+        canAnalyzePdf && _materialAiStatus(material) == 'ready';
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
 
@@ -1864,6 +2873,10 @@ class _InstructorModuleDetailScreenState
                     _analyzeMaterialWithAi(material);
                     break;
 
+                  case 'generate_ai_quiz':
+                    _generateAiQuizDraft(material);
+                    break;
+
                   case 'delete':
                     _deleteMaterial(material);
                     break;
@@ -1920,6 +2933,21 @@ class _InstructorModuleDetailScreenState
                         SizedBox(width: 10),
 
                         Text('Analyze with AI'),
+                      ],
+                    ),
+                  ),
+
+                if (canGenerateAiQuiz)
+                  const PopupMenuItem(
+                    value: 'generate_ai_quiz',
+
+                    child: Row(
+                      children: [
+                        Icon(Icons.quiz_rounded, color: purple, size: 19),
+
+                        SizedBox(width: 10),
+
+                        Text('Generate AI Quiz Draft'),
                       ],
                     ),
                   ),
@@ -2052,6 +3080,9 @@ class _InstructorModuleDetailScreenState
     final String url = (assessment['externalUrl'] ?? '').toString();
 
     final num points = (assessment['totalPoints'] as num?) ?? 0;
+
+    final bool isAiGeneratedQuiz =
+        deliveryType == 'ai_generated' && type == 'quiz';
 
     final Color statusColor = _statusColor(status);
 
@@ -2206,12 +3237,20 @@ class _InstructorModuleDetailScreenState
 
                 onSelected: (value) {
                   switch (value) {
+                    case 'edit_ai_quiz':
+                      _editAiQuizAssessment(assessment);
+                      break;
+
                     case 'grading':
                       _openAssessmentGrading(assessment);
                       break;
 
                     case 'publish':
-                      _changeStatus(assessment, 'published');
+                      if (isAiGeneratedQuiz) {
+                        _publishAiQuiz(assessment);
+                      } else {
+                        _changeStatus(assessment, 'published');
+                      }
                       break;
 
                     case 'draft':
@@ -2229,6 +3268,27 @@ class _InstructorModuleDetailScreenState
                 },
 
                 itemBuilder: (context) => [
+                  if (isAiGeneratedQuiz)
+                    const PopupMenuItem(
+                      value: 'edit_ai_quiz',
+
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.edit_note_rounded,
+                            size: 19,
+                            color: purple,
+                          ),
+
+                          SizedBox(width: 10),
+
+                          Text('Review & Edit AI Quiz'),
+                        ],
+                      ),
+                    ),
+
+                  if (isAiGeneratedQuiz) const PopupMenuDivider(),
+
                   const PopupMenuItem(
                     value: 'grading',
 
@@ -2250,9 +3310,13 @@ class _InstructorModuleDetailScreenState
                   const PopupMenuDivider(),
 
                   if (status != 'published')
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'publish',
-                      child: Text('Publish'),
+                      child: Text(
+                        isAiGeneratedQuiz
+                            ? 'Validate & Publish AI Quiz'
+                            : 'Publish',
+                      ),
                     ),
 
                   if (status != 'draft')
@@ -2291,15 +3355,26 @@ class _InstructorModuleDetailScreenState
 
             child: OutlinedButton.icon(
               onPressed: () {
-                _openAssessmentGrading(assessment);
+                if (isAiGeneratedQuiz) {
+                  _editAiQuizAssessment(assessment);
+                } else {
+                  _openAssessmentGrading(assessment);
+                }
               },
 
-              icon: const Icon(Icons.grading_rounded, size: 18),
+              icon: Icon(
+                isAiGeneratedQuiz
+                    ? Icons.edit_note_rounded
+                    : Icons.grading_rounded,
+                size: 18,
+              ),
 
-              label: const Text(
-                'Submissions & Grading',
+              label: Text(
+                isAiGeneratedQuiz
+                    ? 'Review & Edit Quiz'
+                    : 'Submissions & Grading',
 
-                style: TextStyle(fontWeight: FontWeight.w800),
+                style: const TextStyle(fontWeight: FontWeight.w800),
               ),
 
               style: OutlinedButton.styleFrom(
@@ -2470,9 +3545,9 @@ class _InstructorModuleDetailScreenState
                 const SizedBox(height: 5),
 
                 const Text(
-                  'PDF analysis is now available. Open a PDF material menu (⋮) '
-                  'and choose "Analyze with AI". Gemini will use the attached PDF '
-                  'as the source for the analysis.',
+                  'PDF analysis and AI quiz drafting are available. Analyze a PDF '
+                  'first, then open its menu (⋮) and choose "Generate AI Quiz Draft". '
+                  'You can review the questions before they are saved to students.',
 
                   style: TextStyle(color: textGrey, fontSize: 11, height: 1.45),
                 ),
