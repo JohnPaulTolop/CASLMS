@@ -325,13 +325,28 @@ class LearningMaterialService {
   bool isAiEligibleFile(String fileName) {
     final String extension = _extensionFromFileName(fileName);
 
+    // AI-supported in the current direct Flutter architecture.
+    //
+    // Native Gemini input:
+    // PDF, TXT, JPG/JPEG, PNG, WEBP, MP4, WEBM
+    //
+    // CASLMS local text extraction before Gemini:
+    // DOCX, PPTX, XLSX
+    //
+    // Legacy .doc/.ppt/.xls and GIF remain uploadable but are
+    // intentionally not marked AI-eligible.
     const Set<String> aiSupportedExtensions = {
       'pdf',
       'txt',
-      'doc',
       'docx',
-      'ppt',
       'pptx',
+      'xlsx',
+      'jpg',
+      'jpeg',
+      'png',
+      'webp',
+      'mp4',
+      'webm',
     };
 
     return aiSupportedExtensions.contains(extension);
@@ -346,6 +361,10 @@ class LearningMaterialService {
 
     return {
       'aiEligible': eligible,
+
+      // Bump this whenever CASLMS changes which file types can
+      // be analyzed. Existing materials are safely backfilled.
+      'aiEligibilityVersion': 2,
 
       // Future values:
       // pending | processing | ready | failed | unsupported
@@ -368,6 +387,8 @@ class LearningMaterialService {
   Map<String, dynamic> _aiMetadataForExternalLink() {
     return {
       'aiEligible': false,
+
+      'aiEligibilityVersion': 2,
 
       'aiProcessingStatus': 'unsupported',
 
@@ -888,15 +909,12 @@ class LearningMaterialService {
         continue;
       }
 
-      final bool alreadyPrepared =
-          data.containsKey('aiEligible') &&
-          data.containsKey('aiProcessingStatus') &&
-          data.containsKey('aiTextExtracted') &&
-          data.containsKey('aiTextLength') &&
-          data.containsKey('aiProcessedAt') &&
-          data.containsKey('aiError');
+      final int currentVersion =
+          (data['aiEligibilityVersion'] as num?)?.toInt() ?? 0;
 
-      if (alreadyPrepared) {
+      // Version 2 understands PDF/TXT/DOCX/PPTX/XLSX,
+      // supported images, and supported video formats.
+      if (currentVersion >= 2) {
         continue;
       }
 
@@ -905,21 +923,56 @@ class LearningMaterialService {
           .trim()
           .toLowerCase();
 
-      late final Map<String, dynamic> aiMetadata;
+      final Map<String, dynamic> updates = {
+        'aiEligibilityVersion': 2,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
 
       if (deliveryType == 'uploaded_file') {
         final String fileName = (data['fileName'] ?? '').toString().trim();
 
-        aiMetadata = _aiMetadataForUploadedFile(fileName);
+        final bool eligible = isAiEligibleFile(fileName);
+
+        final bool oldEligible = data['aiEligible'] == true;
+
+        final String oldStatus = (data['aiProcessingStatus'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+
+        updates['aiEligible'] = eligible;
+
+        // Do not destroy a successful existing analysis for a file
+        // that is still supported. Only change the status when the
+        // eligibility meaning actually changed or metadata is missing.
+        if (!eligible) {
+          updates['aiProcessingStatus'] = 'unsupported';
+        } else if (!oldEligible ||
+            oldStatus.isEmpty ||
+            oldStatus == 'unsupported') {
+          updates['aiProcessingStatus'] = 'pending';
+        }
+
+        if (!data.containsKey('aiTextExtracted')) {
+          updates['aiTextExtracted'] = false;
+        }
+
+        if (!data.containsKey('aiTextLength')) {
+          updates['aiTextLength'] = 0;
+        }
+
+        if (!data.containsKey('aiProcessedAt')) {
+          updates['aiProcessedAt'] = null;
+        }
+
+        if (!data.containsKey('aiError')) {
+          updates['aiError'] = null;
+        }
       } else {
-        aiMetadata = _aiMetadataForExternalLink();
+        updates.addAll(_aiMetadataForExternalLink());
       }
 
-      batch.update(document.reference, {
-        ...aiMetadata,
-
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      batch.update(document.reference, updates);
 
       updatedCount++;
     }

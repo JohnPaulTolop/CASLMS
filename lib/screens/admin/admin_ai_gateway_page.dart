@@ -1,391 +1,619 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 class AdminAIGatewayScreen extends StatefulWidget {
-  const AdminAIGatewayScreen({Key? key}) : super(key: key);
+  const AdminAIGatewayScreen({super.key});
 
   @override
-  State<AdminAIGatewayScreen> createState() => _AdminAIGatewayScreenState();
+  State<AdminAIGatewayScreen> createState() =>
+      _AdminAIGatewayScreenState();
 }
 
-class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
-  final Color adminTheme = Colors.deepPurple;
+class _AdminAIGatewayScreenState
+    extends State<AdminAIGatewayScreen> {
+  static const Color adminTheme = Colors.deepPurple;
+  static const Color background = Color(0xFFF8F9FA);
+  static const Color textDark = Color(0xFF10182F);
+  static const Color textGrey = Color(0xFF68738A);
+  static const Color borderColor = Color(0xFFE6EAF0);
+  static const Color green = Color(0xFF26A65B);
+  static const Color orange = Color(0xFFFF9418);
+  static const Color red = Color(0xFFFF4B4B);
 
-  // Configuration States
-  String _selectedProvider = 'Google Gemini Pro';
-  final List<String> _providers = ['Google Gemini Pro', 'OpenAI GPT-4o', 'Anthropic Claude 3'];
-  
-  bool _isEditingKey = false;
-  final TextEditingController _apiKeyController = TextEditingController(text: 'AIzaSy***************************');
-  
-  double _temperature = 0.7;
-  double _maxTokens = 2048;
-  bool _isTestingConnection = false;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
 
-  // Mock Activity Logs
-  final List<Map<String, dynamic>> _activityLogs = [
-    {
-      'user': 'Prof. Mabansag',
-      'action': 'Quiz Generation (15 items)',
-      'tokens': 1240,
-      'time': '10 mins ago',
-      'status': 'Success'
-    },
-    {
-      'user': 'Mr. Santos',
-      'action': 'Syllabus Formatting',
-      'tokens': 850,
-      'time': '1 hour ago',
-      'status': 'Success'
-    },
-    {
-      'user': 'Dr. Reyes',
-      'action': 'Module Summarization',
-      'tokens': 3200,
-      'time': '3 hours ago',
-      'status': 'Failed (Timeout)'
-    },
-  ];
+  bool _isLoading = true;
+  String? _errorMessage;
 
-  void _testConnection() async {
-    setState(() => _isTestingConnection = true);
-    
-    // Simulate API handshake
-    await Future.delayed(const Duration(seconds: 2));
-    
-    if (mounted) {
-      setState(() => _isTestingConnection = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.white),
-              const SizedBox(width: 12),
-              Text('Connection to $_selectedProvider verified.'),
-            ],
-          ),
-          backgroundColor: Colors.green.shade600,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
+  int _eligible = 0;
+  int _ready = 0;
+  int _pending = 0;
+  int _failed = 0;
+
+  String _model = 'gemini-3.7-flash';
+
+  List<Map<String, dynamic>> _activities = [];
 
   @override
-  void dispose() {
-    _apiKeyController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadAiStatus();
+  }
+
+  Future<void> _loadAiStatus() async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
+
+    try {
+      final resourceSnapshot =
+          await _firestore.collection('moduleResources').get();
+
+      int eligible = 0;
+      int ready = 0;
+      int pending = 0;
+      int failed = 0;
+
+      final List<Map<String, dynamic>> activities = [];
+      final Set<String> creatorIds = {};
+      final Set<String> models = {};
+
+      for (final document in resourceSnapshot.docs) {
+        final data = document.data();
+
+        if (data['aiEligible'] == true) {
+          eligible++;
+        }
+
+        final status = (data['aiProcessingStatus'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+
+        if (status == 'ready') {
+          ready++;
+        } else if (status == 'pending' ||
+            status == 'processing') {
+          pending++;
+        } else if (status == 'failed') {
+          failed++;
+        }
+
+        final model =
+            (data['aiModel'] ?? '').toString().trim();
+
+        if (model.isNotEmpty) {
+          models.add(model);
+        }
+
+        final creatorId =
+            (data['createdBy'] ?? '').toString().trim();
+
+        if (creatorId.isNotEmpty) {
+          creatorIds.add(creatorId);
+        }
+
+        if (status.isNotEmpty || data['aiEligible'] == true) {
+          activities.add({
+            ...data,
+            'resourceId': document.id,
+            'activityTimestamp':
+                data['aiProcessedAt'] ?? data['updatedAt'],
+          });
+        }
+      }
+
+      final Map<String, String> creatorNames = {};
+
+      for (final creatorId in creatorIds) {
+        final userDocument =
+            await _firestore.collection('users').doc(creatorId).get();
+
+        if (userDocument.exists && userDocument.data() != null) {
+          creatorNames[creatorId] =
+              (userDocument.data()?['name'] ?? 'Instructor')
+                  .toString();
+        }
+      }
+
+      activities.sort((a, b) {
+        final aDate = _dateFrom(a['activityTimestamp']);
+        final bDate = _dateFrom(b['activityTimestamp']);
+
+        if (aDate == null && bDate == null) return 0;
+        if (aDate == null) return 1;
+        if (bDate == null) return -1;
+
+        return bDate.compareTo(aDate);
+      });
+
+      final recent = activities.take(20).map((item) {
+        final creatorId =
+            (item['createdBy'] ?? '').toString();
+
+        return <String, dynamic>{
+          ...item,
+          'creatorName':
+              creatorNames[creatorId] ?? 'Instructor',
+        };
+      }).toList();
+
+      if (!mounted) return;
+
+      setState(() {
+        _eligible = eligible;
+        _ready = ready;
+        _pending = pending;
+        _failed = failed;
+        _activities = recent;
+
+        if (models.isNotEmpty) {
+          _model = models.last;
+        }
+
+        _isLoading = false;
+      });
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage =
+            e.message ?? 'Unable to load Firebase AI activity.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage =
+            e.toString().replaceFirst('Exception: ', '');
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(60.0),
-        child: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87, size: 20),
-            onPressed: () => Navigator.pop(context),
-          ),
-          titleSpacing: 0,
-          title: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'AI Service Gateway',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Colors.black87, letterSpacing: -0.5),
+      backgroundColor: background,
+      appBar: AppBar(
+        backgroundColor: background,
+        elevation: 0,
+        foregroundColor: textDark,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'AI Service Gateway',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
               ),
-              Text(
-                'API & Token Management',
-                style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.save_rounded, color: Colors.deepPurple),
-              tooltip: 'Save Configurations',
-              onPressed: () {
-                setState(() => _isEditingKey = false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('AI Configurations saved successfully.'), backgroundColor: Colors.deepPurple),
-                );
-              },
             ),
-            const SizedBox(width: 16),
+            Text(
+              'Firebase AI Logic Monitoring',
+              style: TextStyle(
+                fontSize: 12,
+                color: textGrey,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
+        actions: [
+          IconButton(
+            onPressed: _isLoading ? null : _loadAiStatus,
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
+        top: false,
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1200),
-            child: ListView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-              children: [
-                _buildHealthBanner(),
-                const SizedBox(height: 24),
-                
-                _buildTopMetrics(),
-                const SizedBox(height: 32),
-                
-                const Text('Provider Configuration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black87)),
-                const SizedBox(height: 16),
-                _buildConfigurationSection(),
-                
-                const SizedBox(height: 32),
-                const Text('Recent Model Activity', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black87)),
-                const SizedBox(height: 16),
-                _buildActivityLogs(),
-                
-                const SizedBox(height: 40),
-              ],
-            ),
+            child: _buildBody(),
           ),
         ),
       ),
     );
   }
 
-  // ==============================================================
-  // UI COMPONENTS
-  // ==============================================================
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: adminTheme),
+      );
+    }
 
-  Widget _buildHealthBanner() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [adminTheme, adminTheme.withOpacity(0.8)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: red,
+                size: 50,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: textGrey,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 18),
+              ElevatedButton.icon(
+                onPressed: _loadAiStatus,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: adminTheme,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try Again'),
+              ),
+            ],
+          ),
         ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadAiStatus,
+      color: adminTheme,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        children: [
+          _buildSecurityBanner(),
+          const SizedBox(height: 18),
+          _buildModelCard(),
+          const SizedBox(height: 18),
+          _buildMetrics(),
+          const SizedBox(height: 28),
+          const Text(
+            'Recent Material AI Activity',
+            style: TextStyle(
+              color: textDark,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_activities.isEmpty)
+            _buildEmptyActivity()
+          else
+            ..._activities.map(_buildActivityCard),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSecurityBanner() {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: adminTheme.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: adminTheme.withValues(alpha: 0.18),
+        ),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.security_rounded, color: adminTheme),
+          SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              'CASLMS does not expose or edit Gemini API keys here. Firebase AI Logic configuration belongs in Firebase / Google Cloud, not inside the Flutter client.',
+              style: TextStyle(
+                color: textDark,
+                fontSize: 11.5,
+                height: 1.45,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModelCard() {
+    return Container(
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: adminTheme.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 6))],
+        border: Border.all(color: borderColor),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-            child: const Icon(Icons.memory_rounded, color: Colors.white, size: 28),
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              color: adminTheme.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: adminTheme,
+            ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 13),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Gateway Status: Healthy', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                Text('All AI endpoints are responding normally.', style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12, fontWeight: FontWeight.w500)),
+                const Text(
+                  'Detected Model',
+                  style: TextStyle(
+                    color: textGrey,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _model,
+                  style: const TextStyle(
+                    color: textDark,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ],
             ),
           ),
-          ElevatedButton(
-            onPressed: _isTestingConnection ? null : _testConnection,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: adminTheme,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          const Text(
+            'Firebase AI Logic',
+            style: TextStyle(
+              color: adminTheme,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
             ),
-            child: _isTestingConnection 
-                ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: adminTheme))
-                : const Text('Test Ping', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTopMetrics() {
+  Widget _buildMetrics() {
     return Row(
       children: [
-        Expanded(child: _buildMetricCard('Tokens Used\n(This Month)', '1.4M', Icons.data_usage_rounded, Colors.blueAccent)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildMetricCard('Total Requests\n(Today)', '342', Icons.compare_arrows_rounded, Colors.teal)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildMetricCard('Avg Response\nTime', '1.2s', Icons.timer_rounded, Colors.orange.shade600)),
+        Expanded(
+          child: _metric(
+            'Eligible',
+            _eligible,
+            Icons.description_outlined,
+            Colors.blue,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _metric(
+            'Ready',
+            _ready,
+            Icons.check_circle_outline_rounded,
+            green,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _metric(
+            'Pending',
+            _pending,
+            Icons.schedule_rounded,
+            orange,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _metric(
+            'Failed',
+            _failed,
+            Icons.error_outline_rounded,
+            red,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+  Widget _metric(
+    String label,
+    int value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      padding: const EdgeInsets.symmetric(
+        vertical: 14,
+        horizontal: 8,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
-        border: Border.all(color: Colors.grey.shade100),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 12),
-          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.black87)),
-          const SizedBox(height: 4),
-          Text(title, textAlign: TextAlign.center, style: TextStyle(fontSize: 10, color: Colors.grey[600], fontWeight: FontWeight.w600, height: 1.3)),
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 5),
+          Text(
+            '$value',
+            style: const TextStyle(
+              color: textDark,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(
+              color: textGrey,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildConfigurationSection() {
+  Widget _buildActivityCard(Map<String, dynamic> item) {
+    final status = (item['aiProcessingStatus'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    final Color color = status == 'ready'
+        ? green
+        : status == 'failed'
+            ? red
+            : orange;
+
+    final fileName =
+        (item['fileName'] ?? item['title'] ?? 'Learning Material')
+            .toString();
+
+    final creatorName =
+        (item['creatorName'] ?? 'Instructor').toString();
+
     return Container(
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
-        border: Border.all(color: Colors.grey.shade100),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: borderColor),
       ),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Provider Dropdown
-          const Text('Active LLM Provider', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey)),
-          const SizedBox(height: 8),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(9),
             decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedProvider,
-                isExpanded: true,
-                icon: const Icon(Icons.arrow_drop_down_rounded, color: Colors.grey),
-                items: _providers.map((provider) {
-                  return DropdownMenuItem(
-                    value: provider,
-                    child: Text(provider, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Colors.black87)),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) setState(() => _selectedProvider = value);
-                },
-              ),
+            child: Icon(
+              status == 'ready'
+                  ? Icons.auto_awesome_rounded
+                  : status == 'failed'
+                      ? Icons.error_outline_rounded
+                      : Icons.schedule_rounded,
+              color: color,
+              size: 19,
             ),
           ),
-          
-          const SizedBox(height: 20),
-          
-          // API Key Field
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Secret API Key', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey)),
-              GestureDetector(
-                onTap: () => setState(() => _isEditingKey = !_isEditingKey),
-                child: Text(_isEditingKey ? 'Lock' : 'Edit', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: adminTheme)),
-              )
-            ],
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _apiKeyController,
-            obscureText: !_isEditingKey,
-            enabled: _isEditingKey,
-            decoration: InputDecoration(
-              prefixIcon: const Icon(Icons.vpn_key_rounded, color: Colors.grey, size: 20),
-              filled: true,
-              fillColor: _isEditingKey ? Colors.white : Colors.grey.shade50,
-              contentPadding: const EdgeInsets.symmetric(vertical: 14),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
-              disabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade200)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: adminTheme, width: 2)),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  fileName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: textDark,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '$creatorName • '
+                  '${status.isEmpty ? 'AI Eligible' : _capitalize(status)}',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _formatTimestamp(item['activityTimestamp']),
+                  style: const TextStyle(
+                    color: textGrey,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
             ),
-          ),
-
-          const SizedBox(height: 24),
-          const Divider(height: 1, color: Color(0xFFF0F2F5)),
-          const SizedBox(height: 24),
-
-          // Temperature Slider
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Model Creativity (Temperature)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.black87)),
-              Text(_temperature.toStringAsFixed(1), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: adminTheme)),
-            ],
-          ),
-          Slider(
-            value: _temperature,
-            min: 0.0,
-            max: 1.0,
-            divisions: 10,
-            activeColor: adminTheme,
-            inactiveColor: adminTheme.withOpacity(0.2),
-            onChanged: (val) => setState(() => _temperature = val),
-          ),
-          
-          const SizedBox(height: 16),
-
-          // Max Tokens Slider
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Max Output Tokens', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.black87)),
-              Text(_maxTokens.toInt().toString(), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: adminTheme)),
-            ],
-          ),
-          Slider(
-            value: _maxTokens,
-            min: 256,
-            max: 4096,
-            divisions: 15,
-            activeColor: adminTheme,
-            inactiveColor: adminTheme.withOpacity(0.2),
-            onChanged: (val) => setState(() => _maxTokens = val),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildActivityLogs() {
-    return Container(
+  Widget _buildEmptyActivity() {
+    return  Container(
+      padding: EdgeInsets.all(28),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
-        border: Border.all(color: Colors.grey.shade100),
+        borderRadius: BorderRadius.all(Radius.circular(16)),
       ),
       child: Column(
-        children: _activityLogs.asMap().entries.map((entry) {
-          final log = entry.value;
-          final isLast = entry.key == _activityLogs.length - 1;
-          final isSuccess = log['status'] == 'Success';
-
-          return Column(
-            children: [
-              ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: (isSuccess ? Colors.green : Colors.red).withOpacity(0.1), shape: BoxShape.circle),
-                  child: Icon(isSuccess ? Icons.check_rounded : Icons.close_rounded, color: isSuccess ? Colors.green : Colors.red, size: 20),
-                ),
-                title: Text(log['action'], style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Colors.black87)),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: Text('${log['user']} • ${log['tokens']} tokens', style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontWeight: FontWeight.w500)),
-                ),
-                trailing: Text(log['time'], style: TextStyle(color: Colors.grey.shade400, fontSize: 11, fontWeight: FontWeight.w600)),
-              ),
-              if (!isLast) const Divider(height: 1, indent: 70, color: Color(0xFFF0F2F5)),
-            ],
-          );
-        }).toList(),
+        children: [
+          Icon(
+            Icons.auto_awesome_outlined,
+            color: textGrey,
+            size: 32,
+          ),
+          SizedBox(height: 9),
+          Text(
+            'No AI material activity has been recorded yet.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: textGrey),
+          ),
+        ],
       ),
     );
+  }
+
+  DateTime? _dateFrom(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
+  }
+
+  String _formatTimestamp(dynamic value) {
+    final date = _dateFrom(value);
+
+    if (date == null) return 'No timestamp';
+
+    final difference =
+        DateTime.now().difference(date.toLocal());
+
+    if (difference.inMinutes < 1) return 'Just now';
+    if (difference.inMinutes < 60) {
+      return '${difference.inMinutes} min ago';
+    }
+    if (difference.inHours < 24) {
+      return '${difference.inHours} hr ago';
+    }
+
+    return '${difference.inDays} day${difference.inDays == 1 ? '' : 's'} ago';
+  }
+
+  String _capitalize(String value) {
+    if (value.isEmpty) return value;
+    return '${value[0].toUpperCase()}${value.substring(1)}';
   }
 }

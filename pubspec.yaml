@@ -43,6 +43,7 @@ dependencies:
   file_picker: ^12.1.2
   firebase_ai: ^4.0.0
   firebase_app_check: ^0.4.7
+  archive: ^4.2.0
 
 dev_dependencies:
   flutter_test:

@@ -1,471 +1,931 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class AdminCoursesScreen extends StatefulWidget {
-  const AdminCoursesScreen({Key? key}) : super(key: key);
+  const AdminCoursesScreen({super.key});
 
   @override
-  State<AdminCoursesScreen> createState() => _AdminCoursesScreenState();
+  State<AdminCoursesScreen> createState() =>
+      _AdminCoursesScreenState();
 }
 
 class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
-  final Color adminTheme = Colors.indigo.shade600;
+  static const Color adminTheme = Color(0xFF4F46E5);
+  static const Color background = Color(0xFFF8F9FA);
+  static const Color textDark = Color(0xFF10182F);
+  static const Color textGrey = Color(0xFF68738A);
+  static const Color borderColor = Color(0xFFE6EAF0);
+  static const Color green = Color(0xFF26A65B);
+  static const Color orange = Color(0xFFFF9418);
+  static const Color red = Color(0xFFFF4B4B);
+
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
+
+  bool _isLoading = true;
+  bool _isBusy = false;
+  String? _errorMessage;
 
   String _searchQuery = '';
   String _selectedStatusFilter = 'Active';
-  final List<String> _statusOptions = ['All', 'Active', 'Archived'];
 
-  // Mock Course Database
-  final List<Map<String, dynamic>> _courses = [
-    {
-      'code': 'IT301',
-      'title': 'Mobile Development',
-      'instructor': 'Mr. Santos',
-      'students': 45,
-      'status': 'Active',
-      'color': Colors.blueAccent,
-    },
-    {
-      'code': 'IT305',
-      'title': 'System Integration',
-      'instructor': 'Prof. Cruz',
-      'students': 40,
-      'status': 'Active',
-      'color': Colors.deepPurple,
-    },
-    {
-      'code': 'IT401',
-      'title': 'IT Capstone Project 1',
-      'instructor': 'Prof. Reyes',
-      'students': 32,
-      'status': 'Active',
-      'color': Colors.purple.shade400,
-    },
-    {
-      'code': 'CS101',
-      'title': 'Introduction to Computing',
-      'instructor': 'Dr. Gomez',
-      'students': 120,
-      'status': 'Archived',
-      'color': Colors.grey,
-    },
+  final List<String> _statusOptions = const [
+    'All',
+    'Active',
+    'Archived',
   ];
 
-  // Dynamic Filtering Logic
+  List<Map<String, dynamic>> _courses = [];
+  List<Map<String, dynamic>> _instructors = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCourses();
+  }
+
+  Future<void> _loadCourses() async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
+
+    try {
+      final courseSnapshot =
+          await _firestore.collection('courses').get();
+
+      final instructorSnapshot = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: 'instructor')
+          .get();
+
+      final instructors = instructorSnapshot.docs
+          .map(
+            (document) => <String, dynamic>{
+              ...document.data(),
+              'uid': document.id,
+            },
+          )
+          .where(
+            (user) =>
+                (user['status'] ?? 'active')
+                    .toString()
+                    .trim()
+                    .toLowerCase() ==
+                'active',
+          )
+          .toList();
+
+      final List<Map<String, dynamic>> courses = [];
+
+      for (final document in courseSnapshot.docs) {
+        final data = document.data();
+
+        final enrollmentSnapshot = await _firestore
+            .collection('enrollments')
+            .where('courseId', isEqualTo: document.id)
+            .get();
+
+        final Set<String> activeStudents = {};
+
+        for (final enrollmentDocument
+            in enrollmentSnapshot.docs) {
+          final enrollment = enrollmentDocument.data();
+          final status = (enrollment['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
+
+          final studentId =
+              (enrollment['studentId'] ?? '').toString().trim();
+
+          if (status == 'active' && studentId.isNotEmpty) {
+            activeStudents.add(studentId);
+          }
+        }
+
+        courses.add({
+          ...data,
+          'id': document.id,
+          'courseId': document.id,
+          'studentCount': activeStudents.length,
+        });
+      }
+
+      courses.sort(
+        (a, b) =>
+            _courseCode(a).compareTo(_courseCode(b)),
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _courses = courses;
+        _instructors = instructors;
+        _isLoading = false;
+      });
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage =
+            e.message ?? 'Unable to load courses.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage =
+            e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
   List<Map<String, dynamic>> get _filteredCourses {
+    final query = _searchQuery.trim().toLowerCase();
+
     return _courses.where((course) {
-      final matchesStatus = _selectedStatusFilter == 'All' || course['status'] == _selectedStatusFilter;
-      final matchesSearch = course['title'].toLowerCase().contains(_searchQuery.toLowerCase()) || 
-                            course['code'].toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                            course['instructor'].toLowerCase().contains(_searchQuery.toLowerCase());
-      return matchesStatus && matchesSearch;
+      final status = _courseStatus(course);
+
+      final statusMatches =
+          _selectedStatusFilter == 'All' ||
+              status == _selectedStatusFilter.toLowerCase();
+
+      if (!statusMatches) return false;
+
+      if (query.isEmpty) return true;
+
+      return _courseCode(course).toLowerCase().contains(query) ||
+          _courseTitle(course).toLowerCase().contains(query) ||
+          _instructorName(course).toLowerCase().contains(query);
     }).toList();
   }
 
-  void _toggleCourseStatus(int index) {
-    setState(() {
-      _courses[index]['status'] = _courses[index]['status'] == 'Active' ? 'Archived' : 'Active';
-      _courses[index]['color'] = _courses[index]['status'] == 'Active' ? Colors.indigo.shade400 : Colors.grey;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${_courses[index]['code']} is now ${_courses[index]['status']}'),
-        backgroundColor: adminTheme,
-        behavior: SnackBarBehavior.floating,
-      ),
+  int get _activeCourseCount => _courses
+      .where((course) => _courseStatus(course) == 'active')
+      .length;
+
+  int get _archivedCourseCount => _courses
+      .where((course) => _courseStatus(course) == 'archived')
+      .length;
+
+  int get _totalEnrollments => _courses.fold<int>(
+        0,
+        (total, course) =>
+            total +
+            ((course['studentCount'] as num?)?.toInt() ?? 0),
+      );
+
+  Future<void> _toggleCourseStatus(
+    Map<String, dynamic> course,
+  ) async {
+    if (_isBusy) return;
+
+    final courseId = _courseId(course);
+    if (courseId.isEmpty) return;
+
+    final current = _courseStatus(course);
+    final next = current == 'active' ? 'archived' : 'active';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(
+            next == 'archived'
+                ? 'Archive Course?'
+                : 'Reactivate Course?',
+          ),
+          content: Text(
+            next == 'archived'
+                ? 'The course will no longer be treated as active. Existing modules, assessments, and enrollment records will be preserved.'
+                : 'The course will become active again.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    next == 'archived' ? orange : green,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(
+                next == 'archived' ? 'Archive' : 'Reactivate',
+              ),
+            ),
+          ],
+        );
+      },
     );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _isBusy = true;
+    });
+
+    try {
+      await _firestore.collection('courses').doc(courseId).update({
+        'status': next,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      await _loadCourses();
+
+      if (!mounted) return;
+
+      _showMessage(
+        '${_courseCode(course)} is now ${_capitalize(next)}.',
+      );
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      _showError(e.message ?? 'Unable to update course status.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
   }
 
-  void _deleteCourse(int index) {
-    final title = _courses[index]['title'];
-    setState(() {
-      _courses.removeAt(index);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$title deleted successfully.'),
-        backgroundColor: Colors.red.shade600,
-        behavior: SnackBarBehavior.floating,
-      ),
+  Future<void> _editCourse(
+    Map<String, dynamic> course,
+  ) async {
+    if (_isBusy) return;
+
+    final codeController =
+        TextEditingController(text: _courseCode(course));
+
+    final titleController =
+        TextEditingController(text: _courseTitle(course));
+
+    final classCodeController = TextEditingController(
+      text: (course['classCode'] ?? '').toString(),
     );
+
+    String selectedInstructorId =
+        (course['instructorId'] ?? '').toString();
+
+    if (selectedInstructorId.isEmpty &&
+        _instructors.isNotEmpty) {
+      selectedInstructorId =
+          (_instructors.first['uid'] ?? '').toString();
+    }
+
+    final result =
+        await showDialog<Map<String, String>>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final bool hasSelectedInstructor = _instructors.any(
+              (item) =>
+                  (item['uid'] ?? '').toString() ==
+                  selectedInstructorId,
+            );
+
+            return AlertDialog(
+              title: const Text(
+                'Edit Course',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: codeController,
+                      textCapitalization:
+                          TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Course Code',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: titleController,
+                      decoration: const InputDecoration(
+                        labelText: 'Course Title',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: classCodeController,
+                      textCapitalization:
+                          TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Class Code',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_instructors.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        value: hasSelectedInstructor
+                            ? selectedInstructorId
+                            : null,
+                        decoration: const InputDecoration(
+                          labelText: 'Instructor',
+                        ),
+                        items: _instructors.map((instructor) {
+                          return DropdownMenuItem<String>(
+                            value:
+                                (instructor['uid'] ?? '').toString(),
+                            child: Text(
+                              (instructor['name'] ?? 'Instructor')
+                                  .toString(),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+
+                          setDialogState(() {
+                            selectedInstructorId = value;
+                          });
+                        },
+                      )
+                    else
+                      const Text(
+                        'No active instructors are available.',
+                        style: TextStyle(color: textGrey),
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(
+                      dialogContext,
+                      <String, String>{
+                        'code': codeController.text,
+                        'title': titleController.text,
+                        'classCode': classCodeController.text,
+                        'instructorId': selectedInstructorId,
+                      },
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: adminTheme,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    codeController.dispose();
+    titleController.dispose();
+    classCodeController.dispose();
+
+    if (result == null) return;
+
+    final code =
+        (result['code'] ?? '').trim().toUpperCase();
+    final title = (result['title'] ?? '').trim();
+    final classCode =
+        (result['classCode'] ?? '').trim().toUpperCase();
+    final instructorId =
+        (result['instructorId'] ?? '').trim();
+
+    if (code.isEmpty || title.isEmpty) {
+      _showError('Course code and title are required.');
+      return;
+    }
+
+    String instructorName = '';
+
+    for (final instructor in _instructors) {
+      if ((instructor['uid'] ?? '').toString() ==
+          instructorId) {
+        instructorName =
+            (instructor['name'] ?? '').toString();
+        break;
+      }
+    }
+
+    setState(() {
+      _isBusy = true;
+    });
+
+    try {
+      await _firestore
+          .collection('courses')
+          .doc(_courseId(course))
+          .update({
+        'code': code,
+        'title': title,
+        'classCode': classCode,
+        'instructorId': instructorId,
+        'instructorName': instructorName,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      await _loadCourses();
+
+      if (!mounted) return;
+
+      _showMessage('Course updated successfully.');
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+      _showError(e.message ?? 'Unable to update course.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isBusy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _exportCsv() async {
+    if (_filteredCourses.isEmpty) {
+      _showError('There are no courses to export.');
+      return;
+    }
+
+    final csv = StringBuffer(
+      'Course Code,Title,Class Code,Instructor,Active Students,Status\n',
+    );
+
+    for (final course in _filteredCourses) {
+      csv.writeln(
+        '${_csv(_courseCode(course))},'
+        '${_csv(_courseTitle(course))},'
+        '${_csv((course['classCode'] ?? '').toString())},'
+        '${_csv(_instructorName(course))},'
+        '${(course['studentCount'] as num?)?.toInt() ?? 0},'
+        '${_csv(_capitalize(_courseStatus(course)))}',
+      );
+    }
+
+    await Clipboard.setData(
+      ClipboardData(text: csv.toString()),
+    );
+
+    if (!mounted) return;
+
+    _showMessage('Course CSV copied to clipboard.');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(60.0),
-        child: AppBar(
-          automaticallyImplyLeading: false,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          titleSpacing: 24.0,
-          title: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'Course Administration',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Colors.black87, letterSpacing: -0.5),
+      backgroundColor: background,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: background,
+        elevation: 0,
+        titleSpacing: 24,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Course Administration',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+                color: textDark,
               ),
-              Text(
-                'Active Subjects & Enrollment',
-                style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600),
+            ),
+            Text(
+              'Live Courses & Enrollment',
+              style: TextStyle(
+                fontSize: 12,
+                color: textGrey,
+                fontWeight: FontWeight.w600,
               ),
-            ],
-          ),
-          actions: [
-            IconButton(icon: const Icon(Icons.download_rounded, color: Colors.black87), tooltip: 'Export Roster', onPressed: () {}),
-            const SizedBox(width: 24),
+            ),
           ],
         ),
+        actions: [
+          IconButton(
+            onPressed: _isBusy ? null : _exportCsv,
+            tooltip: 'Copy CSV',
+            icon: const Icon(Icons.download_rounded, color: textDark),
+          ),
+          IconButton(
+            onPressed: _isBusy ? null : _loadCourses,
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh_rounded, color: textDark),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
+        top: false,
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1200),
-            child: ListView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-              children: [
-                _buildTopMetrics(),
-                const SizedBox(height: 24),
-                _buildSearchAndFilter(),
-                const SizedBox(height: 24),
-
-                if (_filteredCourses.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 40),
-                    child: Center(
-                      child: Text('No courses found.', style: TextStyle(color: Colors.grey.shade600, fontSize: 16, fontWeight: FontWeight.w600)),
-                    ),
-                  )
-                else
-                  ..._filteredCourses.map((course) {
-                    int originalIndex = _courses.indexWhere((c) => c['code'] == course['code']);
-                    return _buildSubjectCard(course, originalIndex);
-                  }).toList(),
-                  
-                const SizedBox(height: 80), // Fab padding
-              ],
-            ),
+            child: _buildBody(),
           ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCreateCourseModal(context),
-        backgroundColor: adminTheme,
-        elevation: 4,
-        icon: const Icon(Icons.library_add_rounded, color: Colors.white),
-        label: const Text('New Course', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
   }
 
-  // ==============================================================
-  // UI COMPONENTS
-  // ==============================================================
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: adminTheme),
+      );
+    }
 
-  Widget _buildTopMetrics() {
-    int active = _courses.where((c) => c['status'] == 'Active').length;
-    int archived = _courses.where((c) => c['status'] == 'Archived').length;
-    int totalStudents = _courses.where((c) => c['status'] == 'Active').fold(0, (sum, item) => sum + (item['students'] as int));
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded, color: red, size: 50),
+              const SizedBox(height: 14),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: textGrey, height: 1.45),
+              ),
+              const SizedBox(height: 18),
+              ElevatedButton.icon(
+                onPressed: _loadCourses,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: adminTheme,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try Again'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
+    return RefreshIndicator(
+      onRefresh: _loadCourses,
+      color: adminTheme,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        children: [
+          _buildMetrics(),
+          const SizedBox(height: 20),
+          _buildSearchAndFilter(),
+          const SizedBox(height: 18),
+          if (_filteredCourses.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 50),
+              child: Center(
+                child: Text(
+                  'No courses match this filter.',
+                  style: TextStyle(
+                    color: textGrey,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            )
+          else
+            ..._filteredCourses.map(_buildCourseCard),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetrics() {
     return Row(
       children: [
-        Expanded(child: _buildMetricCard('Active', active.toString(), Icons.class_rounded, adminTheme)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildMetricCard('Enrolled', totalStudents.toString(), Icons.groups_rounded, Colors.blueAccent)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildMetricCard('Archived', archived.toString(), Icons.inventory_2_rounded, Colors.grey.shade600)),
+        Expanded(
+          child: _metricCard(
+            'Active',
+            '$_activeCourseCount',
+            Icons.library_books_rounded,
+            adminTheme,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _metricCard(
+            'Archived',
+            '$_archivedCourseCount',
+            Icons.inventory_2_outlined,
+            orange,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _metricCard(
+            'Enrollments',
+            '$_totalEnrollments',
+            Icons.groups_rounded,
+            green,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+  Widget _metricCard(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
-        border: Border.all(color: Colors.grey.shade100),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.black87)),
-          const SizedBox(height: 2),
-          Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: Colors.grey[600], fontWeight: FontWeight.w600)),
+          Icon(icon, color: color, size: 21),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              color: textDark,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(
+              color: textGrey,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _buildSearchAndFilter() {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          flex: 5,
-          child: TextField(
-            onChanged: (value) => setState(() => _searchQuery = value),
-            decoration: InputDecoration(
-              hintText: 'Search course code or title...',
-              hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-              prefixIcon: const Icon(Icons.search_rounded, color: Colors.grey),
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(vertical: 14),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade200)),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade200)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: adminTheme, width: 2)),
+        TextField(
+          onChanged: (value) {
+            setState(() {
+              _searchQuery = value;
+            });
+          },
+          decoration: InputDecoration(
+            hintText: 'Search course, code, or instructor',
+            prefixIcon: const Icon(Icons.search_rounded),
+            filled: true,
+            fillColor: Colors.white,
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: borderColor),
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 3,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedStatusFilter,
-                isExpanded: true,
-                icon: const Icon(Icons.filter_list_rounded, color: Colors.grey),
-                items: _statusOptions.map((status) {
-                  return DropdownMenuItem(
-                    value: status,
-                    child: Text(status, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.black87)),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) setState(() => _selectedStatusFilter = value);
-                },
-              ),
-            ),
+        const SizedBox(height: 11),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: _statusOptions.map((status) {
+              final selected =
+                  _selectedStatusFilter == status;
+
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  selected: selected,
+                  label: Text(status),
+                  selectedColor:
+                      adminTheme.withValues(alpha: 0.12),
+                  labelStyle: TextStyle(
+                    color: selected ? adminTheme : textGrey,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  onSelected: (_) {
+                    setState(() {
+                      _selectedStatusFilter = status;
+                    });
+                  },
+                ),
+              );
+            }).toList(),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildSubjectCard(Map<String, dynamic> course, int originalIndex) {
-    bool isArchived = course['status'] == 'Archived';
-    
+  Widget _buildCourseCard(Map<String, dynamic> course) {
+    final status = _courseStatus(course);
+    final active = status == 'active';
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 11),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isArchived ? Colors.grey.shade300 : Colors.transparent, width: 1.5),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 12, offset: const Offset(0, 4))],
+        border: Border.all(color: borderColor),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  course['title'], 
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800, 
-                    fontSize: 16, 
-                    color: isArchived ? Colors.grey.shade600 : Colors.black87
-                  )
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.more_horiz_rounded, color: Colors.grey),
-                onPressed: () => _showCourseOptions(context, course, originalIndex),
-                constraints: const BoxConstraints(),
-                padding: EdgeInsets.zero,
-              ),
-            ],
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 9,
+        ),
+        leading: Container(
+          width: 48,
+          height: 48,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: (active ? adminTheme : Colors.grey)
+                .withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(13),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: course['color'].withOpacity(0.1), borderRadius: BorderRadius.circular(6)),
-                child: Text(
-                  course['code'], 
-                  style: TextStyle(color: course['color'], fontSize: 11, fontWeight: FontWeight.w800)
-                ),
-              ),
-              const SizedBox(width: 8),
-              if (isArchived)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(6)),
-                  child: Text(
-                    'Archived', 
-                    style: TextStyle(color: Colors.grey.shade700, fontSize: 10, fontWeight: FontWeight.w700)
-                  ),
-                ),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16.0),
-            child: Divider(height: 1, thickness: 1, color: Color(0xFFF0F0F0)),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.person_rounded, size: 16, color: Colors.grey[400]),
-                  const SizedBox(width: 6),
-                  Text(course['instructor'], style: TextStyle(color: Colors.grey[600], fontSize: 13, fontWeight: FontWeight.w600)),
-                ],
-              ),
-              Row(
-                children: [
-                  Icon(Icons.groups_rounded, size: 16, color: isArchived ? Colors.grey[400] : adminTheme),
-                  const SizedBox(width: 6),
-                  Text('${course['students']} Enrolled', style: TextStyle(color: isArchived ? Colors.grey.shade500 : adminTheme, fontSize: 13, fontWeight: FontWeight.w700)),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ==============================================================
-  // ACTIONS & MODALS
-  // ==============================================================
-
-  void _showCourseOptions(BuildContext context, Map<String, dynamic> course, int index) {
-    bool isArchived = course['status'] == 'Archived';
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: const Icon(Icons.edit_document, color: Colors.black87),
-                title: const Text('Edit Course Details', style: TextStyle(fontWeight: FontWeight.w600)),
-                onTap: () {
-                  Navigator.pop(context);
-                  // Trigger edit modal here
-                },
-              ),
-              ListTile(
-                leading: Icon(isArchived ? Icons.unarchive_rounded : Icons.archive_rounded, color: isArchived ? Colors.green : Colors.orange),
-                title: Text(isArchived ? 'Restore Course' : 'Archive Course', style: TextStyle(fontWeight: FontWeight.w600, color: isArchived ? Colors.green : Colors.orange.shade800)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _toggleCourseStatus(index);
-                },
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.delete_forever_rounded, color: Colors.red),
-                title: const Text('Delete Course', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red)),
-                onTap: () {
-                  Navigator.pop(context);
-                  _deleteCourse(index);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showCreateCourseModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return Container(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 24, right: 24, top: 24),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.only(topLeft: Radius.circular(32), topRight: Radius.circular(32)),
+          child: Text(
+            _courseCode(course),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: active ? adminTheme : Colors.grey,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
             ),
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Create New Course', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black87)),
-                  const SizedBox(height: 24),
-                  
-                  _buildTextField('Course Code (e.g., IT501)', Icons.tag_rounded),
-                  const SizedBox(height: 16),
-                  _buildTextField('Course Title', Icons.title_rounded),
-                  const SizedBox(height: 16),
-                  _buildTextField('Assign Instructor Email', Icons.alternate_email_rounded),
-                  
-                  const SizedBox(height: 32),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          _courses.insert(0, {
-                            'code': 'NEW101',
-                            'title': 'Newly Created Course',
-                            'instructor': 'Pending Assignment',
-                            'students': 0,
-                            'status': 'Active',
-                            'color': Colors.indigo.shade400,
-                          });
-                        });
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Course successfully created!'), backgroundColor: Colors.green.shade600));
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: adminTheme,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        elevation: 0,
-                      ),
-                      child: const Text('Create Course', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                ],
+          ),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _courseTitle(course),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: textDark,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
-          );
-        }
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 7,
+                vertical: 3,
+              ),
+              decoration: BoxDecoration(
+                color:
+                    (active ? green : orange).withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _capitalize(status),
+                style: TextStyle(
+                  color: active ? green : orange,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 5),
+          child: Text(
+            '${_courseCode(course)} • ${_instructorName(course)}\n'
+            'Class code: ${(course['classCode'] ?? 'Not set')} • '
+            '${(course['studentCount'] as num?)?.toInt() ?? 0} active student(s)',
+            style: const TextStyle(
+              color: textGrey,
+              fontSize: 11,
+              height: 1.4,
+            ),
+          ),
+        ),
+        trailing: PopupMenuButton<String>(
+          enabled: !_isBusy,
+          onSelected: (action) {
+            if (action == 'edit') {
+              _editCourse(course);
+            } else if (action == 'status') {
+              _toggleCourseStatus(course);
+            }
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: 'edit',
+              child: Text('Edit Course'),
+            ),
+            PopupMenuItem(
+              value: 'status',
+              child: Text(
+                active ? 'Archive Course' : 'Reactivate Course',
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildTextField(String label, IconData icon) {
-    return TextField(
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: Colors.grey.shade500),
-        filled: true,
-        fillColor: Colors.grey[50],
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.shade200, width: 1.5)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: adminTheme, width: 2)),
+  String _courseId(Map<String, dynamic> course) {
+    return (course['courseId'] ?? course['id'] ?? '')
+        .toString()
+        .trim();
+  }
+
+  String _courseCode(Map<String, dynamic> course) {
+    final value = (course['code'] ?? '').toString().trim();
+    return value.isEmpty ? 'COURSE' : value;
+  }
+
+  String _courseTitle(Map<String, dynamic> course) {
+    final value = (course['title'] ?? '').toString().trim();
+    return value.isEmpty ? 'Untitled Course' : value;
+  }
+
+  String _courseStatus(Map<String, dynamic> course) {
+    final value =
+        (course['status'] ?? 'active').toString().trim().toLowerCase();
+
+    return value.isEmpty ? 'active' : value;
+  }
+
+  String _instructorName(Map<String, dynamic> course) {
+    final direct =
+        (course['instructorName'] ?? '').toString().trim();
+
+    if (direct.isNotEmpty) return direct;
+
+    final instructorId =
+        (course['instructorId'] ?? '').toString();
+
+    for (final instructor in _instructors) {
+      if ((instructor['uid'] ?? '').toString() ==
+          instructorId) {
+        return (instructor['name'] ?? 'Instructor').toString();
+      }
+    }
+
+    return 'Unassigned';
+  }
+
+  String _capitalize(String value) {
+    if (value.isEmpty) return value;
+    return '${value[0].toUpperCase()}${value.substring(1)}';
+  }
+
+  String _csv(String value) {
+    return '"${value.replaceAll('"', '""')}"';
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: adminTheme,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: red,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }

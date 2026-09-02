@@ -1,310 +1,685 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../auth_page.dart';
-import 'settings_page.dart';
-import '../../services/auth_service.dart';
 
-class StudentProfileScreen extends StatelessWidget {
+import '../../services/profile_picture_service.dart';
+
+class StudentProfileScreen extends StatefulWidget {
   const StudentProfileScreen({super.key});
 
-  // ==============================================================
+  @override
+  State<StudentProfileScreen> createState() =>
+      _StudentProfileScreenState();
+}
+
+class _StudentProfileScreenState extends State<StudentProfileScreen> {
+  // ============================================================
   // CASLMS DESIGN SYSTEM
-  // ==============================================================
+  // ============================================================
+
   static const Color primaryBlue = Color(0xFF1769FF);
+  static const Color background = Color(0xFFF7F9FC);
   static const Color darkText = Color(0xFF10182F);
   static const Color greyText = Color(0xFF68738A);
-  static const Color background = Color(0xFFF7F9FC);
+  static const Color borderColor = Color(0xFFE6EAF0);
+  static const Color green = Color(0xFF26A65B);
   static const Color orange = Color(0xFFFF9418);
   static const Color red = Color(0xFFFF4B4B);
 
+  // ============================================================
+  // FIREBASE
+  // ============================================================
+
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final ProfilePictureService _profilePictureService =
+      ProfilePictureService();
+
+  // ============================================================
+  // STATE
+  // ============================================================
+
+  bool _isLoading = true;
+  bool _isSaving = false;
+  bool _isUploadingPhoto = false;
+  String? _errorMessage;
+
+  Map<String, dynamic>? _profile;
+  int _activeClasses = 0;
+
+  // ============================================================
+  // INIT
+  // ============================================================
+
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: background,
-      
-      // ==================================================
-      // STANDARDIZED HEADER
-      // ==================================================
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(60.0),
-        child: AppBar(
-          automaticallyImplyLeading: false,
-          backgroundColor: background,
-          elevation: 0,
-          centerTitle: true,
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  // ============================================================
+  // LOAD REAL STUDENT PROFILE + ENROLLMENT COUNT
+  // ============================================================
+
+  Future<void> _loadProfile() async {
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
+
+    try {
+      final User? user = _auth.currentUser;
+
+      if (user == null) {
+        throw Exception('You are not currently logged in.');
+      }
+
+      final DocumentSnapshot<Map<String, dynamic>> profileDocument =
+          await _firestore.collection('users').doc(user.uid).get();
+
+      if (!profileDocument.exists || profileDocument.data() == null) {
+        throw Exception('Student profile could not be found.');
+      }
+
+      final Map<String, dynamic> profileData = profileDocument.data()!;
+
+      final String role =
+          (profileData['role'] ?? '').toString().trim().toLowerCase();
+
+      if (role != 'student') {
+        throw Exception('This account is not a student account.');
+      }
+
+      final QuerySnapshot<Map<String, dynamic>> enrollmentSnapshot =
+          await _firestore
+              .collection('enrollments')
+              .where('studentId', isEqualTo: user.uid)
+              .get();
+
+      int activeClasses = 0;
+
+      for (final QueryDocumentSnapshot<Map<String, dynamic>> document
+          in enrollmentSnapshot.docs) {
+        final String status =
+            (document.data()['status'] ?? '').toString().trim().toLowerCase();
+
+        if (status == 'active') {
+          activeClasses++;
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _profile = {
+          ...profileData,
+          'uid': user.uid,
+        };
+
+        _activeClasses = activeClasses;
+        _isLoading = false;
+        _errorMessage = null;
+      });
+    } on FirebaseException catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage =
+            e.message ?? 'Unable to load your student profile.';
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage =
+            e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  // ============================================================
+  // REAL PROFILE VALUES
+  // ============================================================
+
+  String get _name {
+    final String value =
+        (_profile?['name'] ?? _auth.currentUser?.displayName ?? '')
+            .toString()
+            .trim();
+
+    return value.isEmpty ? 'Student' : value;
+  }
+
+  String get _course {
+    final String value = (_profile?['course'] ?? '').toString().trim();
+
+    return value.isEmpty ? 'Course not specified' : value;
+  }
+
+  String get _department {
+    final String value = (_profile?['department'] ?? '').toString().trim();
+
+    return value.isEmpty ? 'Department not specified' : value;
+  }
+
+  String get _studentId {
+    final String value = (_profile?['universityId'] ?? '').toString().trim();
+
+    return value.isEmpty ? 'Not set' : value;
+  }
+
+  String get _email {
+    final String value = (_profile?['email'] ?? '').toString().trim();
+
+    return value.isEmpty ? 'Not set' : value;
+  }
+
+  String get _status {
+    final String value =
+        (_profile?['status'] ?? 'active').toString().trim().toLowerCase();
+
+    return value.isEmpty ? 'active' : value;
+  }
+
+  String get _photoUrl {
+    return (_profile?['photoUrl'] ?? '').toString().trim();
+  }
+
+  Future<void> _changeProfilePicture() async {
+    if (_isUploadingPhoto || _isSaving) {
+      return;
+    }
+
+    setState(() {
+      _isUploadingPhoto = true;
+    });
+
+    try {
+      final ProfilePictureResult? result =
+          await _profilePictureService.pickAndUploadProfilePicture();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (result == null) {
+        setState(() {
+          _isUploadingPhoto = false;
+        });
+        return;
+      }
+
+      setState(() {
+        _profile = {
+          ...?_profile,
+          'photoUrl': result.photoUrl,
+          'photoPath': result.photoPath,
+        };
+        _isUploadingPhoto = false;
+      });
+
+      _showMessage('Profile picture updated.');
+    } on ProfilePictureServiceException catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isUploadingPhoto = false;
+      });
+
+      _showError(e.message);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isUploadingPhoto = false;
+      });
+
+      _showError('Unable to update your profile picture.');
+    }
+  }
+
+  Future<void> _removeProfilePicture() async {
+    if (_photoUrl.isEmpty || _isUploadingPhoto) {
+      return;
+    }
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
           title: const Text(
-            'My Profile',
+            'Remove Profile Picture',
             style: TextStyle(
-              fontSize: 18,
               fontWeight: FontWeight.w800,
+            ),
+          ),
+          content: const Text(
+            'Your initials will be shown instead.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Remove'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isUploadingPhoto = true;
+    });
+
+    try {
+      await _profilePictureService.removeProfilePicture();
+
+      if (!mounted) {
+        return;
+      }
+
+      final Map<String, dynamic> updatedProfile = {
+        ...?_profile,
+      };
+
+      updatedProfile.remove('photoUrl');
+      updatedProfile.remove('photoPath');
+
+      setState(() {
+        _profile = updatedProfile;
+        _isUploadingPhoto = false;
+      });
+
+      _showMessage('Profile picture removed.');
+    } on ProfilePictureServiceException catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isUploadingPhoto = false;
+      });
+
+      _showError(e.message);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isUploadingPhoto = false;
+      });
+
+      _showError('Unable to remove your profile picture.');
+    }
+  }
+
+  String get _initials {
+    final List<String> parts =
+        _name.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
+
+    if (parts.isEmpty) {
+      return 'S';
+    }
+
+    if (parts.length == 1) {
+      return parts.first[0].toUpperCase();
+    }
+
+    return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+  }
+
+  // ============================================================
+  // EDIT PERSONAL INFORMATION
+  //
+  // Campus ID, role, status and hidden Firebase auth email are
+  // intentionally not editable from the student profile.
+  // ============================================================
+
+  Future<void> _showEditProfileDialog() async {
+    if (_profile == null || _isSaving) {
+      return;
+    }
+
+    String newName = _name;
+    String newEmail =
+        (_profile?['email'] ?? '').toString();
+
+    String newDepartment =
+        (_profile?['department'] ?? '').toString();
+
+    String newCourse =
+        (_profile?['course'] ?? '').toString();
+
+    final Map<String, String>? result =
+        await showDialog<Map<String, String>>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            'Personal Information',
+            style: TextStyle(
               color: darkText,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  initialValue: newName,
+                  textCapitalization:
+                      TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    prefixIcon:
+                        Icon(Icons.person_outline_rounded),
+                  ),
+                  onChanged: (String value) {
+                    newName = value;
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  initialValue: newEmail,
+                  keyboardType:
+                      TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Contact Email',
+                    prefixIcon:
+                        Icon(Icons.email_outlined),
+                  ),
+                  onChanged: (String value) {
+                    newEmail = value;
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  initialValue: newDepartment,
+                  textCapitalization:
+                      TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Department',
+                    prefixIcon:
+                        Icon(Icons.apartment_rounded),
+                  ),
+                  onChanged: (String value) {
+                    newDepartment = value;
+                  },
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  initialValue: newCourse,
+                  textCapitalization:
+                      TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Course / Program',
+                    prefixIcon:
+                        Icon(Icons.school_outlined),
+                  ),
+                  onChanged: (String value) {
+                    newCourse = value;
+                  },
+                ),
+                const SizedBox(height: 14),
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Student ID',
+                    prefixIcon:
+                        Icon(Icons.badge_outlined),
+                    helperText:
+                        'Student ID cannot be changed from the profile.',
+                  ),
+                  child: Text(
+                    _studentId,
+                    style: const TextStyle(
+                      color: darkText,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           actions: [
-            IconButton(
-              icon: const Icon(Icons.settings_rounded, color: darkText),
+            TextButton(
               onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
-                );
+                FocusScope.of(dialogContext).unfocus();
+                Navigator.of(dialogContext).pop();
               },
+              child: const Text('Cancel'),
             ),
-            const SizedBox(width: 8),
-          ],
-        ),
-      ),
-      
-      body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            // Expanded to 1200px for wide desktop monitors
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
-              child: Column(
-                children: [
-                  // ==================================================
-                  // PROFILE HEADER
-                  // ==================================================
-                  Center(
-                    child: Column(
-                      children: [
-                        Stack(
-                          alignment: Alignment.bottomRight,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(4),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: primaryBlue, width: 2),
-                              ),
-                              child: const CircleAvatar(
-                                radius: 48,
-                                backgroundColor: Colors.white,
-                                child: Icon(Icons.person_rounded, color: primaryBlue, size: 48),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: primaryBlue,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
-                              ),
-                              child: const Icon(Icons.edit_rounded, color: Colors.white, size: 14),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Rolando Mabansag', 
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: darkText, letterSpacing: -0.5)
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'BS Information Technology', 
-                          style: TextStyle(fontSize: 14, color: greyText, fontWeight: FontWeight.w500)
-                        ),
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: primaryBlue.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            'Samar State University', 
-                            style: TextStyle(color: primaryBlue, fontSize: 12, fontWeight: FontWeight.w700)
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 32),
+            ElevatedButton(
+              onPressed: () {
+                FocusScope.of(dialogContext).unfocus();
 
-                  // ==================================================
-                  // QUICK STATS
-                  // ==================================================
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildInfoCard('Completed', '12 Modules', Icons.emoji_events_rounded, orange),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _buildInfoCard('Student ID', '2023-1042', Icons.badge_rounded, primaryBlue),
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 32),
-
-                  // ==================================================
-                  // ACADEMIC & DEVELOPER SETTINGS
-                  // ==================================================
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: const Color(0xFFE6EAF0)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.025),
-                          blurRadius: 12,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        _buildMenuTile(Icons.account_circle_outlined, 'Personal Information'),
-                        _buildDivider(),
-                        _buildMenuTile(Icons.code_rounded, 'Linked Accounts', subtitle: 'GitHub Connected'),
-                        _buildDivider(),
-                        _buildMenuTile(Icons.folder_shared_outlined, 'Digital Portfolio', subtitle: 'Manage capstone projects'),
-                        _buildDivider(),
-                        _buildMenuTile(Icons.notifications_none_rounded, 'Notification Preferences'),
-                      ],
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 24),
-
-                  // ==================================================
-                  // APP SETTINGS & LOGOUT
-                  // ==================================================
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: const Color(0xFFE6EAF0)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.025),
-                          blurRadius: 12,
-                          offset: const Offset(0, 5),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        _buildMenuTile(Icons.dark_mode_outlined, 'App Theme', subtitle: 'System Default'),
-                        _buildDivider(),
-                        _buildMenuTile(Icons.help_outline_rounded, 'Help & Support'),
-                        _buildDivider(),
-                        ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                          leading: Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: red.withValues(alpha: 0.1), 
-                              borderRadius: BorderRadius.circular(12)
-                            ),
-                            child: const Icon(Icons.logout_rounded, color: red, size: 20),
-                          ),
-                          title: const Text(
-                            'Log Out', 
-                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: red)
-                          ),
-                          onTap: () {
-                            _showLogoutDialog(context);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+                Navigator.of(dialogContext).pop({
+                  'name': newName,
+                  'email': newEmail,
+                  'department': newDepartment,
+                  'course': newCourse,
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+                foregroundColor: Colors.white,
               ),
+              child: const Text('Save Changes'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || result == null) {
+      return;
+    }
+
+    final String cleanName =
+        (result['name'] ?? '').trim();
+
+    final String cleanEmail =
+        (result['email'] ?? '').trim();
+
+    final String cleanDepartment =
+        (result['department'] ?? '').trim();
+
+    final String cleanCourse =
+        (result['course'] ?? '').trim();
+
+    if (cleanName.isEmpty) {
+      _showError('Full name cannot be empty.');
+      return;
+    }
+
+    if (cleanEmail.isNotEmpty &&
+        (!cleanEmail.contains('@') ||
+            !cleanEmail.contains('.'))) {
+      _showError('Enter a valid contact email address.');
+      return;
+    }
+
+    final User? user = _auth.currentUser;
+
+    if (user == null) {
+      _showError('You are no longer logged in.');
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .update({
+        'name': cleanName,
+        'email': cleanEmail,
+        'department': cleanDepartment,
+        'course': cleanCourse,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      try {
+        await user.updateDisplayName(cleanName);
+      } catch (_) {
+        // Firestore remains the source of truth.
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      // Important:
+      // Do not immediately call _loadProfile() while the dialog
+      // route is still being removed from Flutter's widget tree.
+      setState(() {
+        _profile = {
+          ...?_profile,
+          'name': cleanName,
+          'email': cleanEmail,
+          'department': cleanDepartment,
+          'course': cleanCourse,
+        };
+        _isSaving = false;
+      });
+
+      _showMessage('Profile updated successfully.');
+    } on FirebaseException catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isSaving = false;
+      });
+
+      _showError(
+        e.message ?? 'Unable to update your profile.',
+      );
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _isSaving = false;
+      });
+
+      _showError('Unable to update your profile.');
+    }
+  }
+
+  // ============================================================
+  // ACCOUNT DETAILS
+  // ============================================================
+
+  Future<void> _showAccountDetails() async {
+    if (_profile == null) {
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (BuildContext sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 4, 22, 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Account Details',
+                  style: TextStyle(
+                    color: darkText,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                _buildDetailRow(
+                  Icons.badge_outlined,
+                  'Student ID',
+                  _studentId,
+                ),
+                _buildDetailRow(
+                  Icons.email_outlined,
+                  'Contact Email',
+                  _email,
+                ),
+                _buildDetailRow(
+                  Icons.school_outlined,
+                  'Course / Program',
+                  _course,
+                ),
+                _buildDetailRow(
+                  Icons.apartment_rounded,
+                  'Department',
+                  _department,
+                ),
+                _buildDetailRow(
+                  Icons.person_outline_rounded,
+                  'Role',
+                  'Student',
+                ),
+                _buildDetailRow(
+                  Icons.verified_user_outlined,
+                  'Account Status',
+                  _capitalize(_status),
+                  valueColor: _status == 'active' ? green : red,
+                ),
+              ],
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  // ==============================================================
-  // UI COMPONENTS
-  // ==============================================================
+  // ============================================================
+  // LOGOUT
+  // ============================================================
 
-  Widget _buildInfoCard(String title, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE6EAF0)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.025), 
-            blurRadius: 12, 
-            offset: const Offset(0, 5)
-          )
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color, size: 24),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value, 
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: darkText), 
-            textAlign: TextAlign.center
-          ),
-          const SizedBox(height: 4),
-          Text(
-            title, 
-            style: const TextStyle(fontSize: 12, color: greyText, fontWeight: FontWeight.w600)
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMenuTile(IconData icon, String title, {String? subtitle}) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      leading: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: primaryBlue.withValues(alpha: 0.08), 
-          borderRadius: BorderRadius.circular(12)
-        ),
-        child: Icon(icon, color: primaryBlue, size: 20),
-      ),
-      title: Text(
-        title, 
-        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: darkText)
-      ),
-      subtitle: subtitle != null 
-          ? Text(subtitle, style: const TextStyle(color: greyText, fontSize: 12, fontWeight: FontWeight.w500)) 
-          : null,
-      trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF9BA4B4), size: 20),
-      onTap: () {},
-    );
-  }
-
-  Widget _buildDivider() {
-    return const Divider(
-      height: 1, 
-      thickness: 1, 
-      color: Color(0xFFF0F2F5), 
-      indent: 68, 
-      endIndent: 20
-    );
-  }
-
-  void _showLogoutDialog(BuildContext context) {
-    showDialog(
+  Future<void> _showLogoutDialog() async {
+    final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
@@ -314,73 +689,699 @@ class StudentProfileScreen extends StatelessWidget {
           title: const Text(
             'Log Out',
             style: TextStyle(
-              fontWeight: FontWeight.w800,
               color: darkText,
+              fontWeight: FontWeight.w800,
             ),
           ),
           content: const Text(
-            'Are you sure you want to log out of your account?',
+            'Are you sure you want to log out of your CASLMS account?',
             style: TextStyle(
               color: greyText,
-              fontWeight: FontWeight.w500,
+              height: 1.45,
             ),
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(dialogContext);
+                Navigator.of(dialogContext).pop(false);
               },
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  color: greyText,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: () async {
-                try {
-                  await AuthService().signOut();
-
-                  if (!dialogContext.mounted) return;
-
-                  Navigator.pushAndRemoveUntil(
-                    dialogContext,
-                    MaterialPageRoute(
-                      builder: (_) => const AuthScreen(),
-                    ),
-                    (route) => false,
-                  );
-                } on AuthServiceException catch (e) {
-                  if (!dialogContext.mounted) return;
-
-                  ScaffoldMessenger.of(dialogContext).showSnackBar(
-                    SnackBar(
-                      content: Text(e.message),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: red,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
+                foregroundColor: Colors.white,
               ),
-              child: const Text(
-                'Log Out',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              child: const Text('Log Out'),
             ),
           ],
         );
       },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    try {
+      await _auth.signOut();
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/',
+        (route) => false,
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      _showError(e.message ?? 'Unable to log out.');
+    }
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: background,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: background,
+        elevation: 0,
+        centerTitle: true,
+        title: const Text(
+          'My Profile',
+          style: TextStyle(
+            color: darkText,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        actions: [
+          IconButton(
+            onPressed: _isLoading ? null : _loadProfile,
+            tooltip: 'Refresh Profile',
+            icon: const Icon(
+              Icons.refresh_rounded,
+              color: darkText,
+            ),
+          ),
+          IconButton(
+            onPressed: _isLoading ? null : _showAccountDetails,
+            tooltip: 'Account Details',
+            icon: const Icon(
+              Icons.settings_outlined,
+              color: darkText,
+            ),
+          ),
+          const SizedBox(width: 5),
+        ],
+      ),
+      body: SafeArea(
+        top: false,
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
+            child: _buildBody(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(
+          color: primaryBlue,
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return _buildErrorState();
+    }
+
+    if (_profile == null) {
+      return _buildErrorState(
+        message: 'Student profile is unavailable.',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadProfile,
+      color: primaryBlue,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
+        child: Column(
+          children: [
+            _buildProfileHeader(),
+            const SizedBox(height: 30),
+            _buildStats(),
+            const SizedBox(height: 28),
+            _buildAccountMenu(),
+            const SizedBox(height: 22),
+            _buildLogoutCard(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // PROFILE HEADER
+  // ============================================================
+
+  Widget _buildProfileHeader() {
+    return Column(
+      children: [
+        Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: primaryBlue,
+                  width: 2,
+                ),
+              ),
+              child: _buildProfileAvatar(),
+            ),
+            Material(
+              color: primaryBlue,
+              shape: const CircleBorder(),
+              child: InkWell(
+                onTap: _isUploadingPhoto
+                    ? null
+                    : _changeProfilePicture,
+                customBorder: const CircleBorder(),
+                child: SizedBox(
+                  width: 34,
+                  height: 34,
+                  child: _isUploadingPhoto
+                      ? const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.camera_alt_rounded,
+                          color: Colors.white,
+                          size: 17,
+                        ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: _isUploadingPhoto
+              ? null
+              : _changeProfilePicture,
+          icon: const Icon(
+            Icons.photo_camera_outlined,
+            size: 17,
+          ),
+          label: Text(
+            _photoUrl.isEmpty
+                ? 'Upload Profile Picture'
+                : 'Change Profile Picture',
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _name,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: darkText,
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          _course,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: greyText,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          _department,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: greyText,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 6,
+          ),
+          decoration: BoxDecoration(
+            color: primaryBlue.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: const Text(
+            'Samar State University',
+            style: TextStyle(
+              color: primaryBlue,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProfileAvatar() {
+    if (_photoUrl.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          _photoUrl,
+          width: 96,
+          height: 96,
+          fit: BoxFit.cover,
+          errorBuilder: (
+            BuildContext context,
+            Object error,
+            StackTrace? stackTrace,
+          ) {
+            return _buildInitialAvatar();
+          },
+        ),
+      );
+    }
+
+    return _buildInitialAvatar();
+  }
+
+  Widget _buildInitialAvatar() {
+    return CircleAvatar(
+      radius: 48,
+      backgroundColor:
+          primaryBlue.withValues(alpha: 0.10),
+      child: Text(
+        _initials,
+        style: const TextStyle(
+          color: primaryBlue,
+          fontSize: 28,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // REAL STATS
+  // ============================================================
+
+  Widget _buildStats() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildInfoCard(
+            title: 'Active Classes',
+            value: '$_activeClasses',
+            icon: Icons.class_outlined,
+            color: orange,
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: _buildInfoCard(
+            title: 'Student ID',
+            value: _studentId,
+            icon: Icons.badge_outlined,
+            color: primaryBlue,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // ACCOUNT MENU
+  // ============================================================
+
+  Widget _buildAccountMenu() {
+    return Container(
+      decoration: _cardDecoration(),
+      child: Column(
+        children: [
+          _buildMenuTile(
+            icon: Icons.account_circle_outlined,
+            title: 'Personal Information',
+            subtitle: 'Update your name, email, course, and department',
+            onTap: _showEditProfileDialog,
+          ),
+          _buildDivider(),
+          _buildMenuTile(
+            icon: Icons.photo_camera_outlined,
+            title: _photoUrl.isEmpty
+                ? 'Upload Profile Picture'
+                : 'Change Profile Picture',
+            subtitle: 'JPG, JPEG, PNG, or WEBP up to 5 MB',
+            onTap: _changeProfilePicture,
+          ),
+          if (_photoUrl.isNotEmpty) ...[
+            _buildDivider(),
+            _buildMenuTile(
+              icon: Icons.delete_outline_rounded,
+              title: 'Remove Profile Picture',
+              subtitle: 'Show your initials instead',
+              onTap: _removeProfilePicture,
+            ),
+          ],
+          _buildDivider(),
+          _buildMenuTile(
+            icon: Icons.badge_outlined,
+            title: 'Account Details',
+            subtitle: 'Student ID, role, and account status',
+            onTap: _showAccountDetails,
+          ),
+          _buildDivider(),
+          _buildMenuTile(
+            icon: Icons.refresh_rounded,
+            title: 'Refresh Profile',
+            subtitle: 'Reload your latest Firebase account data',
+            onTap: _loadProfile,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogoutCard() {
+    return Container(
+      decoration: _cardDecoration(),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 7,
+        ),
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: red.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Icon(
+            Icons.logout_rounded,
+            color: red,
+            size: 20,
+          ),
+        ),
+        title: const Text(
+          'Log Out',
+          style: TextStyle(
+            color: red,
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          ),
+        ),
+        subtitle: const Text(
+          'Sign out of this student account',
+          style: TextStyle(
+            color: greyText,
+            fontSize: 12,
+          ),
+        ),
+        trailing: const Icon(
+          Icons.chevron_right_rounded,
+          color: Color(0xFF9BA4B4),
+        ),
+        onTap: _showLogoutDialog,
+      ),
+    );
+  }
+
+  // ============================================================
+  // UI HELPERS
+  // ============================================================
+
+  Widget _buildInfoCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        vertical: 17,
+        horizontal: 12,
+      ),
+      decoration: _cardDecoration(),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 23,
+            ),
+          ),
+          const SizedBox(height: 11),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: darkText,
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: greyText,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMenuTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 20,
+        vertical: 6,
+      ),
+      leading: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: primaryBlue.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(
+          icon,
+          color: primaryBlue,
+          size: 20,
+        ),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          color: darkText,
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: const TextStyle(
+          color: greyText,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      trailing: const Icon(
+        Icons.chevron_right_rounded,
+        color: Color(0xFF9BA4B4),
+        size: 20,
+      ),
+      onTap: onTap,
+    );
+  }
+
+  Widget _buildDetailRow(
+    IconData icon,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            icon,
+            size: 20,
+            color: primaryBlue,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: greyText,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: valueColor ?? darkText,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDivider() {
+    return const Divider(
+      height: 1,
+      thickness: 1,
+      color: Color(0xFFF0F2F5),
+      indent: 68,
+      endIndent: 20,
+    );
+  }
+
+  Widget _buildErrorState({
+    String? message,
+  }) {
+    final String text =
+        message ?? _errorMessage ?? 'Unable to load your profile.';
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: red,
+              size: 50,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: greyText,
+                fontSize: 13,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton.icon(
+              onPressed: _loadProfile,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Try Again'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  BoxDecoration _cardDecoration() {
+    return BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(
+        color: borderColor,
+        width: 1.5,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.025),
+          blurRadius: 12,
+          offset: const Offset(0, 5),
+        ),
+      ],
+    );
+  }
+
+  String _capitalize(String value) {
+    if (value.isEmpty) {
+      return value;
+    }
+
+    return '${value[0].toUpperCase()}${value.substring(1)}';
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: primaryBlue,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: red,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 }

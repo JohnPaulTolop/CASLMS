@@ -1,0 +1,906 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================================
+    // COMMON HELPERS
+    // ============================================================
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userExists() {
+      return signedIn() &&
+        exists(
+          /databases/$(database)/documents/users/$(request.auth.uid)
+        );
+    }
+
+    function currentUser() {
+      return get(
+        /databases/$(database)/documents/users/$(request.auth.uid)
+      ).data;
+    }
+
+    function isActive() {
+      return userExists() &&
+        currentUser().status == 'active';
+    }
+
+    function isStudent() {
+      return isActive() &&
+        currentUser().role == 'student';
+    }
+
+    function isInstructor() {
+      return isActive() &&
+        currentUser().role == 'instructor';
+    }
+
+    function isAdmin() {
+      return isActive() &&
+        currentUser().role == 'admin';
+    }
+
+    function isStaff() {
+      return isInstructor() || isAdmin();
+    }
+
+    function isSelf(uid) {
+      return signedIn() &&
+        request.auth.uid == uid;
+    }
+
+    // ============================================================
+    // COURSE OWNERSHIP
+    // ============================================================
+
+    function courseExists(courseId) {
+      return exists(
+        /databases/$(database)/documents/courses/$(courseId)
+      );
+    }
+
+    function ownsCourse(courseId) {
+      return isInstructor() &&
+        courseExists(courseId) &&
+        get(
+          /databases/$(database)/documents/courses/$(courseId)
+        ).data.instructorId == request.auth.uid;
+    }
+
+    function canManageCourse(courseId) {
+      return isAdmin() ||
+        ownsCourse(courseId);
+    }
+
+    // ============================================================
+    // USERS
+    // ============================================================
+
+    match /users/{userId} {
+
+      // Prototype compatibility:
+      // signed-in users may read profiles.
+      allow read: if signedIn();
+
+      // Public registration creates student accounts only.
+      allow create: if
+        (
+          signedIn() &&
+          request.auth.uid == userId &&
+          request.resource.data.uid == userId &&
+          request.resource.data.role == 'student' &&
+          request.resource.data.status == 'active'
+        )
+        ||
+        isAdmin();
+
+      // User may update ordinary profile fields only.
+      allow update: if
+        isAdmin()
+        ||
+        (
+          isSelf(userId) &&
+
+          !request.resource.data
+            .diff(resource.data)
+            .affectedKeys()
+            .hasAny([
+              'uid',
+              'role',
+              'status',
+              'universityId',
+              'authEmail',
+              'createdAt'
+            ])
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // COURSES
+    // ============================================================
+
+    match /courses/{courseId} {
+
+      // Needed for:
+      // - class-code search
+      // - enrolled course loading
+      // - student module screens
+      allow read: if isActive();
+
+      allow create: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          request.resource.data.instructorId ==
+            request.auth.uid
+        );
+
+      allow update: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          resource.data.instructorId ==
+            request.auth.uid &&
+          request.resource.data.instructorId ==
+            resource.data.instructorId
+        );
+
+      allow delete: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          resource.data.instructorId ==
+            request.auth.uid
+        );
+    }
+
+    // ============================================================
+    // ENROLLMENTS
+    // ============================================================
+
+    match /enrollments/{enrollmentId} {
+
+      // ----------------------------------------------------------
+      // SINGLE DOCUMENT GET
+      //
+      // Important for joining a new class.
+      //
+      // EnrollmentService checks:
+      // courseId_studentUid
+      //
+      // before creating the document.
+      // ----------------------------------------------------------
+
+      allow get: if
+        isStaff()
+        ||
+        (
+          isStudent() &&
+          enrollmentId.matches(
+            '.*_' + request.auth.uid
+          )
+        );
+
+      // ----------------------------------------------------------
+      // QUERY / LIST
+      //
+      // Students can query only their own enrollments.
+      // ----------------------------------------------------------
+
+      allow list: if
+        isStaff()
+        ||
+        (
+          isStudent() &&
+          resource.data.studentId ==
+            request.auth.uid
+        );
+
+      // ----------------------------------------------------------
+      // CREATE
+      // ----------------------------------------------------------
+
+      allow create: if
+        isStudent() &&
+
+        request.resource.data.studentId ==
+          request.auth.uid &&
+
+        enrollmentId ==
+          request.resource.data.courseId +
+          "_" +
+          request.auth.uid &&
+
+        request.resource.data.status ==
+          'active';
+
+      // ----------------------------------------------------------
+      // UPDATE / REACTIVATE
+      // ----------------------------------------------------------
+
+      allow update: if
+        isStaff()
+        ||
+        (
+          isStudent() &&
+
+          resource.data.studentId ==
+            request.auth.uid &&
+
+          request.resource.data.studentId ==
+            resource.data.studentId &&
+
+          request.resource.data.courseId ==
+            resource.data.courseId &&
+
+          enrollmentId ==
+            resource.data.courseId +
+            "_" +
+            request.auth.uid &&
+
+          request.resource.data.status ==
+            'active' &&
+
+          request.resource.data
+            .diff(resource.data)
+            .affectedKeys()
+            .hasOnly([
+              'studentName',
+              'status',
+              'enrolledAt'
+            ])
+        );
+
+      // ----------------------------------------------------------
+      // DELETE
+      // ----------------------------------------------------------
+
+      allow delete: if
+        isStaff()
+        ||
+        (
+          isStudent() &&
+          resource.data.studentId ==
+            request.auth.uid
+        );
+    }
+
+    // ============================================================
+    // MODULES
+    // ============================================================
+
+    match /modules/{moduleId} {
+
+      allow read: if isActive();
+
+      allow create: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            request.resource.data.courseId
+          )
+        );
+
+      allow update: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            resource.data.courseId
+          ) &&
+          request.resource.data.courseId ==
+            resource.data.courseId
+        );
+
+      allow delete: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            resource.data.courseId
+          )
+        );
+    }
+
+    // ============================================================
+    // MODULE PROGRESS
+    //
+    // Fixes:
+    // PERMISSION_DENIED:
+    // moduleProgress where studentId == current student UID
+    //
+    // Used by:
+    // - Student Modules
+    // - Student Progress
+    // - Instructor analytics later
+    // ============================================================
+
+    match /moduleProgress/{progressId} {
+
+      // ----------------------------------------------------------
+      // READ
+      // ----------------------------------------------------------
+
+      allow read: if
+        isStaff()
+        ||
+        (
+          isStudent() &&
+          resource.data.studentId ==
+            request.auth.uid
+        );
+
+      // ----------------------------------------------------------
+      // CREATE
+      // ----------------------------------------------------------
+
+      allow create: if
+        isStudent() &&
+
+        request.resource.data.studentId ==
+          request.auth.uid &&
+
+        request.resource.data.courseId is string &&
+
+        request.resource.data.moduleId is string;
+
+      // ----------------------------------------------------------
+      // UPDATE
+      // ----------------------------------------------------------
+
+      allow update: if
+        isStaff()
+        ||
+        (
+          isStudent() &&
+
+          resource.data.studentId ==
+            request.auth.uid &&
+
+          request.resource.data.studentId ==
+            resource.data.studentId &&
+
+          request.resource.data.courseId ==
+            resource.data.courseId &&
+
+          request.resource.data.moduleId ==
+            resource.data.moduleId
+        );
+
+      // ----------------------------------------------------------
+      // DELETE
+      // ----------------------------------------------------------
+
+      allow delete: if
+        isAdmin()
+        ||
+        (
+          isStudent() &&
+          resource.data.studentId ==
+            request.auth.uid
+        );
+    }
+
+    // ============================================================
+    // LEARNING MATERIAL METADATA
+    // ============================================================
+
+    match /moduleResources/{resourceId} {
+
+      allow read: if isActive();
+
+      allow create: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            request.resource.data.courseId
+          ) &&
+          request.resource.data.createdBy ==
+            request.auth.uid
+        );
+
+      allow update: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            resource.data.courseId
+          ) &&
+          request.resource.data.courseId ==
+            resource.data.courseId
+        );
+
+      allow delete: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            resource.data.courseId
+          )
+        );
+    }
+
+    // ============================================================
+    // ASSESSMENTS
+    //
+    // New CASLMS assessment system:
+    // - external_link
+    // - ai_generated
+    // ============================================================
+
+    match /assessments/{assessmentId} {
+
+      // Option B thesis/demo architecture:
+      //
+      // Students must currently read AI assessment documents
+      // because Flutter performs client-side quiz scoring.
+      allow read: if isActive();
+
+      allow create: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            request.resource.data.courseId
+          ) &&
+          request.resource.data.createdBy ==
+            request.auth.uid
+        );
+
+      allow update: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            resource.data.courseId
+          ) &&
+          request.resource.data.courseId ==
+            resource.data.courseId
+        );
+
+      allow delete: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            resource.data.courseId
+          )
+        );
+    }
+
+    // ============================================================
+    // LEGACY QUIZZES
+    //
+    // Fixes:
+    //
+    // PERMISSION_DENIED:
+    // quizzes where courseId == ...
+    //
+    // Some student screens still use /quizzes.
+    // ============================================================
+
+    match /quizzes/{quizId} {
+
+      // Current student screens query this collection.
+      allow read: if isActive();
+
+      allow create: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            request.resource.data.courseId
+          )
+        );
+
+      allow update: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            resource.data.courseId
+          ) &&
+          request.resource.data.courseId ==
+            resource.data.courseId
+        );
+
+      allow delete: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            resource.data.courseId
+          )
+        );
+    }
+
+    // ============================================================
+    // ASSESSMENT SUBMISSIONS
+    //
+    // External assessment submissions +
+    // AI-generated quiz submissions.
+    // ============================================================
+
+    match /assessmentSubmissions/{submissionId} {
+
+      allow read: if
+        isStaff()
+        ||
+        (
+          isStudent() &&
+          resource.data.studentId ==
+            request.auth.uid
+        );
+
+      // ----------------------------------------------------------
+      // STUDENT CREATE
+      //
+      // AI quizzes may be created directly as graded because
+      // Option B performs automatic grading in Flutter.
+      // ----------------------------------------------------------
+
+      allow create: if
+        isStudent() &&
+
+        request.resource.data.studentId ==
+          request.auth.uid &&
+
+        submissionId ==
+          request.resource.data.assessmentId +
+          "_" +
+          request.auth.uid &&
+
+        request.resource.data.status in [
+          'submitted',
+          'graded'
+        ];
+
+      // ----------------------------------------------------------
+      // UPDATE
+      // ----------------------------------------------------------
+
+      allow update: if
+        isStaff()
+        ||
+        (
+          isStudent() &&
+
+          resource.data.studentId ==
+            request.auth.uid &&
+
+          request.resource.data.studentId ==
+            resource.data.studentId &&
+
+          request.resource.data.assessmentId ==
+            resource.data.assessmentId &&
+
+          resource.data.status !=
+            'submitted' &&
+
+          resource.data.status !=
+            'graded'
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // LEGACY / STANDARD ASSIGNMENTS
+    // ============================================================
+
+    match /assignments/{assignmentId} {
+
+      allow read: if isActive();
+
+      allow create: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            request.resource.data.courseId
+          )
+        );
+
+      allow update: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            resource.data.courseId
+          ) &&
+          request.resource.data.courseId ==
+            resource.data.courseId
+        );
+
+      allow delete: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            resource.data.courseId
+          )
+        );
+    }
+
+    // ============================================================
+    // LEGACY ASSIGNMENT SUBMISSIONS
+    // ============================================================
+
+    match /submissions/{submissionId} {
+
+      allow read: if
+        isStaff()
+        ||
+        (
+          isStudent() &&
+          resource.data.studentId ==
+            request.auth.uid
+        );
+
+      allow create: if
+        isStudent() &&
+        request.resource.data.studentId ==
+          request.auth.uid;
+
+      allow update: if
+        isStaff()
+        ||
+        (
+          isStudent() &&
+
+          resource.data.studentId ==
+            request.auth.uid &&
+
+          request.resource.data.studentId ==
+            resource.data.studentId &&
+
+          request.resource.data.assignmentId ==
+            resource.data.assignmentId &&
+
+          !request.resource.data
+            .diff(resource.data)
+            .affectedKeys()
+            .hasAny([
+              'score',
+              'grade',
+              'feedback',
+              'gradedAt',
+              'gradedBy'
+            ])
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // ANNOUNCEMENTS
+    // ============================================================
+
+    match /announcements/{announcementId} {
+
+      allow read: if isActive();
+
+      allow create: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            request.resource.data.courseId
+          )
+        );
+
+      allow update: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            resource.data.courseId
+          )
+        );
+
+      allow delete: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(
+            resource.data.courseId
+          )
+        );
+    }
+
+    // ============================================================
+    // NOTIFICATIONS
+    // ============================================================
+
+    match /notifications/{notificationId} {
+
+      allow read: if
+        isStaff()
+        ||
+        (
+          isStudent() &&
+          resource.data.userId ==
+            request.auth.uid
+        );
+
+      allow create: if isStaff();
+
+      // Recipient may mark their own notification read.
+      allow update: if
+        isAdmin()
+        ||
+        (
+          signedIn() &&
+
+          resource.data.userId ==
+            request.auth.uid &&
+
+          request.resource.data.userId ==
+            resource.data.userId &&
+
+          request.resource.data
+            .diff(resource.data)
+            .affectedKeys()
+            .hasOnly([
+              'isRead',
+              'readAt',
+              'updatedAt'
+            ])
+        );
+
+      allow delete: if
+        isAdmin()
+        ||
+        (
+          signedIn() &&
+          resource.data.userId ==
+            request.auth.uid
+        );
+    }
+
+    // ============================================================
+    // CONVERSATIONS
+    // ============================================================
+
+    match /conversations/{conversationId} {
+
+      allow read: if
+        isStaff()
+        ||
+        (
+          isActive() &&
+          request.auth.uid in
+            resource.data.participants
+        );
+
+      allow create: if
+        isActive() &&
+        request.resource.data.participants is list &&
+        request.auth.uid in
+          request.resource.data.participants;
+
+      allow update: if
+        isAdmin()
+        ||
+        (
+          isActive() &&
+          request.auth.uid in
+            resource.data.participants &&
+
+          request.resource.data.participants ==
+            resource.data.participants
+        );
+
+      allow delete: if
+        isAdmin()
+        ||
+        (
+          isActive() &&
+          request.auth.uid in
+            resource.data.participants
+        );
+
+      // ==========================================================
+      // NESTED CHAT MESSAGES
+      // ==========================================================
+
+      match /messages/{messageId} {
+
+        function conversation() {
+          return get(
+            /databases/$(database)/documents/conversations/$(conversationId)
+          ).data;
+        }
+
+        allow read: if
+          isStaff()
+          ||
+          (
+            isActive() &&
+            request.auth.uid in
+              conversation().participants
+          );
+
+        allow create: if
+          isActive() &&
+
+          request.resource.data.senderId ==
+            request.auth.uid &&
+
+          request.auth.uid in
+            conversation().participants;
+
+        allow update, delete: if
+          isAdmin()
+          ||
+          (
+            isActive() &&
+            resource.data.senderId ==
+              request.auth.uid
+          );
+      }
+    }
+
+    // ============================================================
+    // OPTIONAL TOP-LEVEL CHAT MESSAGES
+    // ============================================================
+
+    match /messages/{messageId} {
+
+      allow read: if isActive();
+
+      allow create: if
+        isActive() &&
+        request.resource.data.senderId ==
+          request.auth.uid;
+
+      allow update, delete: if
+        isAdmin()
+        ||
+        (
+          isActive() &&
+          resource.data.senderId ==
+            request.auth.uid
+        );
+    }
+
+    // ============================================================
+    // DEFAULT DENY
+    //
+    // Keep this LAST.
+    // ============================================================
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

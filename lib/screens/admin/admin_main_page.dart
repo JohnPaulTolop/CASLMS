@@ -1,21 +1,27 @@
 import 'package:flutter/material.dart';
-import 'admin_dashboard_page.dart';
-import 'admin_users_page.dart';
+
 import 'admin_courses_page.dart';
+import 'admin_dashboard_page.dart';
 import 'admin_settings_page.dart';
+import 'admin_users_page.dart';
 
 class AdminMainScreen extends StatefulWidget {
-  const AdminMainScreen({Key? key}) : super(key: key);
+  const AdminMainScreen({super.key});
 
   @override
   State<AdminMainScreen> createState() => _AdminMainScreenState();
 }
 
 class _AdminMainScreenState extends State<AdminMainScreen> {
+  static const Color adminTheme = Color(0xFF4F46E5);
+
   int _selectedIndex = 0;
-  final Color adminTheme = Colors.indigo.shade600;
 
   void _onItemTapped(int index) {
+    if (index == _selectedIndex) {
+      return;
+    }
+
     setState(() {
       _selectedIndex = index;
     });
@@ -23,9 +29,10 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Defined inside build() so _onItemTapped is properly passed
     final List<Widget> pages = [
-      AdminDashboardScreen(onNavigateToTab: _onItemTapped),
+      AdminDashboardScreen(
+        onNavigateToTab: _onItemTapped,
+      ),
       const AdminUsersScreen(),
       const AdminCoursesScreen(),
       const AdminSettingsScreen(),
@@ -47,7 +54,7 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, -4),
             ),
@@ -55,56 +62,40 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
         ),
         child: SafeArea(
           child: Center(
-            heightFactor: 1.0,
+            heightFactor: 1,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1200),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  splashColor: Colors.transparent,
-                  highlightColor: Colors.transparent,
+              child: BottomNavigationBar(
+                currentIndex: _selectedIndex,
+                onTap: _onItemTapped,
+                selectedItemColor: adminTheme,
+                unselectedItemColor: Colors.grey.shade400,
+                type: BottomNavigationBarType.fixed,
+                backgroundColor: Colors.white,
+                elevation: 0,
+                selectedFontSize: 11,
+                unselectedFontSize: 11,
+                selectedLabelStyle: const TextStyle(
+                  fontWeight: FontWeight.w700,
                 ),
-                child: BottomNavigationBar(
-                  currentIndex: _selectedIndex,
-                  onTap: _onItemTapped,
-                  selectedItemColor: adminTheme,
-                  unselectedItemColor: Colors.grey[400],
-                  type: BottomNavigationBarType.fixed,
-                  backgroundColor: Colors.white,
-                  elevation: 0,
-                  selectedFontSize: 11,
-                  unselectedFontSize: 11,
-                  selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                  items: const [
-                    BottomNavigationBarItem(
-                      icon: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12.0),
-                        child: Icon(Icons.dashboard_rounded),
-                      ),
-                      label: 'Dashboard',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12.0),
-                        child: Icon(Icons.manage_accounts_rounded),
-                      ),
-                      label: 'Users',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12.0),
-                        child: Icon(Icons.library_books_rounded),
-                      ),
-                      label: 'Courses',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12.0),
-                        child: Icon(Icons.settings_suggest_rounded),
-                      ),
-                      label: 'Settings',
-                    ),
-                  ],
-                ),
+                items: const [
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.dashboard_rounded),
+                    label: 'Dashboard',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.manage_accounts_rounded),
+                    label: 'Users',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.library_books_rounded),
+                    label: 'Courses',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.settings_suggest_rounded),
+                    label: 'Settings',
+                  ),
+                ],
               ),
             ),
           ),

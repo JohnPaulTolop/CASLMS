@@ -1074,7 +1074,72 @@ class _InstructorModuleDetailScreenState
   // PHASE 13B: ANALYZE PDF WITH GEMINI
   // ============================================================
 
-  Future<void> _analyzeMaterialWithAi(Map<String, dynamic> material) async {
+  Future<void> _showAiAnalysisDialog({
+    required String title,
+    required String analysis,
+  }) async {
+    if (!mounted) {
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.auto_awesome_rounded, color: primaryTeal),
+              const SizedBox(width: 10),
+              Expanded(child: Text(title)),
+            ],
+          ),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(
+              child: SelectableText(
+                analysis,
+                style: const TextStyle(height: 1.5),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+              },
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showSavedAiAnalysis(Map<String, dynamic> material) async {
+    final String analysis = (material['aiAnalysisSummary'] ?? '')
+        .toString()
+        .trim();
+
+    final String title =
+        (material['title'] ?? material['fileName'] ?? 'Learning Material')
+            .toString();
+
+    if (analysis.isEmpty) {
+      _showError('No saved AI analysis is available yet.');
+
+      return;
+    }
+
+    await _showAiAnalysisDialog(
+      title: 'AI Analysis — $title',
+      analysis: analysis,
+    );
+  }
+
+  Future<void> _analyzeMaterialWithAi(
+    Map<String, dynamic> material, {
+    bool forceReanalyze = false,
+  }) async {
     final String materialId = _materialId(material);
 
     if (materialId.isEmpty) {
@@ -1091,9 +1156,27 @@ class _InstructorModuleDetailScreenState
         (material['title'] ?? material['fileName'] ?? 'Learning Material')
             .toString();
 
+    final String typeLabel = _materialTypeLabel(material);
+
+    final String existingAnalysis = (material['aiAnalysisSummary'] ?? '')
+        .toString()
+        .trim();
+
+    final bool alreadyReady =
+        _materialAiStatus(material) == 'ready' && existingAnalysis.isNotEmpty;
+
+    // Important quota protection:
+    // Clicking Analyze on an already-ready material simply opens
+    // the saved result unless the instructor explicitly chooses
+    // Re-analyze with AI.
+    if (alreadyReady && !forceReanalyze) {
+      await _showSavedAiAnalysis(material);
+
+      return;
+    }
+
     final bool? confirmed = await showDialog<bool>(
       context: context,
-
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           icon: const Icon(
@@ -1101,33 +1184,37 @@ class _InstructorModuleDetailScreenState
             color: primaryTeal,
             size: 34,
           ),
-
-          title: const Text('Analyze Material with AI'),
-
-          content: Text(
-            'Gemini will read "$title" and create a short analysis '
-            'based only on the PDF.\n\n'
-            'Continue?',
+          title: Text(
+            forceReanalyze
+                ? 'Re-analyze Material with AI?'
+                : 'Analyze Material with AI',
           ),
-
+          content: Text(
+            forceReanalyze
+                ? '"$title" already has a saved AI analysis.\n\n'
+                      'Re-analyzing sends another request to Gemini and '
+                      'uses more of your AI quota.\n\nContinue?'
+                : 'Gemini will analyze "$title" as a $typeLabel learning '
+                      'material and create a short analysis based only on '
+                      'its supported content.\n\n'
+                      'DOCX, PPTX, and XLSX are converted to readable text '
+                      'inside CASLMS before being sent to Gemini. '
+                      'PDFs, supported images, and supported videos are '
+                      'analyzed as multimodal input.\n\nContinue?',
+          ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop(false);
               },
-
               child: const Text('Cancel'),
             ),
-
             FilledButton.icon(
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
               },
-
               icon: const Icon(Icons.auto_awesome_rounded),
-
-              label: const Text('Analyze'),
-
+              label: Text(forceReanalyze ? 'Re-analyze' : 'Analyze'),
               style: FilledButton.styleFrom(
                 backgroundColor: primaryTeal,
                 foregroundColor: Colors.white,
@@ -1148,7 +1235,7 @@ class _InstructorModuleDetailScreenState
 
     try {
       final AiMaterialAnalysisResult result = await _firebaseAiService
-          .analyzePdfMaterial(
+          .analyzeMaterial(
             material: material,
             courseTitle: widget.courseTitle,
             moduleTitle: _moduleTitle,
@@ -1164,44 +1251,9 @@ class _InstructorModuleDetailScreenState
         return;
       }
 
-      await showDialog<void>(
-        context: context,
-
-        builder: (BuildContext dialogContext) {
-          return AlertDialog(
-            title: const Row(
-              children: [
-                Icon(Icons.auto_awesome_rounded, color: primaryTeal),
-
-                SizedBox(width: 10),
-
-                Expanded(child: Text('AI Material Analysis')),
-              ],
-            ),
-
-            content: SizedBox(
-              width: 520,
-
-              child: SingleChildScrollView(
-                child: SelectableText(
-                  result.analysis,
-
-                  style: const TextStyle(height: 1.5),
-                ),
-              ),
-            ),
-
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(dialogContext).pop();
-                },
-
-                child: const Text('Close'),
-              ),
-            ],
-          );
-        },
+      await _showAiAnalysisDialog(
+        title: 'AI Material Analysis',
+        analysis: result.analysis,
       );
     } on FirebaseAiServiceException catch (e) {
       if (!mounted) {
@@ -2599,14 +2651,18 @@ class _InstructorModuleDetailScreenState
 
     final List<String> details = [typeLabel, if (size.isNotEmpty) size];
 
-    final bool canAnalyzePdf =
-        material['aiEligible'] == true &&
-        deliveryType == 'uploaded_file' &&
-        (typeLabel.toLowerCase() == 'pdf' ||
-            fileName.toLowerCase().endsWith('.pdf'));
+    final bool canAnalyzeMaterial =
+        material['aiEligible'] == true && deliveryType == 'uploaded_file';
 
-    final bool canGenerateAiQuiz =
-        canAnalyzePdf && _materialAiStatus(material) == 'ready';
+    final bool aiReady = _materialAiStatus(material) == 'ready';
+
+    final String savedAiAnalysis = (material['aiAnalysisSummary'] ?? '')
+        .toString()
+        .trim();
+
+    final bool hasSavedAiAnalysis = aiReady && savedAiAnalysis.isNotEmpty;
+
+    final bool canGenerateAiQuiz = canAnalyzeMaterial && aiReady;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -2873,6 +2929,14 @@ class _InstructorModuleDetailScreenState
                     _analyzeMaterialWithAi(material);
                     break;
 
+                  case 'view_ai_analysis':
+                    _showSavedAiAnalysis(material);
+                    break;
+
+                  case 'reanalyze_ai':
+                    _analyzeMaterialWithAi(material, forceReanalyze: true);
+                    break;
+
                   case 'generate_ai_quiz':
                     _generateAiQuizDraft(material);
                     break;
@@ -2918,7 +2982,7 @@ class _InstructorModuleDetailScreenState
                     ),
                   ),
 
-                if (canAnalyzePdf)
+                if (canAnalyzeMaterial && !hasSavedAiAnalysis)
                   const PopupMenuItem(
                     value: 'analyze_ai',
 
@@ -2933,6 +2997,42 @@ class _InstructorModuleDetailScreenState
                         SizedBox(width: 10),
 
                         Text('Analyze with AI'),
+                      ],
+                    ),
+                  ),
+
+                if (hasSavedAiAnalysis)
+                  const PopupMenuItem(
+                    value: 'view_ai_analysis',
+
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.visibility_outlined,
+                          color: primaryTeal,
+                          size: 19,
+                        ),
+
+                        SizedBox(width: 10),
+
+                        Text('View AI Analysis'),
+                      ],
+                    ),
+                  ),
+
+                if (hasSavedAiAnalysis)
+                  const PopupMenuItem(
+                    value: 'reanalyze_ai',
+
+                    child: Row(
+                      children: [
+                        Icon(Icons.refresh_rounded, color: orange, size: 19),
+
+                        SizedBox(width: 10),
+
+                        Expanded(
+                          child: Text('Re-analyze with AI (uses quota)'),
+                        ),
                       ],
                     ),
                   ),
@@ -3545,9 +3645,11 @@ class _InstructorModuleDetailScreenState
                 const SizedBox(height: 5),
 
                 const Text(
-                  'PDF analysis and AI quiz drafting are available. Analyze a PDF '
-                  'first, then open its menu (⋮) and choose "Generate AI Quiz Draft". '
-                  'You can review the questions before they are saved to students.',
+                  'AI analysis and quiz drafting support PDF, TXT, DOCX, PPTX, XLSX, '
+                  'JPG/JPEG, PNG, WEBP, MP4, and WEBM. Open a material menu (⋮), '
+                  'analyze it once, then reuse the saved analysis or generate a quiz. '
+                  'Use Re-analyze only when you really need a fresh result because it '
+                  'uses another Gemini request.',
 
                   style: TextStyle(color: textGrey, fontSize: 11, height: 1.45),
                 ),

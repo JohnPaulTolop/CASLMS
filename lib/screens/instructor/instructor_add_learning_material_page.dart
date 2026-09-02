@@ -114,100 +114,169 @@ class _InstructorAddLearningMaterialScreenState
   // Compatible with file_picker v12.
   // ============================================================
 
-  Future<void> _pickFile() async {
-    if (_isSaving) {
-      return;
-    }
+  // ============================================================
+// FILE PICKER
+//
+// FileType.any is used intentionally.
+//
+// Some Android document providers do not correctly expose
+// .doc / .docx files when FileType.custom is used.
+//
+// CASLMS therefore lets Android show normal files first,
+// then validates the extension itself.
+// ============================================================
 
-    try {
-      final PlatformFile? file =
-          await FilePicker.pickFile(
-        type: FileType.custom,
-        allowedExtensions: const [
+Future<void> _pickFile() async {
+  if (_isSaving) {
+    return;
+  }
+
+  try {
+        final PlatformFile? file =
+            await FilePicker.pickFile(
+          type: FileType.any,
+        );
+
+        // User cancelled.
+        if (file == null) {
+          return;
+        }
+
+        // ========================================================
+        // VALIDATE EXTENSION
+        // ========================================================
+
+        final String extension =
+            (file.extension ?? '')
+                .trim()
+                .toLowerCase();
+
+        const Set<String> supportedExtensions = {
+          // PDF
           'pdf',
+
+          // Microsoft Word
           'doc',
           'docx',
+
+          // PowerPoint
           'ppt',
           'pptx',
+
+          // Excel
           'xls',
           'xlsx',
+
+          // Text
           'txt',
+
+          // Images
           'jpg',
           'jpeg',
           'png',
           'gif',
           'webp',
+
+          // Videos
           'mp4',
           'webm',
-        ],
-      );
+        };
 
-      // User cancelled.
-      if (file == null) {
-        return;
-      }
+        if (extension.isEmpty) {
+          if (!mounted) {
+            return;
+          }
 
-      // file_picker v12
-      final Uint8List bytes =
-          await file.readAsBytes();
+          _showError(
+            'The selected file has no supported extension.',
+          );
 
-      if (bytes.isEmpty) {
+          return;
+        }
+
+        if (!supportedExtensions.contains(
+          extension,
+        )) {
+          if (!mounted) {
+            return;
+          }
+
+          _showError(
+            'Unsupported file type: .$extension',
+          );
+
+          return;
+        }
+
+        // ========================================================
+        // READ FILE
+        // ========================================================
+
+        final Uint8List bytes =
+            await file.readAsBytes();
+
+        if (bytes.isEmpty) {
+          if (!mounted) {
+            return;
+          }
+
+          _showError(
+            'The selected file is empty.',
+          );
+
+          return;
+        }
+
+        // ========================================================
+        // 50 MB LIMIT
+        // ========================================================
+
+        const int maxFileSize =
+            50 * 1024 * 1024;
+
+        if (bytes.length > maxFileSize) {
+          if (!mounted) {
+            return;
+          }
+
+          _showError(
+            'The selected file exceeds the 50 MB limit.',
+          );
+
+          return;
+        }
+
+        if (!mounted) {
+          return;
+        }
+
+        // ========================================================
+        // SAVE SELECTED FILE
+        // ========================================================
+
+        setState(() {
+          _selectedFile = file;
+          _selectedFileBytes = bytes;
+        });
+
+        // Automatically use filename as title
+        // when the title field is empty.
+        if (_titleController.text.trim().isEmpty) {
+          _titleController.text =
+              _fileNameWithoutExtension(
+            file.name,
+          );
+        }
+      } catch (e) {
         if (!mounted) {
           return;
         }
 
         _showError(
-          'The selected file is empty.',
-        );
-
-        return;
-      }
-
-      // ========================================================
-      // 50 MB LIMIT
-      // ========================================================
-
-      const int maxFileSize =
-          50 * 1024 * 1024;
-
-      if (bytes.length > maxFileSize) {
-        if (!mounted) {
-          return;
-        }
-
-        _showError(
-          'The selected file exceeds the 50 MB limit.',
-        );
-
-        return;
-      }
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _selectedFile = file;
-        _selectedFileBytes = bytes;
-      });
-
-      // Automatically use filename as title if title is empty.
-      if (_titleController.text.trim().isEmpty) {
-        _titleController.text =
-            _fileNameWithoutExtension(
-          file.name,
+          'Unable to select file: $e',
         );
       }
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      _showError(
-        'Unable to select file: $e',
-      );
     }
-  }
 
   // ============================================================
   // REMOVE SELECTED FILE

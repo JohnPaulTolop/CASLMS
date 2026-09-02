@@ -1,506 +1,708 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class AdminSystemReportsScreen extends StatefulWidget {
-  const AdminSystemReportsScreen({Key? key}) : super(key: key);
+  const AdminSystemReportsScreen({super.key});
 
   @override
-  State<AdminSystemReportsScreen> createState() => _AdminSystemReportsScreenState();
+  State<AdminSystemReportsScreen> createState() =>
+      _AdminSystemReportsScreenState();
 }
 
-class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
+class _AdminSystemReportsScreenState
+    extends State<AdminSystemReportsScreen> {
   static const Color reportRed = Color(0xFFFF4B4B);
+  static const Color background = Color(0xFFF8F9FA);
   static const Color textDark = Color(0xFF10182F);
   static const Color textGrey = Color(0xFF68738A);
+  static const Color borderColor = Color(0xFFE6EAF0);
+  static const Color green = Color(0xFF26A65B);
+  static const Color blue = Color(0xFF1769FF);
+  static const Color orange = Color(0xFFFF9418);
 
-  String _selectedTimeframe = 'Current Semester';
-  final List<String> _timeframeOptions = [
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
+
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  String _selectedTimeframe = 'All Time';
+
+  final List<String> _timeframeOptions = const [
     'Today',
     'Last 7 Days',
     'Last 30 Days',
-    'Current Semester',
-    'Academic Year 2025-2026',
+    'All Time',
   ];
 
-  bool _isExporting = false;
+  int _users = 0;
+  int _activeCourses = 0;
+  int _activeEnrollments = 0;
+  int _assessmentSubmissions = 0;
+  int _moduleProgressRecords = 0;
+  int _aiReady = 0;
+  int _aiFailed = 0;
 
-  final List<Map<String, dynamic>> _systemLogs = [
-    {
-      'event': 'Bulk Grade Export Generated',
-      'user': 'Admin (Dr. Anna Reyes)',
-      'ip': '192.168.1.104',
-      'timestamp': '12 mins ago',
-      'level': 'Info',
-      'icon': Icons.file_download_outlined,
-      'color': Colors.blueAccent,
-    },
-    {
-      'event': 'API Gateway Rate Limit Warning',
-      'user': 'System Engine',
-      'ip': '127.0.0.1',
-      'timestamp': '45 mins ago',
-      'level': 'Warning',
-      'icon': Icons.warning_amber_rounded,
-      'color': Colors.orange,
-    },
-    {
-      'event': 'Instructor Account Provisioned',
-      'user': 'Admin (Dr. Anna Reyes)',
-      'ip': '192.168.1.104',
-      'timestamp': '2 hours ago',
-      'level': 'Success',
-      'icon': Icons.person_add_alt_1_rounded,
-      'color': Colors.green,
-    },
-    {
-      'event': 'Failed Admin Login Attempt',
-      'user': 'Unknown (admin_root)',
-      'ip': '112.198.74.22',
-      'timestamp': '5 hours ago',
-      'level': 'Alert',
-      'icon': Icons.gpp_bad_outlined,
-      'color': reportRed,
-    },
-    {
-      'event': 'Moodle Cache Synchronized',
-      'user': 'Cron Automation',
-      'ip': 'Internal REST',
-      'timestamp': '8 hours ago',
-      'level': 'Info',
-      'icon': Icons.sync_rounded,
-      'color': Colors.teal,
-    },
-  ];
+  List<Map<String, dynamic>> _activities = [];
 
-  void _triggerExport(String fileType) async {
-    Navigator.pop(context);
-    setState(() => _isExporting = true);
+  @override
+  void initState() {
+    super.initState();
+    _loadReport();
+  }
 
-    await Future.delayed(const Duration(seconds: 2));
-
+  Future<void> _loadReport() async {
     if (mounted) {
-      setState(() => _isExporting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
-              const SizedBox(width: 12),
-              Text('CASLMS_System_Report_$fileType downloaded successfully.'),
-            ],
-          ),
-          backgroundColor: Colors.green.shade600,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
+
+    try {
+      final usersSnapshot =
+          await _firestore.collection('users').get();
+
+      final coursesSnapshot =
+          await _firestore.collection('courses').get();
+
+      final enrollmentSnapshot =
+          await _firestore.collection('enrollments').get();
+
+      final submissionSnapshot =
+          await _firestore
+              .collection('assessmentSubmissions')
+              .get();
+
+      final progressSnapshot =
+          await _firestore.collection('moduleProgress').get();
+
+      final resourceSnapshot =
+          await _firestore.collection('moduleResources').get();
+
+      int activeCourses = 0;
+
+      for (final document in coursesSnapshot.docs) {
+        final status = (document.data()['status'] ?? 'active')
+            .toString()
+            .trim()
+            .toLowerCase();
+
+        if (status == 'active') {
+          activeCourses++;
+        }
+      }
+
+      int activeEnrollments = 0;
+
+      for (final document in enrollmentSnapshot.docs) {
+        final status = (document.data()['status'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+
+        if (status == 'active') {
+          activeEnrollments++;
+        }
+      }
+
+      int aiReady = 0;
+      int aiFailed = 0;
+
+      final List<Map<String, dynamic>> activities = [];
+
+      for (final document in usersSnapshot.docs) {
+        final data = document.data();
+
+        if (data['lastLoginAt'] != null) {
+          activities.add({
+            'type': 'User Login',
+            'title': (data['name'] ?? 'User').toString(),
+            'subtitle':
+                '${_capitalize((data['role'] ?? 'user').toString())} account activity',
+            'timestamp': data['lastLoginAt'],
+            'color': blue,
+            'icon': Icons.login_rounded,
+          });
+        }
+      }
+
+      for (final document in coursesSnapshot.docs) {
+        final data = document.data();
+
+        final timestamp =
+            data['updatedAt'] ?? data['createdAt'];
+
+        if (timestamp != null) {
+          activities.add({
+            'type': 'Course',
+            'title':
+                '${(data['code'] ?? 'Course')} • ${(data['title'] ?? '')}',
+            'subtitle': 'Course record updated',
+            'timestamp': timestamp,
+            'color': Colors.indigo,
+            'icon': Icons.library_books_rounded,
+          });
+        }
+      }
+
+      for (final document in resourceSnapshot.docs) {
+        final data = document.data();
+
+        final status = (data['aiProcessingStatus'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+
+        if (status == 'ready') {
+          aiReady++;
+        } else if (status == 'failed') {
+          aiFailed++;
+        }
+
+        final timestamp =
+            data['aiProcessedAt'] ?? data['updatedAt'];
+
+        if (status.isNotEmpty && timestamp != null) {
+          activities.add({
+            'type': 'AI',
+            'title':
+                (data['fileName'] ?? data['title'] ?? 'Learning Material')
+                    .toString(),
+            'subtitle': 'AI status: ${_capitalize(status)}',
+            'timestamp': timestamp,
+            'color': status == 'ready'
+                ? green
+                : status == 'failed'
+                    ? reportRed
+                    : orange,
+            'icon': Icons.auto_awesome_rounded,
+          });
+        }
+      }
+
+      activities.sort((a, b) {
+        final aDate = _dateFrom(a['timestamp']);
+        final bDate = _dateFrom(b['timestamp']);
+
+        if (aDate == null && bDate == null) return 0;
+        if (aDate == null) return 1;
+        if (bDate == null) return -1;
+
+        return bDate.compareTo(aDate);
+      });
+
+      if (!mounted) return;
+
+      setState(() {
+        _users = usersSnapshot.size;
+        _activeCourses = activeCourses;
+        _activeEnrollments = activeEnrollments;
+        _assessmentSubmissions = submissionSnapshot.size;
+        _moduleProgressRecords = progressSnapshot.size;
+        _aiReady = aiReady;
+        _aiFailed = aiFailed;
+        _activities = activities;
+        _isLoading = false;
+      });
+    } on FirebaseException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage =
+            e.message ?? 'Unable to load system report.';
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage =
+            e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  List<Map<String, dynamic>> get _filteredActivities {
+    final now = DateTime.now();
+    DateTime? cutoff;
+
+    if (_selectedTimeframe == 'Today') {
+      cutoff = DateTime(now.year, now.month, now.day);
+    } else if (_selectedTimeframe == 'Last 7 Days') {
+      cutoff = now.subtract(const Duration(days: 7));
+    } else if (_selectedTimeframe == 'Last 30 Days') {
+      cutoff = now.subtract(const Duration(days: 30));
+    }
+
+    if (cutoff == null) {
+      return _activities.take(50).toList();
+    }
+
+    return _activities.where((item) {
+      final date = _dateFrom(item['timestamp']);
+
+      return date != null &&
+          !date.toLocal().isBefore(cutoff!);
+    }).take(50).toList();
+  }
+
+  Future<void> _exportReport() async {
+    final csv = StringBuffer();
+
+    csv.writeln('CASLMS System Report');
+    csv.writeln('Timeframe,${_csv(_selectedTimeframe)}');
+    csv.writeln();
+    csv.writeln('Metric,Value');
+    csv.writeln('Users,$_users');
+    csv.writeln('Active Courses,$_activeCourses');
+    csv.writeln('Active Enrollments,$_activeEnrollments');
+    csv.writeln(
+      'Assessment Submissions,$_assessmentSubmissions',
+    );
+    csv.writeln(
+      'Module Progress Records,$_moduleProgressRecords',
+    );
+    csv.writeln('AI Ready,$_aiReady');
+    csv.writeln('AI Failed,$_aiFailed');
+    csv.writeln();
+    csv.writeln('Activity Type,Title,Details,Timestamp');
+
+    for (final item in _filteredActivities) {
+      csv.writeln(
+        '${_csv((item['type'] ?? '').toString())},'
+        '${_csv((item['title'] ?? '').toString())},'
+        '${_csv((item['subtitle'] ?? '').toString())},'
+        '${_csv(_formatAbsoluteDate(item['timestamp']))}',
       );
     }
+
+    await Clipboard.setData(
+      ClipboardData(text: csv.toString()),
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'System report CSV copied to clipboard.',
+        ),
+        backgroundColor: green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(60.0),
-        child: AppBar(
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.black87, size: 20),
-            onPressed: () => Navigator.pop(context),
-          ),
-          titleSpacing: 0,
-          title: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                'System Reports & Logs',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18, color: Colors.black87, letterSpacing: -0.5),
+      backgroundColor: background,
+      appBar: AppBar(
+        backgroundColor: background,
+        elevation: 0,
+        foregroundColor: textDark,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'System Reports',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
               ),
-              Text(
-                'Audit Trails & Academic Performance',
-                style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          actions: [
-            IconButton(
-              icon: _isExporting
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: reportRed))
-                  : const Icon(Icons.file_download_outlined, color: reportRed),
-              tooltip: 'Export Comprehensive Report',
-              onPressed: _isExporting ? null : () => _showExportModal(context),
             ),
-            const SizedBox(width: 16),
+            Text(
+              'Real Firestore Platform Metrics',
+              style: TextStyle(
+                fontSize: 12,
+                color: textGrey,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
+        actions: [
+          IconButton(
+            onPressed: _isLoading ? null : _exportReport,
+            tooltip: 'Copy CSV',
+            icon: const Icon(
+              Icons.file_download_outlined,
+              color: reportRed,
+            ),
+          ),
+          IconButton(
+            onPressed: _isLoading ? null : _loadReport,
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
+        top: false,
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1200),
-            child: ListView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-              children: [
-                _buildTimeframeSelector(),
-                const SizedBox(height: 20),
-                _buildKeyMetrics(),
-                const SizedBox(height: 28),
-                const Text(
-                  'Grade Distribution (CAS Department)',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textDark),
-                ),
-                const SizedBox(height: 14),
-                _buildGradeDistributionCard(),
-                const SizedBox(height: 28),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Audit & Activity Logs',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textDark),
-                    ),
-                    Text(
-                      '${_systemLogs.length} Events Recorded',
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textGrey),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                _buildAuditLogsSection(),
-                const SizedBox(height: 40),
-              ],
-            ),
+            child: _buildBody(),
           ),
         ),
       ),
     );
   }
 
-  // ==============================================================
-  // UI SECTIONS & CARDS
-  // ==============================================================
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: reportRed),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                color: reportRed,
+                size: 50,
+              ),
+              const SizedBox(height: 14),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: textGrey,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 18),
+              ElevatedButton.icon(
+                onPressed: _loadReport,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: reportRed,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try Again'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadReport,
+      color: reportRed,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        children: [
+          _buildTimeframeSelector(),
+          const SizedBox(height: 18),
+          _buildMetrics(),
+          const SizedBox(height: 28),
+          const Text(
+            'Recent Platform Activity',
+            style: TextStyle(
+              color: textDark,
+              fontSize: 17,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (_filteredActivities.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Center(
+                child: Text(
+                  'No recorded activity for this timeframe.',
+                  style: TextStyle(color: textGrey),
+                ),
+              ),
+            )
+          else
+            ..._filteredActivities.map(_buildActivityCard),
+        ],
+      ),
+    );
+  }
 
   Widget _buildTimeframeSelector() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE6EAF0)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 3)),
-        ],
+        border: Border.all(color: borderColor),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.date_range_rounded, color: reportRed, size: 20),
-              SizedBox(width: 10),
-              Text('Reporting Period:', style: TextStyle(color: textGrey, fontSize: 13, fontWeight: FontWeight.w600)),
-            ],
-          ),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _selectedTimeframe,
-              icon: const Icon(Icons.arrow_drop_down_rounded, color: textDark),
-              items: _timeframeOptions.map((time) {
-                return DropdownMenuItem(
-                  value: time,
-                  child: Text(
-                    time,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: textDark),
-                  ),
-                );
-              }).toList(),
-              onChanged: (val) {
-                if (val != null) setState(() => _selectedTimeframe = val);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildKeyMetrics() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildMetricCard(
-            title: 'Passing Rate',
-            value: '88.4%',
-            subtitle: '+2.1% from Midterms',
-            icon: Icons.auto_graph_rounded,
-            color: Colors.green.shade600,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildMetricCard(
-            title: 'Daily Active',
-            value: '2,819',
-            subtitle: '82% of student body',
-            icon: Icons.person_pin_circle_rounded,
-            color: Colors.blueAccent,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildMetricCard(
-            title: 'Submissions',
-            value: '14.2k',
-            subtitle: 'Tasks & Quizzes',
-            icon: Icons.checklist_rtl_rounded,
-            color: Colors.deepPurple,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMetricCard({
-    required String title,
-    required String value,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE6EAF0)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(height: 12),
-          Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: color)),
-          const SizedBox(height: 2),
-          Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: textDark)),
-          const SizedBox(height: 2),
-          Text(
-            subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: textGrey),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGradeDistributionCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE6EAF0)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        children: [
-          _buildGradeBar('Excellent (1.0 - 1.5)', 0.38, '38%', Colors.green.shade600),
-          const SizedBox(height: 14),
-          _buildGradeBar('Good (1.75 - 2.25)', 0.42, '42%', Colors.blueAccent),
-          const SizedBox(height: 14),
-          _buildGradeBar('Satisfactory (2.5 - 3.0)', 0.14, '14%', Colors.orange),
-          const SizedBox(height: 14),
-          _buildGradeBar('Conditional / Failed (4.0 - 5.0)', 0.06, '6%', reportRed),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGradeBar(String label, double ratio, String percentage, Color barColor) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: textDark)),
-            Text(percentage, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: barColor)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: LinearProgressIndicator(
-            value: ratio,
-            backgroundColor: const Color(0xFFEEF2F6),
-            valueColor: AlwaysStoppedAnimation<Color>(barColor),
-            minHeight: 8,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAuditLogsSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE6EAF0)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
-        ],
-      ),
-      child: Column(
-        children: _systemLogs.asMap().entries.map((entry) {
-          final log = entry.value;
-          final isLast = entry.key == _systemLogs.length - 1;
-
-          return Column(
-            children: [
-              ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: (log['color'] as Color).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(log['icon'] as IconData, color: log['color'] as Color, size: 22),
-                ),
-                title: Text(
-                  log['event'],
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: textDark),
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4.0),
-                  child: Text(
-                    '${log['user']} • IP: ${log['ip']}',
-                    style: const TextStyle(color: textGrey, fontSize: 11.5, fontWeight: FontWeight.w500),
-                  ),
-                ),
-                trailing: Text(
-                  log['timestamp'],
-                  style: const TextStyle(color: Color(0xFF9BA4B4), fontSize: 11, fontWeight: FontWeight.w600),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedTimeframe,
+          isExpanded: true,
+          items: _timeframeOptions.map((value) {
+            return DropdownMenuItem<String>(
+              value: value,
+              child: Text(
+                value,
+                style: const TextStyle(
+                  color: textDark,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              if (!isLast) const Divider(height: 1, indent: 68, endIndent: 18, color: Color(0xFFF0F2F5)),
-            ],
-          );
-        }).toList(),
+            );
+          }).toList(),
+          onChanged: (value) {
+            if (value == null) return;
+
+            setState(() {
+              _selectedTimeframe = value;
+            });
+          },
+        ),
       ),
     );
   }
 
-  // ==============================================================
-  // EXPORT BOTTOM SHEET MODAL
-  // ==============================================================
-
-  void _showExportModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  Widget _buildMetrics() {
+    final cards = [
+      _metric('Users', _users, Icons.groups_rounded, blue),
+      _metric(
+        'Active Courses',
+        _activeCourses,
+        Icons.library_books_rounded,
+        Colors.indigo,
       ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Export System Reports',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: textDark),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Choose format to download platform audit logs & student metrics:',
-                style: TextStyle(fontSize: 12, color: textGrey),
-              ),
-              const SizedBox(height: 20),
-              _buildExportOption(
-                icon: Icons.picture_as_pdf_rounded,
-                title: 'PDF Formal Report (.pdf)',
-                subtitle: 'Formatted summary charts & executive review',
-                color: reportRed,
-                onTap: () => _triggerExport('PDF'),
-              ),
-              const SizedBox(height: 10),
-              _buildExportOption(
-                icon: Icons.table_chart_rounded,
-                title: 'Spreadsheet Format (.xlsx / .csv)',
-                subtitle: 'Raw log rows, user IDs, and timestamps',
-                color: Colors.green.shade700,
-                onTap: () => _triggerExport('CSV'),
-              ),
-            ],
-          ),
+      _metric(
+        'Enrollments',
+        _activeEnrollments,
+        Icons.how_to_reg_rounded,
+        green,
+      ),
+      _metric(
+        'Submissions',
+        _assessmentSubmissions,
+        Icons.assignment_turned_in_outlined,
+        orange,
+      ),
+      _metric(
+        'Progress Records',
+        _moduleProgressRecords,
+        Icons.trending_up_rounded,
+        Colors.teal,
+      ),
+      _metric(
+        'AI Ready',
+        _aiReady,
+        Icons.auto_awesome_rounded,
+        Colors.deepPurple,
+      ),
+      _metric(
+        'AI Failed',
+        _aiFailed,
+        Icons.error_outline_rounded,
+        reportRed,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 850
+            ? 4
+            : constraints.maxWidth >= 520
+                ? 2
+                : 1;
+
+        const spacing = 12.0;
+        final width =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: cards
+              .map((card) => SizedBox(width: width, child: card))
+              .toList(),
         );
       },
     );
   }
 
-  Widget _buildExportOption({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE6EAF0)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-              child: Icon(icon, color: color, size: 22),
+  Widget _metric(
+    String label,
+    int value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: textDark)),
-                  const SizedBox(height: 2),
-                  Text(subtitle, style: const TextStyle(color: textGrey, fontSize: 11, fontWeight: FontWeight.w500)),
-                ],
-              ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$value',
+                  style: const TextStyle(
+                    color: textDark,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: textGrey,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
-            const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF9BA4B4), size: 14),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+  }
+
+  Widget _buildActivityCard(Map<String, dynamic> item) {
+    final color = item['color'] is Color
+        ? item['color'] as Color
+        : textGrey;
+
+    final icon = item['icon'] is IconData
+        ? item['icon'] as IconData
+        : Icons.info_outline_rounded;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 19),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (item['title'] ?? '').toString(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: textDark,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  (item['subtitle'] ?? '').toString(),
+                  style: const TextStyle(
+                    color: textGrey,
+                    fontSize: 10.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _formatRelative(item['timestamp']),
+            style: const TextStyle(
+              color: textGrey,
+              fontSize: 9.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  DateTime? _dateFrom(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
+  }
+
+  String _formatRelative(dynamic value) {
+    final date = _dateFrom(value);
+
+    if (date == null) return '';
+
+    final difference =
+        DateTime.now().difference(date.toLocal());
+
+    if (difference.inMinutes < 1) return 'Now';
+    if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m';
+    }
+    if (difference.inHours < 24) {
+      return '${difference.inHours}h';
+    }
+
+    return '${difference.inDays}d';
+  }
+
+  String _formatAbsoluteDate(dynamic value) {
+    final date = _dateFrom(value);
+
+    if (date == null) return '';
+
+    final local = date.toLocal();
+
+    return '${local.year}-'
+        '${local.month.toString().padLeft(2, '0')}-'
+        '${local.day.toString().padLeft(2, '0')} '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _capitalize(String value) {
+    final clean = value.trim();
+
+    if (clean.isEmpty) return clean;
+
+    return '${clean[0].toUpperCase()}${clean.substring(1)}';
+  }
+
+  String _csv(String value) {
+    return '"${value.replaceAll('"', '""')}"';
   }
 }
