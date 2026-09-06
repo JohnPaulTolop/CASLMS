@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 
 import '../services/campus_auth_service.dart';
+import '../services/instructor_registration_service.dart';
+
+enum RegistrationAccountType {
+  student,
+  instructor,
+}
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({
@@ -14,10 +20,6 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState
     extends State<AuthScreen> {
-  // ============================================================
-  // DESIGN
-  // ============================================================
-
   static const Color primaryBlue =
       Color(0xFF1769FF);
 
@@ -42,16 +44,12 @@ class _AuthScreenState
   static const Color lightBlue =
       Color(0xFFEAF3FF);
 
-  // ============================================================
-  // SERVICE
-  // ============================================================
-
   final CampusAuthService _authService =
       CampusAuthService();
 
-  // ============================================================
-  // FORM
-  // ============================================================
+  final InstructorRegistrationService
+      _instructorRegistrationService =
+      InstructorRegistrationService();
 
   final GlobalKey<FormState> _formKey =
       GlobalKey<FormState>();
@@ -84,45 +82,35 @@ class _AuthScreenState
       _confirmPasswordController =
       TextEditingController();
 
-  // ============================================================
-  // STATE
-  // ============================================================
-
   bool _isSignUpMode = false;
-
   bool _isLoading = false;
-
+  bool _isPickingFile = false;
   bool _showPassword = false;
-
   bool _showConfirmPassword = false;
 
-  // ============================================================
-  // DISPOSE
-  // ============================================================
+  RegistrationAccountType
+      _registrationAccountType =
+      RegistrationAccountType.student;
+
+  FacultyIdDocument? _facultyIdDocument;
+
+  bool get _isInstructorRegistration =>
+      _isSignUpMode &&
+      _registrationAccountType ==
+          RegistrationAccountType.instructor;
 
   @override
   void dispose() {
     _fullNameController.dispose();
-
     _emailController.dispose();
-
     _campusIdController.dispose();
-
     _departmentController.dispose();
-
     _courseController.dispose();
-
     _passwordController.dispose();
-
-    _confirmPasswordController
-        .dispose();
+    _confirmPasswordController.dispose();
 
     super.dispose();
   }
-
-  // ============================================================
-  // MODE
-  // ============================================================
 
   void _switchMode(
     bool signUp,
@@ -132,42 +120,77 @@ class _AuthScreenState
       return;
     }
 
-    FocusScope.of(context)
-        .unfocus();
-
-    _formKey.currentState
-        ?.reset();
+    FocusScope.of(context).unfocus();
+    _formKey.currentState?.reset();
 
     setState(() {
-      _isSignUpMode =
-          signUp;
-
-      _showPassword =
-          false;
-
-      _showConfirmPassword =
-          false;
-
-      _passwordController
-          .clear();
-
-      _confirmPasswordController
-          .clear();
+      _isSignUpMode = signUp;
+      _showPassword = false;
+      _showConfirmPassword = false;
+      _passwordController.clear();
+      _confirmPasswordController.clear();
     });
   }
 
-  // ============================================================
-  // LOGIN
-  //
-  // After successful Firebase login, go back to a completely
-  // fresh SessionGate.
-  //
-  // SessionGate handles:
-  //
-  // student    -> Student Dashboard
-  // instructor -> Instructor Dashboard
-  // admin      -> Admin Dashboard
-  // ============================================================
+  void _selectAccountType(
+    RegistrationAccountType type,
+  ) {
+    if (_isLoading ||
+        type == _registrationAccountType) {
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    _formKey.currentState?.reset();
+
+    setState(() {
+      _registrationAccountType = type;
+      _facultyIdDocument = null;
+      _courseController.clear();
+    });
+  }
+
+  Future<void> _pickFacultyId() async {
+    if (_isLoading ||
+        _isPickingFile) {
+      return;
+    }
+
+    setState(() {
+      _isPickingFile = true;
+    });
+
+    try {
+      final FacultyIdDocument? document =
+          await _instructorRegistrationService
+              .pickFacultyIdDocument();
+
+      if (!mounted ||
+          document == null) {
+        return;
+      }
+
+      setState(() {
+        _facultyIdDocument = document;
+      });
+    } on CampusAuthException catch (error) {
+      if (mounted) {
+        _showError(error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        _showError(
+          'Unable to select the faculty ID file.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPickingFile = false;
+        });
+      }
+    }
+  }
 
   Future<void> _handleLogin() async {
     if (_isLoading) {
@@ -180,8 +203,7 @@ class _AuthScreenState
       return;
     }
 
-    FocusScope.of(context)
-        .unfocus();
+    FocusScope.of(context).unfocus();
 
     setState(() {
       _isLoading = true;
@@ -190,66 +212,38 @@ class _AuthScreenState
     try {
       await _authService.signIn(
         campusId:
-            _campusIdController
-                .text,
-
+            _campusIdController.text,
         password:
-            _passwordController
-                .text,
+            _passwordController.text,
       );
 
       if (!mounted) {
         return;
       }
-
-      // ========================================================
-      // LOGIN SUCCESS
-      //
-      // Delete the old Landing/Auth routes and start again from
-      // SessionGate.
-      // ========================================================
 
       Navigator.of(context)
           .pushNamedAndRemoveUntil(
         '/',
         (route) => false,
       );
-    } on CampusAuthException catch (e) {
-      if (!mounted) {
-        return;
+    } on CampusAuthException catch (error) {
+      if (mounted) {
+        _showError(error.message);
       }
-
-      _showError(
-        e.message,
-      );
     } catch (_) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        _showError(
+          'Unable to log in. Please try again.',
+        );
       }
-
-      _showError(
-        'Unable to log in. Please try again.',
-      );
     } finally {
       if (mounted) {
         setState(() {
-          _isLoading =
-              false;
+          _isLoading = false;
         });
       }
     }
   }
-
-  // ============================================================
-  // SIGN UP
-  //
-  // IMPORTANT:
-  //
-  // We DO NOT sign out after successful registration.
-  //
-  // Firebase creates the account and automatically logs in the
-  // new student. We immediately return to SessionGate.
-  // ============================================================
 
   Future<void> _handleSignUp() async {
     if (_isLoading) {
@@ -263,8 +257,7 @@ class _AuthScreenState
     }
 
     if (_passwordController.text !=
-        _confirmPasswordController
-            .text) {
+        _confirmPasswordController.text) {
       _showError(
         'Passwords do not match.',
       );
@@ -272,92 +265,86 @@ class _AuthScreenState
       return;
     }
 
-    FocusScope.of(context)
-        .unfocus();
+    if (_isInstructorRegistration &&
+        _facultyIdDocument == null) {
+      _showError(
+        'Please upload your faculty ID.',
+      );
+
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
 
     setState(() {
       _isLoading = true;
     });
 
     try {
-      await _authService
-          .signUpStudent(
-        fullName:
-            _fullNameController
-                .text,
-
-        email:
-            _emailController
-                .text,
-
-        campusId:
-            _campusIdController
-                .text,
-
-        department:
-            _departmentController
-                .text,
-
-        course:
-            _courseController
-                .text,
-
-        password:
-            _passwordController
-                .text,
-      );
+      if (_isInstructorRegistration) {
+        await _instructorRegistrationService
+            .registerInstructor(
+          fullName:
+              _fullNameController.text,
+          email:
+              _emailController.text,
+          campusId:
+              _campusIdController.text,
+          department:
+              _departmentController.text,
+          position:
+              _courseController.text,
+          password:
+              _passwordController.text,
+          facultyId:
+              _facultyIdDocument!,
+        );
+      } else {
+        await _authService.signUpStudent(
+          fullName:
+              _fullNameController.text,
+          email:
+              _emailController.text,
+          campusId:
+              _campusIdController.text,
+          department:
+              _departmentController.text,
+          course:
+              _courseController.text,
+          password:
+              _passwordController.text,
+        );
+      }
 
       if (!mounted) {
         return;
       }
-
-      // ========================================================
-      // REGISTRATION SUCCESS
-      //
-      // Firebase user remains authenticated.
-      //
-      // Public registration creates:
-      //
-      // role   = student
-      // status = active
-      //
-      // SessionGate will therefore open StudentMainScreen.
-      // ========================================================
 
       Navigator.of(context)
           .pushNamedAndRemoveUntil(
         '/',
         (route) => false,
       );
-    } on CampusAuthException catch (e) {
-      if (!mounted) {
-        return;
+    } on CampusAuthException catch (error) {
+      if (mounted) {
+        _showError(error.message);
       }
-
-      _showError(
-        e.message,
-      );
     } catch (_) {
-      if (!mounted) {
-        return;
+      if (mounted) {
+        _showError(
+          _isInstructorRegistration
+              ? 'Unable to submit the instructor application.'
+              : 'Unable to create your account.',
+        );
       }
-
-      _showError(
-        'Unable to create your account. Please try again.',
-      );
     } finally {
       if (mounted) {
         setState(() {
-          _isLoading =
-              false;
+          _isLoading = false;
         });
       }
     }
   }
-
-  // ============================================================
-  // SUBMIT
-  // ============================================================
 
   Future<void> _submit() async {
     if (_isSignUpMode) {
@@ -366,10 +353,6 @@ class _AuthScreenState
       await _handleLogin();
     }
   }
-
-  // ============================================================
-  // ERROR
-  // ============================================================
 
   void _showError(
     String message,
@@ -380,593 +363,433 @@ class _AuthScreenState
     ScaffoldMessenger.of(context)
         .showSnackBar(
       SnackBar(
-        content: Text(
-          message,
-        ),
-
-        backgroundColor:
-            red,
-
+        content: Text(message),
+        backgroundColor: red,
         behavior:
-            SnackBarBehavior
-                .floating,
+            SnackBarBehavior.floating,
       ),
     );
   }
-
-  // ============================================================
-  // BUILD
-  // ============================================================
 
   @override
   Widget build(
     BuildContext context,
   ) {
     return Scaffold(
-      backgroundColor:
-          background,
-
+      backgroundColor: background,
       appBar: AppBar(
-        backgroundColor:
-            background,
-
+        backgroundColor: background,
         elevation: 0,
-
-        foregroundColor:
-            darkText,
+        foregroundColor: darkText,
       ),
-
       body: SafeArea(
         top: false,
-
         child: Center(
           child: ConstrainedBox(
             constraints:
                 const BoxConstraints(
               maxWidth: 520,
             ),
-
-            child:
-                SingleChildScrollView(
+            child: SingleChildScrollView(
               physics:
                   const BouncingScrollPhysics(),
-
               padding:
-                  const EdgeInsets
-                      .fromLTRB(
+                  const EdgeInsets.fromLTRB(
                 24,
                 10,
                 24,
                 40,
               ),
-
               child: Form(
                 key: _formKey,
-
                 child: Column(
                   crossAxisAlignment:
                       CrossAxisAlignment
                           .stretch,
-
                   children: [
-                    // ==========================================
-                    // LOGO
-                    // ==========================================
-
                     Center(
                       child: Container(
                         width: 78,
-
                         height: 78,
-
                         decoration:
                             BoxDecoration(
-                          color:
-                              Colors.white,
-
+                          color: Colors.white,
                           borderRadius:
-                              BorderRadius
-                                  .circular(
+                              BorderRadius.circular(
                             22,
                           ),
-
-                          border:
-                              Border.all(
-                            color:
-                                borderColor,
+                          border: Border.all(
+                            color: borderColor,
                           ),
-
                           image:
                               const DecorationImage(
-                            image:
-                                AssetImage(
+                            image: AssetImage(
                               'assets/images/CASlogo.jpg',
                             ),
-
-                            fit:
-                                BoxFit.cover,
+                            fit: BoxFit.cover,
                           ),
                         ),
                       ),
                     ),
-
                     const SizedBox(
                       height: 20,
                     ),
-
-                    // ==========================================
-                    // TITLE
-                    // ==========================================
-
                     Text(
                       _isSignUpMode
                           ? 'Create your account'
                           : 'Welcome back',
-
                       textAlign:
                           TextAlign.center,
-
                       style:
                           const TextStyle(
-                        color:
-                            darkText,
-
-                        fontSize:
-                            27,
-
+                        color: darkText,
+                        fontSize: 27,
                         fontWeight:
-                            FontWeight
-                                .w800,
-
-                        letterSpacing:
-                            -0.7,
+                            FontWeight.w800,
+                        letterSpacing: -0.7,
                       ),
                     ),
-
                     const SizedBox(
                       height: 7,
                     ),
-
                     Text(
                       _isSignUpMode
-                          ? 'Register your student information to access CASLMS.'
+                          ? _isInstructorRegistration
+                              ? 'Submit your instructor information for administrator verification.'
+                              : 'Register your student information to access CASLMS.'
                           : 'Log in using your ID number and password.',
-
                       textAlign:
                           TextAlign.center,
-
                       style:
                           const TextStyle(
-                        color:
-                            greyText,
-
-                        fontSize:
-                            13,
-
-                        height:
-                            1.5,
+                        color: greyText,
+                        fontSize: 13,
+                        height: 1.5,
                       ),
                     ),
-
                     const SizedBox(
                       height: 26,
                     ),
-
-                    // ==========================================
-                    // LOGIN / SIGN UP SELECTOR
-                    // ==========================================
-
                     _buildModeSelector(),
-
                     const SizedBox(
-                      height: 24,
+                      height: 22,
                     ),
-
-                    // ==========================================
-                    // FULL NAME
-                    // ==========================================
 
                     if (_isSignUpMode) ...[
                       _label(
-                        'Full Name',
+                        'Register as',
                       ),
-
                       const SizedBox(
                         height: 8,
                       ),
-
+                      _buildAccountTypeSelector(),
+                      const SizedBox(
+                        height: 20,
+                      ),
+                      _label(
+                        'Full Name',
+                      ),
+                      const SizedBox(
+                        height: 8,
+                      ),
                       TextFormField(
                         controller:
                             _fullNameController,
-
                         enabled:
                             !_isLoading,
-
                         textCapitalization:
-                            TextCapitalization
-                                .words,
-
+                            TextCapitalization.words,
                         textInputAction:
-                            TextInputAction
-                                .next,
-
+                            TextInputAction.next,
                         decoration:
                             _inputDecoration(
                           hintText:
                               'Enter your full name',
-
-                          icon:
-                              Icons
-                                  .person_outline_rounded,
+                          icon: Icons
+                              .person_outline_rounded,
                         ),
-
-                        validator:
-                            (value) {
+                        validator: (value) {
                           if (!_isSignUpMode) {
                             return null;
                           }
 
-                          if (value ==
-                                  null ||
-                              value
-                                  .trim()
-                                  .isEmpty) {
+                          final String text =
+                              value?.trim() ?? '';
+
+                          if (text.isEmpty) {
                             return 'Please enter your full name';
                           }
 
-                          if (value
-                                  .trim()
-                                  .length <
-                              2) {
+                          if (text.length < 2) {
                             return 'Enter your complete name';
                           }
 
                           return null;
                         },
                       ),
-
                       const SizedBox(
                         height: 18,
                       ),
-
-                      // ========================================
-                      // REAL EMAIL
-                      // ========================================
-
                       _label(
                         'Email Address',
                       ),
-
                       const SizedBox(
                         height: 8,
                       ),
-
                       TextFormField(
                         controller:
                             _emailController,
-
                         enabled:
                             !_isLoading,
-
                         keyboardType:
                             TextInputType
                                 .emailAddress,
-
-                        autocorrect:
-                            false,
-
+                        autocorrect: false,
                         textInputAction:
-                            TextInputAction
-                                .next,
-
+                            TextInputAction.next,
                         decoration:
                             _inputDecoration(
                           hintText:
-                              'Enter your email address',
-
+                              'Enter your Gmail address',
                           icon:
-                              Icons
-                                  .email_outlined,
+                              Icons.email_outlined,
                         ),
-
-                        validator:
-                            (value) {
+                        validator: (value) {
                           if (!_isSignUpMode) {
                             return null;
                           }
 
-                          if (value ==
-                                  null ||
-                              value
-                                  .trim()
-                                  .isEmpty) {
+                          final String text =
+                              value?.trim() ?? '';
+
+                          if (text.isEmpty) {
                             return 'Please enter your email';
                           }
 
                           if (!_authService
-                              .isValidEmail(
-                            value,
-                          )) {
+                              .isValidEmail(text)) {
                             return 'Enter a valid email address';
                           }
 
                           return null;
                         },
                       ),
-
                       const SizedBox(
                         height: 18,
                       ),
                     ],
 
-                    // ==========================================
-                    // ID NUMBER
-                    // ==========================================
-
                     _label(
-                      'ID Number',
+                      _isInstructorRegistration
+                          ? 'Faculty ID Number'
+                          : 'ID Number',
                     ),
-
                     const SizedBox(
                       height: 8,
                     ),
-
                     TextFormField(
                       controller:
                           _campusIdController,
-
                       enabled:
                           !_isLoading,
-
                       keyboardType:
-                          TextInputType
-                              .number,
-
-                      autocorrect:
-                          false,
-
+                          TextInputType.number,
+                      autocorrect: false,
                       textInputAction:
-                          TextInputAction
-                              .next,
-
+                          TextInputAction.next,
                       decoration:
                           _inputDecoration(
                         hintText:
-                            'e.g. 231577',
-
+                            _isInstructorRegistration
+                                ? 'Enter your faculty ID'
+                                : 'e.g. 231577',
                         icon:
-                            Icons
-                                .badge_outlined,
+                            Icons.badge_outlined,
                       ),
+                      validator: (value) {
+                        final String text =
+                            value?.trim() ?? '';
 
-                      validator:
-                          (value) {
-                        if (value ==
-                                null ||
-                            value
-                                .trim()
-                                .isEmpty) {
-                          return 'Please enter your ID number';
+                        if (text.isEmpty) {
+                          return _isInstructorRegistration
+                              ? 'Please enter your faculty ID'
+                              : 'Please enter your ID number';
                         }
 
                         if (!_authService
-                            .isValidCampusId(
-                          value,
-                        )) {
-                          return 'Enter a valid ID number';
+                            .isValidCampusId(text)) {
+                          return _isInstructorRegistration
+                              ? 'Enter a valid faculty ID'
+                              : 'Enter a valid ID number';
                         }
 
                         return null;
                       },
                     ),
 
-                    // ==========================================
-                    // DEPARTMENT + COURSE
-                    // ==========================================
-
                     if (_isSignUpMode) ...[
                       const SizedBox(
                         height: 18,
                       ),
-
                       _label(
                         'Department',
                       ),
-
                       const SizedBox(
                         height: 8,
                       ),
-
                       TextFormField(
                         controller:
                             _departmentController,
-
                         enabled:
                             !_isLoading,
-
                         textCapitalization:
-                            TextCapitalization
-                                .words,
-
+                            TextCapitalization.words,
                         textInputAction:
-                            TextInputAction
-                                .next,
-
+                            TextInputAction.next,
                         decoration:
                             _inputDecoration(
                           hintText:
                               'Enter your department',
-
-                          icon:
-                              Icons
-                                  .account_balance_outlined,
+                          icon: Icons
+                              .account_balance_outlined,
                         ),
-
-                        validator:
-                            (value) {
+                        validator: (value) {
                           if (!_isSignUpMode) {
                             return null;
                           }
 
-                          if (value ==
-                                  null ||
-                              value
-                                  .trim()
-                                  .isEmpty) {
+                          if ((value?.trim() ?? '')
+                              .isEmpty) {
                             return 'Please enter your department';
                           }
 
                           return null;
                         },
                       ),
-
                       const SizedBox(
                         height: 18,
                       ),
-
                       _label(
-                        'Course',
+                        _isInstructorRegistration
+                            ? 'Position / Program'
+                            : 'Course / Program',
                       ),
-
                       const SizedBox(
                         height: 8,
                       ),
-
                       TextFormField(
                         controller:
                             _courseController,
-
                         enabled:
                             !_isLoading,
-
                         textCapitalization:
-                            TextCapitalization
-                                .words,
-
+                            TextCapitalization.words,
                         textInputAction:
-                            TextInputAction
-                                .next,
-
+                            TextInputAction.next,
                         decoration:
                             _inputDecoration(
                           hintText:
-                              'e.g. BS Information Technology',
-
-                          icon:
-                              Icons
-                                  .menu_book_outlined,
+                              _isInstructorRegistration
+                                  ? 'e.g. Faculty, BSIT'
+                                  : 'e.g. BSIT',
+                          icon: _isInstructorRegistration
+                              ? Icons.work_outline_rounded
+                              : Icons
+                                  .school_outlined,
                         ),
-
-                        validator:
-                            (value) {
+                        validator: (value) {
                           if (!_isSignUpMode) {
                             return null;
                           }
 
-                          if (value ==
-                                  null ||
-                              value
-                                  .trim()
-                                  .isEmpty) {
-                            return 'Please enter your course';
+                          if ((value?.trim() ?? '')
+                              .isEmpty) {
+                            return _isInstructorRegistration
+                                ? 'Please enter your position or program'
+                                : 'Please enter your course or program';
                           }
 
                           return null;
                         },
                       ),
-                    ],
 
-                    // ==========================================
-                    // PASSWORD
-                    // ==========================================
+                      if (_isInstructorRegistration) ...[
+                        const SizedBox(
+                          height: 18,
+                        ),
+                        _label(
+                          'Faculty ID Document',
+                        ),
+                        const SizedBox(
+                          height: 8,
+                        ),
+                        _buildFacultyIdPicker(),
+                      ],
+                    ],
 
                     const SizedBox(
                       height: 18,
                     ),
-
                     _label(
                       'Password',
                     ),
-
                     const SizedBox(
                       height: 8,
                     ),
-
                     TextFormField(
                       controller:
                           _passwordController,
-
                       enabled:
                           !_isLoading,
-
                       obscureText:
                           !_showPassword,
-
                       textInputAction:
                           _isSignUpMode
-                              ? TextInputAction
-                                  .next
-                              : TextInputAction
-                                  .done,
-
-                      onFieldSubmitted:
-                          (_) {
+                              ? TextInputAction.next
+                              : TextInputAction.done,
+                      onFieldSubmitted: (_) {
                         if (!_isSignUpMode &&
                             !_isLoading) {
                           _submit();
                         }
                       },
-
                       decoration:
                           _inputDecoration(
                         hintText:
                             _isSignUpMode
                                 ? 'Create your password'
                                 : 'Enter your password',
-
-                        icon:
-                            Icons
-                                .lock_outline_rounded,
-
+                        icon: Icons
+                            .lock_outline_rounded,
                         suffixIcon:
                             IconButton(
                           onPressed:
                               _isLoading
                                   ? null
                                   : () {
-                                      setState(
-                                        () {
-                                          _showPassword =
-                                              !_showPassword;
-                                        },
-                                      );
+                                      setState(() {
+                                        _showPassword =
+                                            !_showPassword;
+                                      });
                                     },
-
-                          icon:
-                              Icon(
+                          icon: Icon(
                             _showPassword
                                 ? Icons
                                     .visibility_off_outlined
                                 : Icons
                                     .visibility_outlined,
-
-                            color:
-                                greyText,
+                            color: greyText,
                           ),
                         ),
                       ),
-
-                      validator:
-                          (value) {
-                        if (value ==
-                                null ||
+                      validator: (value) {
+                        if (value == null ||
                             value.isEmpty) {
                           return 'Please enter your password';
                         }
 
                         if (_isSignUpMode &&
-                            value.length <
-                                6) {
+                            value.length < 6) {
                           return 'Password must contain at least 6 characters';
                         }
 
@@ -974,96 +797,69 @@ class _AuthScreenState
                       },
                     ),
 
-                    // ==========================================
-                    // CONFIRM PASSWORD
-                    // ==========================================
-
                     if (_isSignUpMode) ...[
                       const SizedBox(
                         height: 18,
                       ),
-
                       _label(
                         'Confirm Password',
                       ),
-
                       const SizedBox(
                         height: 8,
                       ),
-
                       TextFormField(
                         controller:
                             _confirmPasswordController,
-
                         enabled:
                             !_isLoading,
-
                         obscureText:
                             !_showConfirmPassword,
-
                         textInputAction:
-                            TextInputAction
-                                .done,
-
-                        onFieldSubmitted:
-                            (_) {
+                            TextInputAction.done,
+                        onFieldSubmitted: (_) {
                           if (!_isLoading) {
                             _submit();
                           }
                         },
-
                         decoration:
                             _inputDecoration(
                           hintText:
                               'Enter your password again',
-
                           icon:
-                              Icons
-                                  .lock_reset_rounded,
-
+                              Icons.lock_reset_rounded,
                           suffixIcon:
                               IconButton(
                             onPressed:
                                 _isLoading
                                     ? null
                                     : () {
-                                        setState(
-                                          () {
-                                            _showConfirmPassword =
-                                                !_showConfirmPassword;
-                                          },
-                                        );
+                                        setState(() {
+                                          _showConfirmPassword =
+                                              !_showConfirmPassword;
+                                        });
                                       },
-
-                            icon:
-                                Icon(
+                            icon: Icon(
                               _showConfirmPassword
                                   ? Icons
                                       .visibility_off_outlined
                                   : Icons
                                       .visibility_outlined,
-
-                              color:
-                                  greyText,
+                              color: greyText,
                             ),
                           ),
                         ),
-
-                        validator:
-                            (value) {
+                        validator: (value) {
                           if (!_isSignUpMode) {
                             return null;
                           }
 
-                          if (value ==
-                                  null ||
+                          if (value == null ||
                               value.isEmpty) {
                             return 'Please confirm your password';
                           }
 
                           if (value !=
-                              _passwordController
-                                  .text) {
+                              _passwordController.text) {
                             return 'Passwords do not match';
                           }
 
@@ -1075,111 +871,73 @@ class _AuthScreenState
                     const SizedBox(
                       height: 28,
                     ),
-
-                    // ==========================================
-                    // SUBMIT BUTTON
-                    // ==========================================
-
                     SizedBox(
                       height: 56,
-
-                      child:
-                          ElevatedButton(
+                      child: ElevatedButton(
                         onPressed:
-                            _isLoading
+                            _isLoading ||
+                                    _isPickingFile
                                 ? null
                                 : _submit,
-
                         style:
-                            ElevatedButton
-                                .styleFrom(
+                            ElevatedButton.styleFrom(
                           backgroundColor:
                               primaryBlue,
-
                           disabledBackgroundColor:
-                              primaryBlue
-                                  .withValues(
-                            alpha:
-                                0.55,
+                              primaryBlue.withValues(
+                            alpha: 0.55,
                           ),
-
-                          elevation:
-                              0,
-
+                          elevation: 0,
                           shape:
                               RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius
-                                    .circular(
+                                BorderRadius.circular(
                               16,
                             ),
                           ),
                         ),
-
-                        child:
-                            _isLoading
-                                ? const SizedBox(
-                                    width:
-                                        22,
-
-                                    height:
-                                        22,
-
-                                    child:
-                                        CircularProgressIndicator(
-                                      color:
-                                          Colors.white,
-
-                                      strokeWidth:
-                                          2.5,
-                                    ),
-                                  )
-                                : Text(
-                                    _isSignUpMode
-                                        ? 'Create Account'
-                                        : 'Log In',
-
-                                    style:
-                                        const TextStyle(
-                                      color:
-                                          Colors.white,
-
-                                      fontWeight:
-                                          FontWeight.w800,
-
-                                      fontSize:
-                                          15,
-                                    ),
-                                  ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child:
+                                    CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.5,
+                                ),
+                              )
+                            : Text(
+                                _isSignUpMode
+                                    ? _isInstructorRegistration
+                                        ? 'Submit for Approval'
+                                        : 'Create Account'
+                                    : 'Log In',
+                                style:
+                                    const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight:
+                                      FontWeight.w800,
+                                  fontSize: 15,
+                                ),
+                              ),
                       ),
                     ),
-
                     const SizedBox(
                       height: 20,
                     ),
-
-                    // ==========================================
-                    // SWITCH LOGIN / SIGN UP
-                    // ==========================================
-
                     Row(
                       mainAxisAlignment:
-                          MainAxisAlignment
-                              .center,
-
+                          MainAxisAlignment.center,
                       children: [
                         Text(
                           _isSignUpMode
                               ? 'Already registered?'
                               : 'New to CASLMS?',
-
                           style:
                               const TextStyle(
-                            color:
-                                greyText,
+                            color: greyText,
                           ),
                         ),
-
                         TextButton(
                           onPressed:
                               _isLoading
@@ -1189,17 +947,13 @@ class _AuthScreenState
                                         !_isSignUpMode,
                                       );
                                     },
-
                           child: Text(
                             _isSignUpMode
                                 ? 'Log In'
                                 : 'Create Account',
-
                             style:
                                 const TextStyle(
-                              color:
-                                  primaryBlue,
-
+                              color: primaryBlue,
                               fontWeight:
                                   FontWeight.w800,
                             ),
@@ -1208,79 +962,8 @@ class _AuthScreenState
                       ],
                     ),
 
-                    // ==========================================
-                    // SIGN-UP INFORMATION
-                    // ==========================================
-
                     if (_isSignUpMode)
-                      Container(
-                        margin:
-                            const EdgeInsets
-                                .only(
-                          top: 8,
-                        ),
-
-                        padding:
-                            const EdgeInsets
-                                .all(
-                          13,
-                        ),
-
-                        decoration:
-                            BoxDecoration(
-                          color:
-                              lightBlue,
-
-                          borderRadius:
-                              BorderRadius
-                                  .circular(
-                            12,
-                          ),
-                        ),
-
-                        child:
-                            const Row(
-                          crossAxisAlignment:
-                              CrossAxisAlignment
-                                  .start,
-
-                          children: [
-                            Icon(
-                              Icons
-                                  .info_outline_rounded,
-
-                              color:
-                                  primaryBlue,
-
-                              size:
-                                  18,
-                            ),
-
-                            SizedBox(
-                              width: 9,
-                            ),
-
-                            Expanded(
-                              child:
-                                  Text(
-                                'Student accounts can register here. Instructor and Admin accounts are created separately.',
-
-                                style:
-                                    TextStyle(
-                                  color:
-                                      greyText,
-
-                                  fontSize:
-                                      10.5,
-
-                                  height:
-                                      1.45,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      _buildInformationBox(),
                   ],
                 ),
               ),
@@ -1291,63 +974,85 @@ class _AuthScreenState
     );
   }
 
-  // ============================================================
-  // MODE SELECTOR
-  // ============================================================
-
   Widget _buildModeSelector() {
     return Container(
       padding:
-          const EdgeInsets.all(
-        4,
-      ),
-
-      decoration:
-          BoxDecoration(
+          const EdgeInsets.all(4),
+      decoration: BoxDecoration(
         color:
-            const Color(
-          0xFFEEF1F6,
-        ),
-
+            const Color(0xFFEEF1F6),
         borderRadius:
-            BorderRadius.circular(
-          14,
-        ),
+            BorderRadius.circular(14),
       ),
-
       child: Row(
         children: [
           Expanded(
-            child:
-                _modeButton(
-              title:
-                  'Log In',
-
+            child: _selectionButton(
+              title: 'Log In',
               selected:
                   !_isSignUpMode,
+              onTap: () {
+                _switchMode(false);
+              },
+            ),
+          ),
+          Expanded(
+            child: _selectionButton(
+              title: 'Sign Up',
+              selected:
+                  _isSignUpMode,
+              onTap: () {
+                _switchMode(true);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-              onTap:
-                  () {
-                _switchMode(
-                  false,
+  Widget _buildAccountTypeSelector() {
+    return Container(
+      padding:
+          const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color:
+            const Color(0xFFEEF1F6),
+        borderRadius:
+            BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _selectionButton(
+              title: 'Student',
+              icon:
+                  Icons.school_outlined,
+              selected:
+                  _registrationAccountType ==
+                      RegistrationAccountType
+                          .student,
+              onTap: () {
+                _selectAccountType(
+                  RegistrationAccountType
+                      .student,
                 );
               },
             ),
           ),
-
           Expanded(
-            child:
-                _modeButton(
-              title:
-                  'Sign Up',
-
+            child: _selectionButton(
+              title: 'Instructor',
+              icon: Icons
+                  .co_present_outlined,
               selected:
-                  _isSignUpMode,
-
-              onTap:
-                  () {
-                _switchMode(
-                  true,
+                  _registrationAccountType ==
+                      RegistrationAccountType
+                          .instructor,
+              onTap: () {
+                _selectAccountType(
+                  RegistrationAccountType
+                      .instructor,
                 );
               },
             ),
@@ -1357,127 +1062,286 @@ class _AuthScreenState
     );
   }
 
-  // ============================================================
-  // MODE BUTTON
-  // ============================================================
-
-  Widget _modeButton({
+  Widget _selectionButton({
     required String title,
     required bool selected,
     required VoidCallback onTap,
+    IconData? icon,
   }) {
     return GestureDetector(
-      onTap:
-          onTap,
-
-      child:
-          AnimatedContainer(
+      onTap: onTap,
+      child: AnimatedContainer(
         duration:
             const Duration(
-          milliseconds:
-              180,
+          milliseconds: 180,
         ),
-
         padding:
-            const EdgeInsets
-                .symmetric(
-          vertical:
-              11,
+            const EdgeInsets.symmetric(
+          vertical: 11,
+          horizontal: 8,
         ),
-
-        alignment:
-            Alignment.center,
-
-        decoration:
-            BoxDecoration(
-          color:
-              selected
-                  ? Colors.white
-                  : Colors
-                      .transparent,
-
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected
+              ? Colors.white
+              : Colors.transparent,
           borderRadius:
-              BorderRadius
-                  .circular(
-            11,
-          ),
-
-          boxShadow:
-              selected
-                  ? [
-                      BoxShadow(
-                        color:
-                            Colors.black
-                                .withValues(
-                          alpha:
-                              0.05,
-                        ),
-
-                        blurRadius:
-                            8,
-
-                        offset:
-                            const Offset(
-                          0,
-                          2,
-                        ),
-                      ),
-                    ]
-                  : [],
+              BorderRadius.circular(11),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: Colors.black
+                        .withValues(
+                      alpha: 0.05,
+                    ),
+                    blurRadius: 8,
+                    offset:
+                        const Offset(0, 2),
+                  ),
+                ]
+              : const [],
         ),
-
-        child: Text(
-          title,
-
-          style:
-              TextStyle(
-            color:
-                selected
+        child: Row(
+          mainAxisAlignment:
+              MainAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                color: selected
                     ? primaryBlue
                     : greyText,
-
-            fontWeight:
-                selected
-                    ? FontWeight
-                        .w800
-                    : FontWeight
-                        .w600,
-
-            fontSize:
-                13,
-          ),
+                size: 18,
+              ),
+              const SizedBox(width: 7),
+            ],
+            Text(
+              title,
+              style: TextStyle(
+                color: selected
+                    ? primaryBlue
+                    : greyText,
+                fontWeight: selected
+                    ? FontWeight.w800
+                    : FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // ============================================================
-  // LABEL
-  // ============================================================
+  Widget _buildFacultyIdPicker() {
+    final FacultyIdDocument? document =
+        _facultyIdDocument;
+
+    return Container(
+      padding:
+          const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: document == null
+            ? Colors.white
+            : const Color(
+                0xFFF2FBF5,
+              ),
+        borderRadius:
+            BorderRadius.circular(14),
+        border: Border.all(
+          color: document == null
+              ? borderColor
+              : green.withValues(
+                  alpha: 0.45,
+                ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.stretch,
+        children: [
+          if (document == null)
+            const Row(
+              children: [
+                Icon(
+                  Icons
+                      .badge_outlined,
+                  color: greyText,
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Upload a clear photo or PDF of your faculty ID.',
+                    style: TextStyle(
+                      color: greyText,
+                      fontSize: 12.5,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                const Icon(
+                  Icons
+                      .check_circle_rounded,
+                  color: green,
+                ),
+                const SizedBox(
+                  width: 10,
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        document.name,
+                        maxLines: 1,
+                        overflow:
+                            TextOverflow.ellipsis,
+                        style:
+                            const TextStyle(
+                          color: darkText,
+                          fontWeight:
+                              FontWeight.w700,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                      const SizedBox(
+                        height: 3,
+                      ),
+                      Text(
+                        '${document.sizeInMegabytes.toStringAsFixed(2)} MB',
+                        style:
+                            const TextStyle(
+                          color: greyText,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip:
+                      'Remove file',
+                  onPressed:
+                      _isLoading
+                          ? null
+                          : () {
+                              setState(() {
+                                _facultyIdDocument =
+                                    null;
+                              });
+                            },
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    color: greyText,
+                  ),
+                ),
+              ],
+            ),
+          const SizedBox(
+            height: 12,
+          ),
+          OutlinedButton.icon(
+            onPressed:
+                _isLoading ||
+                        _isPickingFile
+                    ? null
+                    : _pickFacultyId,
+            icon: _isPickingFile
+                ? const SizedBox(
+                    width: 17,
+                    height: 17,
+                    child:
+                        CircularProgressIndicator(
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Icon(
+                    Icons
+                        .upload_file_rounded,
+                  ),
+            label: Text(
+              document == null
+                  ? 'Choose Faculty ID'
+                  : 'Choose Another File',
+            ),
+          ),
+          const SizedBox(
+            height: 7,
+          ),
+          const Text(
+            'Accepted: JPG, PNG, WEBP, or PDF — maximum 5 MB',
+            textAlign:
+                TextAlign.center,
+            style: TextStyle(
+              color: greyText,
+              fontSize: 10.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInformationBox() {
+    return Container(
+      margin:
+          const EdgeInsets.only(
+        top: 8,
+      ),
+      padding:
+          const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: lightBlue,
+        borderRadius:
+            BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.info_outline_rounded,
+            color: primaryBlue,
+            size: 18,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              _isInstructorRegistration
+                  ? 'Instructor accounts require a valid faculty ID and administrator approval. You cannot access instructor features while the application is pending.'
+                  : 'Student accounts become active immediately after successful registration.',
+              style:
+                  const TextStyle(
+                color: greyText,
+                fontSize: 10.5,
+                height: 1.45,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _label(
     String text,
   ) {
     return Text(
       text,
-
-      style:
-          const TextStyle(
-        color:
-            darkText,
-
-        fontSize:
-            12.5,
-
+      style: const TextStyle(
+        color: darkText,
+        fontSize: 12.5,
         fontWeight:
             FontWeight.w700,
       ),
     );
   }
-
-  // ============================================================
-  // INPUT DECORATION
-  // ============================================================
 
   InputDecoration _inputDecoration({
     required String hintText,
@@ -1485,126 +1349,69 @@ class _AuthScreenState
     Widget? suffixIcon,
   }) {
     return InputDecoration(
-      hintText:
-          hintText,
-
+      hintText: hintText,
       hintStyle:
           const TextStyle(
-        color:
-            Color(
-          0xFFA0A8B7,
-        ),
-
-        fontSize:
-            13,
+        color: Color(0xFF98A1B2),
+        fontSize: 13,
       ),
-
-      prefixIcon:
-          Icon(
+      prefixIcon: Icon(
         icon,
-
-        color:
-            greyText,
-
-        size:
-            21,
+        color: greyText,
+        size: 21,
       ),
-
-      suffixIcon:
-          suffixIcon,
-
-      filled:
-          true,
-
-      fillColor:
-          Colors.white,
-
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: Colors.white,
       contentPadding:
-          const EdgeInsets
-              .symmetric(
-        horizontal:
-            16,
-
-        vertical:
-            17,
+          const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 17,
       ),
-
-      border:
-          OutlineInputBorder(
+      border: OutlineInputBorder(
         borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
-
+            BorderRadius.circular(14),
         borderSide:
             const BorderSide(
-          color:
-              borderColor,
+          color: borderColor,
         ),
       ),
-
       enabledBorder:
           OutlineInputBorder(
         borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
-
+            BorderRadius.circular(14),
         borderSide:
             const BorderSide(
-          color:
-              borderColor,
-
-          width:
-              1.3,
+          color: borderColor,
         ),
       ),
-
       focusedBorder:
           OutlineInputBorder(
         borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
-
+            BorderRadius.circular(14),
         borderSide:
             const BorderSide(
-          color:
-              primaryBlue,
-
-          width:
-              1.7,
+          color: primaryBlue,
+          width: 1.6,
         ),
       ),
-
       errorBorder:
           OutlineInputBorder(
         borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
-
+            BorderRadius.circular(14),
         borderSide:
             const BorderSide(
-          color:
-              red,
+          color: red,
         ),
       ),
-
       focusedErrorBorder:
           OutlineInputBorder(
         borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
-
+            BorderRadius.circular(14),
         borderSide:
             const BorderSide(
-          color:
-              red,
-
-          width:
-              1.5,
+          color: red,
+          width: 1.6,
         ),
       ),
     );

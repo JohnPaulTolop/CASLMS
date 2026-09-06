@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../services/assessment_service.dart';
 import '../../services/firebase_ai_service.dart';
 import '../../services/learning_material_service.dart';
+import '../../services/notification_service.dart';
 
 import 'instructor_add_learning_material_page.dart';
 import 'instructor_assessment_grading_page.dart';
@@ -34,6 +35,31 @@ class InstructorModuleDetailScreen extends StatefulWidget {
 
 class _InstructorModuleDetailScreenState
     extends State<InstructorModuleDetailScreen> {
+  bool _retryingNotifications = false;
+
+  Future<void> _retryNotifications() async {
+    if (_retryingNotifications) return;
+    setState(() => _retryingNotifications = true);
+    try {
+      await NotificationService().retryModuleNotifications(
+        moduleId: widget.moduleId,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Missing module notifications delivered.'),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        _showError(
+          'Notification delivery was interrupted. Retry when connected: $error',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _retryingNotifications = false);
+    }
+  }
   // ============================================================
   // DESIGN
   // ============================================================
@@ -2286,6 +2312,21 @@ class _InstructorModuleDetailScreenState
             },
 
             icon: const Icon(Icons.refresh_rounded, color: textDark),
+          ),
+
+          IconButton(
+            tooltip: 'Retry missing notifications',
+            onPressed: _retryingNotifications ? null : _retryNotifications,
+            icon: _retryingNotifications
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(
+                    Icons.notifications_active_outlined,
+                    color: textDark,
+                  ),
           ),
 
           const SizedBox(width: 8),

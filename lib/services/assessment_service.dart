@@ -1,13 +1,24 @@
+import 'dart:developer' as developer;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'notification_service.dart';
+
 class AssessmentService {
-  AssessmentService({FirebaseFirestore? firestore, FirebaseAuth? auth})
-    : _firestore = firestore ?? FirebaseFirestore.instance,
-      _auth = auth ?? FirebaseAuth.instance;
+  AssessmentService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+    NotificationService? notificationService,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _auth = auth ?? FirebaseAuth.instance,
+       _notificationService =
+           notificationService ??
+           NotificationService(firestore: firestore, auth: auth);
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final NotificationService _notificationService;
 
   // ============================================================
   // COLLECTION NAMES
@@ -20,6 +31,7 @@ class AssessmentService {
     'activity',
     'assignment',
     'exam',
+    'summative',
   ];
 
   static const List<String> allowedStatuses = ['draft', 'published', 'closed'];
@@ -296,6 +308,10 @@ class AssessmentService {
 
     await assessmentDocument.set(data);
 
+    if (cleanStatus == 'published') {
+      await _createPublishedNotificationsBestEffort(assessmentDocument.id);
+    }
+
     return {
       ...data,
       'id': assessmentDocument.id,
@@ -480,13 +496,37 @@ class AssessmentService {
       moduleId: (assessment['moduleId'] ?? '').toString(),
     );
 
+    final String cleanStatus = _validateStatus(status);
+
     await _firestore
         .collection(assessmentsCollection)
         .doc(cleanAssessmentId)
         .update({
-          'status': _validateStatus(status),
+          'status': cleanStatus,
           'updatedAt': FieldValue.serverTimestamp(),
         });
+
+    if (cleanStatus == 'published') {
+      await _createPublishedNotificationsBestEffort(cleanAssessmentId);
+    }
+  }
+
+  Future<void> _createPublishedNotificationsBestEffort(
+    String assessmentId,
+  ) async {
+    try {
+      await _notificationService.createAssessmentNotifications(
+        assessmentId: assessmentId,
+      );
+    } catch (error, stackTrace) {
+      // The content was saved. Retrying publication delivers missing notices.
+      developer.log(
+        'Content saved, but notification delivery needs a retry.',
+        name: 'AssessmentService',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   // ============================================================

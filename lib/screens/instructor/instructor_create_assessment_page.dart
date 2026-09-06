@@ -376,6 +376,10 @@ class _InstructorCreateAssessmentScreenState
                         child: Text('Assignment'),
                       ),
                       DropdownMenuItem(value: 'exam', child: Text('Exam')),
+                      DropdownMenuItem(
+                        value: 'summative',
+                        child: Text('Summative'),
+                      ),
                     ],
 
                     onChanged: _isSaving

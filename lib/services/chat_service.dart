@@ -987,8 +987,8 @@ class ChatService {
             unreadMessages[index]
                 .reference,
             {
-              'isRead':
-                  true,
+              'isRead': true,
+              'readAt': FieldValue.serverTimestamp(),
             },
           );
         }

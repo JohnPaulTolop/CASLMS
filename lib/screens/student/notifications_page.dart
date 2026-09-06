@@ -665,6 +665,19 @@ class _NotificationsScreenState
           isUrgent
               ? orange
               : primaryBlue;
+    } else if (type == 'module') {
+      icon = Icons.view_module_rounded;
+      iconColor = const Color(0xFF7C3AED);
+    } else if (type == 'resource') {
+      icon = Icons.attach_file_rounded;
+      iconColor = const Color(0xFF0891B2);
+    } else if (type == 'assessment' ||
+        type == 'assignment') {
+      icon = Icons.assignment_rounded;
+      iconColor = orange;
+    } else if (type == 'grade') {
+      icon = Icons.workspace_premium_rounded;
+      iconColor = const Color(0xFF16A365);
     }
 
     final String courseLabel =

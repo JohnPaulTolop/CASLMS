@@ -2,127 +2,109 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class NotificationService {
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+  NotificationService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _auth = auth ?? FirebaseAuth.instance;
 
-  final FirebaseAuth _auth =
-      FirebaseAuth.instance;
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
 
-  // ============================================================
-  // CURRENT USER
-  // ============================================================
+  String? get currentUserId => _auth.currentUser?.uid;
 
-  String? get currentUserId =>
-      _auth.currentUser?.uid;
+  static const _collections = {
+    'module': 'modules',
+    'moduleResource': 'moduleResources',
+    'assessment': 'assessments',
+    'assignment': 'assignments',
+    'announcement': 'announcements',
+    'assessmentSubmission': 'assessmentSubmissions',
+    'submission': 'submissions',
+  };
 
-  // ============================================================
-  // GET ACTIVE STUDENTS FOR ONE COURSE
-  // ============================================================
-
-  Future<Set<String>> _getActiveStudentIdsForCourse(
-    String courseId,
-  ) async {
-    if (courseId.trim().isEmpty) {
-      return <String>{};
-    }
-
-    final QuerySnapshot<Map<String, dynamic>> snapshot =
-        await _firestore
-            .collection('enrollments')
-            .where(
-              'courseId',
-              isEqualTo: courseId,
-            )
-            .get();
-
-    final Set<String> studentIds =
-        <String>{};
-
-    for (final document in snapshot.docs) {
-      final Map<String, dynamic> data =
-          document.data();
-
-      final String status =
-          (data['status'] ?? '')
-              .toString()
-              .trim()
-              .toLowerCase();
-
-      if (status != 'active') {
-        continue;
-      }
-
-      final String studentId =
-          (data['studentId'] ?? '')
-              .toString()
-              .trim();
-
-      if (studentId.isNotEmpty) {
-        studentIds.add(
-          studentId,
-        );
-      }
-    }
-
-    return studentIds;
+  String _text(dynamic value) {
+    return (value ?? '').toString().trim();
   }
 
-  // ============================================================
-  // GET ALL STUDENTS FROM INSTRUCTOR ACTIVE COURSES
-  // ============================================================
-
-  Future<Set<String>> _getInstructorStudentIds(
-    String instructorId,
+  Future<Map<String, dynamic>> _document(
+    String collection,
+    String id,
   ) async {
-    if (instructorId.trim().isEmpty) {
-      return <String>{};
-    }
-
-    final QuerySnapshot<Map<String, dynamic>>
-        courseSnapshot =
-        await _firestore
-            .collection('courses')
-            .where(
-              'instructorId',
-              isEqualTo: instructorId,
-            )
-            .get();
-
-    final Set<String> studentIds =
-        <String>{};
-
-    for (final courseDocument
-        in courseSnapshot.docs) {
-      final Map<String, dynamic> course =
-          courseDocument.data();
-
-      final String status =
-          (course['status'] ?? '')
-              .toString()
-              .trim()
-              .toLowerCase();
-
-      if (status != 'active') {
-        continue;
-      }
-
-      final Set<String> courseStudents =
-          await _getActiveStudentIdsForCourse(
-        courseDocument.id,
-      );
-
-      studentIds.addAll(
-        courseStudents,
+    if (id.isEmpty || id.contains('/')) {
+      throw NotificationServiceException(
+        'Missing or invalid $collection ID.',
       );
     }
 
-    return studentIds;
+    final snapshot = await _firestore
+        .collection(collection)
+        .doc(id)
+        .get();
+
+    final data = snapshot.data();
+
+    if (data == null) {
+      throw NotificationServiceException(
+        'The $collection item no longer exists.',
+      );
+    }
+
+    return data;
   }
 
-  // ============================================================
-  // CREATE NOTIFICATIONS FROM ANNOUNCEMENT
-  // ============================================================
+  // New published module.
+  Future<void> createModuleNotifications({
+    required String moduleId,
+  }) {
+    return createSourceNotifications(
+      sourceType: 'module',
+      sourceId: moduleId,
+    );
+  }
 
+  // New published file, link, or video.
+  Future<void> createLearningMaterialNotifications({
+    required String resourceId,
+  }) {
+    return createSourceNotifications(
+      sourceType: 'moduleResource',
+      sourceId: resourceId,
+    );
+  }
+
+  // Published quiz, assignment, activity, exam, or summative assessment.
+  Future<void> createAssessmentNotifications({
+    required String assessmentId,
+  }) {
+    return createSourceNotifications(
+      sourceType: 'assessment',
+      sourceId: assessmentId,
+    );
+  }
+
+  // Notify only the student whose assessment submission was graded.
+  Future<void> createAssessmentGradeNotification({
+    required String submissionId,
+  }) {
+    return createSourceNotifications(
+      sourceType: 'assessmentSubmission',
+      sourceId: submissionId,
+    );
+  }
+
+  // Support the older assignments/submissions collections.
+  Future<void> createLegacyAssignmentGradeNotification({
+    required String submissionId,
+  }) {
+    return createSourceNotifications(
+      sourceType: 'submission',
+      sourceId: submissionId,
+    );
+  }
+
+  // Preserve compatibility with your existing AnnouncementService.
+  // Authoritative content and recipients are loaded from Firestore.
   Future<void> createAnnouncementNotifications({
     required String announcementId,
     required String instructorId,
@@ -133,479 +115,442 @@ class NotificationService {
     required String title,
     required String message,
     required bool isUrgent,
+  }) {
+    return createSourceNotifications(
+      sourceType: 'announcement',
+      sourceId: announcementId,
+    );
+  }
+
+  // Retry missing notifications without duplicating existing ones.
+  Future<void> retryModuleNotifications({
+    required String moduleId,
   }) async {
-    try {
-      if (announcementId.trim().isEmpty) {
-        throw NotificationServiceException(
-          'Announcement ID is missing.',
-        );
-      }
+    final module = await _document('modules', moduleId);
 
-      Set<String> studentIds =
-          <String>{};
+    final course = await _document(
+      'courses',
+      _text(module['courseId']),
+    );
 
-      // ----------------------------------------------------------
-      // SPECIFIC COURSE
-      // ----------------------------------------------------------
+    if (currentUserId == null ||
+        course['instructorId'] != currentUserId) {
+      throw NotificationServiceException(
+        'Only the course instructor can retry delivery.',
+      );
+    }
 
-      if (courseId.trim().isNotEmpty) {
-        studentIds =
-            await _getActiveStudentIdsForCourse(
-          courseId,
-        );
-      }
+    await createModuleNotifications(moduleId: moduleId);
 
-      // ----------------------------------------------------------
-      // ALL CLASSES OF INSTRUCTOR
-      // ----------------------------------------------------------
+    const sources = {
+      'moduleResources': 'moduleResource',
+      'assessments': 'assessment',
+      'assessmentSubmissions': 'assessmentSubmission',
+    };
 
-      else {
-        studentIds =
-            await _getInstructorStudentIds(
-          instructorId,
-        );
-      }
+    for (final entry in sources.entries) {
+      final snapshot = await _firestore
+          .collection(entry.key)
+          .where('moduleId', isEqualTo: moduleId)
+          .get();
 
-      if (studentIds.isEmpty) {
-        return;
-      }
-
-      final List<String> recipients =
-          studentIds.toList();
-
-      // Firestore batch limit is 500 operations.
-      const int chunkSize =
-          400;
-
-      for (
-        int start = 0;
-        start < recipients.length;
-        start += chunkSize
-      ) {
-        final int end =
-            start + chunkSize >
-                    recipients.length
-                ? recipients.length
-                : start + chunkSize;
-
-        final WriteBatch batch =
-            _firestore.batch();
-
-        for (
-          int index = start;
-          index < end;
-          index++
-        ) {
-          final String studentId =
-              recipients[index];
-
-          final DocumentReference<
-                  Map<String, dynamic>>
-              notificationReference =
-              _firestore
-                  .collection(
-                    'notifications',
-                  )
-                  .doc();
-
-          batch.set(
-            notificationReference,
-            {
-              // ----------------------------------------------
-              // RECEIVER
-              // ----------------------------------------------
-
-              'userId':
-                  studentId,
-
-              // ----------------------------------------------
-              // TYPE / SOURCE
-              // ----------------------------------------------
-
-              'type':
-                  'announcement',
-
-              'sourceType':
-                  'announcement',
-
-              'sourceId':
-                  announcementId,
-
-              // ----------------------------------------------
-              // CONTENT
-              // ----------------------------------------------
-
-              'title':
-                  title.trim(),
-
-              'message':
-                  message.trim(),
-
-              // ----------------------------------------------
-              // COURSE
-              // ----------------------------------------------
-
-              'courseId':
-                  courseId.trim(),
-
-              'courseCode':
-                  courseCode.trim(),
-
-              'courseTitle':
-                  courseTitle.trim(),
-
-              // ----------------------------------------------
-              // CREATOR
-              // ----------------------------------------------
-
-              'actorId':
-                  instructorId,
-
-              'actorName':
-                  instructorName,
-
-              // ----------------------------------------------
-              // PRIORITY
-              // ----------------------------------------------
-
-              'priority':
-                  isUrgent
-                      ? 'urgent'
-                      : 'normal',
-
-              'isUrgent':
-                  isUrgent,
-
-              // ----------------------------------------------
-              // READ STATUS
-              // ----------------------------------------------
-
-              'isRead':
-                  false,
-
-              'readAt':
-                  null,
-
-              // ----------------------------------------------
-              // TIMESTAMP
-              // ----------------------------------------------
-
-              'createdAt':
-                  FieldValue.serverTimestamp(),
-            },
-          );
+      for (final document in snapshot.docs) {
+        if (document.data()['courseId'] != module['courseId']) {
+          continue;
         }
 
-        await batch.commit();
+        await createSourceNotifications(
+          sourceType: entry.value,
+          sourceId: document.id,
+        );
       }
-    } on NotificationServiceException {
-      rethrow;
-    } on FirebaseException catch (e) {
-      throw NotificationServiceException(
-        e.message ??
-            'Unable to create notifications.',
-      );
-    } catch (_) {
-      throw NotificationServiceException(
-        'Unable to create notifications.',
-      );
     }
   }
 
-  // ============================================================
-  // WATCH CURRENT USER NOTIFICATIONS
-  // ============================================================
-
-  Stream<List<Map<String, dynamic>>>
-      watchMyNotifications() {
-    final User? user =
-        _auth.currentUser;
+  Future<void> createSourceNotifications({
+    required String sourceType,
+    required String sourceId,
+  }) async {
+    final user = _auth.currentUser;
 
     if (user == null) {
-      return Stream.value(
-        <Map<String, dynamic>>[],
+      throw NotificationServiceException(
+        'Sign in to send notifications.',
       );
+    }
+
+    final collection = _collections[sourceType];
+
+    if (collection == null) {
+      throw NotificationServiceException(
+        'Invalid notification source.',
+      );
+    }
+
+    final profile = await _document('users', user.uid);
+
+    if (profile['role'] != 'instructor' ||
+        profile['status'] != 'active') {
+      throw NotificationServiceException(
+        'An active instructor account is required.',
+      );
+    }
+
+    final source = await _document(collection, sourceId);
+
+    final isGrade =
+        sourceType == 'assessmentSubmission' ||
+        sourceType == 'submission';
+
+    final isAnnouncement = sourceType == 'announcement';
+
+    Map<String, dynamic> item = source;
+
+    if (isGrade) {
+      // Only manually graded work from this instructor is eligible.
+      if (source['status'] != 'graded' ||
+          source['gradedBy'] != user.uid ||
+          source['gradingMode'] == 'automatic') {
+        return;
+      }
+
+      final isLegacySubmission = sourceType == 'submission';
+
+      item = await _document(
+        isLegacySubmission ? 'assignments' : 'assessments',
+        _text(
+          source[
+              isLegacySubmission
+                  ? 'assignmentId'
+                  : 'assessmentId'],
+        ),
+      );
+
+      if (source['courseId'] != item['courseId']) {
+        throw NotificationServiceException(
+          'Submission course does not match its activity.',
+        );
+      }
+    } else if (source['status'] != 'published') {
+      // Draft activities must not notify students.
+      return;
+    }
+
+    if (isAnnouncement && source['createdBy'] != user.uid) {
+      throw NotificationServiceException(
+        'Only the author can send announcement notices.',
+      );
+    }
+
+    final courseId = _text(item['courseId']);
+
+    final allClasses =
+        isAnnouncement &&
+        source['targetType'] == 'all_classes' &&
+        courseId.isEmpty;
+
+    final courses = <String, Map<String, dynamic>>{};
+
+    if (allClasses) {
+      final snapshot = await _firestore
+          .collection('courses')
+          .where('instructorId', isEqualTo: user.uid)
+          .get();
+
+      for (final document in snapshot.docs) {
+        if (document.data()['status'] == 'active') {
+          courses[document.id] = document.data();
+        }
+      }
+    } else {
+      courses[courseId] = await _document(
+        'courses',
+        courseId,
+      );
+    }
+
+    // studentId -> courseId proving the instructor's audience.
+    final recipients = <String, String>{};
+
+    final courseIds = courses.keys.toList()..sort();
+
+    for (final id in courseIds) {
+      final course = courses[id]!;
+
+      if (course['instructorId'] != user.uid) {
+        throw NotificationServiceException(
+          'You can only notify your own courses.',
+        );
+      }
+
+      if (isGrade) {
+        final studentId = _text(source['studentId']);
+
+        if (studentId.isEmpty) {
+          throw NotificationServiceException(
+            'Submission student is missing.',
+          );
+        }
+
+        // A grade belongs only to this submission's student.
+        recipients[studentId] = id;
+      } else {
+        final enrollments = await _firestore
+            .collection('enrollments')
+            .where('courseId', isEqualTo: id)
+            .get();
+
+        for (final enrollment in enrollments.docs) {
+          final data = enrollment.data();
+          final studentId = _text(data['studentId']);
+
+          if (data['status'] == 'active' &&
+              studentId.isNotEmpty &&
+              enrollment.id == '${id}_$studentId') {
+            recipients.putIfAbsent(studentId, () => id);
+          }
+        }
+      }
+    }
+
+    final profileName = _text(profile['name']);
+
+    final actorName = profileName.isEmpty
+        ? 'Your instructor'
+        : profileName;
+
+    final itemTitle = _text(item['title']);
+
+    final type = isGrade
+        ? 'grade'
+        : sourceType == 'moduleResource'
+        ? 'resource'
+        : sourceType;
+
+    for (final recipient in recipients.entries) {
+      final course = courses[recipient.value]!;
+      final courseCode = _text(course['code']);
+      final courseTitle = _text(course['title']);
+
+      final courseLabel = courseCode.isEmpty
+          ? courseTitle
+          : courseCode;
+
+      final activityType = _text(item['assessmentType']);
+
+      final String title;
+
+      if (isGrade) {
+        title = 'Graded: $itemTitle';
+      } else if (isAnnouncement) {
+        title = itemTitle;
+      } else {
+        final activityLabel =
+            type == 'assessment' && activityType.isNotEmpty
+            ? activityType
+            : type;
+
+        title = 'New $activityLabel: $itemTitle';
+      }
+
+      final totalPoints = item[
+          sourceType == 'submission' ? 'points' : 'totalPoints'];
+
+      final score = _text(source['score']);
+
+      final String message;
+
+      if (isGrade) {
+        final totalLabel = totalPoints == null
+            ? ''
+            : '/$totalPoints';
+
+        message =
+            '$actorName graded your work. '
+            'Score: $score$totalLabel.';
+      } else if (isAnnouncement) {
+        message = _text(source['message']);
+      } else {
+        message =
+            '$actorName published "$itemTitle" '
+            'in $courseLabel.';
+      }
+
+      final notificationId =
+          '${sourceType}_${sourceId}_${recipient.key}';
+
+      final reference = _firestore
+          .collection('notifications')
+          .doc(notificationId);
+
+      final isUrgent =
+          isAnnouncement && source['isUrgent'] == true;
+
+      // Stable IDs prevent duplicate notifications.
+      // Retrying never resets an existing notification's read status.
+      await _firestore.runTransaction((transaction) async {
+        final existing = await transaction.get(reference);
+
+        if (existing.exists) {
+          return;
+        }
+
+        transaction.set(reference, {
+          'userId': recipient.key,
+          'type': type,
+          'sourceType': sourceType,
+          'sourceId': sourceId,
+          'title': title,
+          'message': message,
+          'courseId': allClasses ? '' : recipient.value,
+          'authorizationCourseId': recipient.value,
+          'courseCode': allClasses ? '' : courseCode,
+          'courseTitle': allClasses ? '' : courseTitle,
+          'moduleId': sourceType == 'module'
+              ? sourceId
+              : _text(item['moduleId']),
+          'activityType': activityType,
+          'actorId': user.uid,
+          'actorName': actorName,
+          'priority': isUrgent ? 'urgent' : 'normal',
+          'isUrgent': isUrgent,
+          'isRead': false,
+          'readAt': null,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      });
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> watchMyNotifications() {
+    final user = _auth.currentUser;
+
+    if (user == null) {
+      return Stream.value(<Map<String, dynamic>>[]);
     }
 
     return _firestore
         .collection('notifications')
-        .where(
-          'userId',
-          isEqualTo: user.uid,
-        )
+        .where('userId', isEqualTo: user.uid)
         .snapshots()
-        .map(
-      (snapshot) {
-        final List<Map<String, dynamic>>
-            notifications =
-            snapshot.docs.map(
-          (document) {
-            return {
+        .map((snapshot) {
+          final notifications = snapshot.docs.map((document) {
+            return <String, dynamic>{
               ...document.data(),
               'id': document.id,
             };
-          },
-        ).toList();
+          }).toList();
 
-        notifications.sort(
-          (a, b) {
-            final dynamic createdA =
-                a['createdAt'];
+          notifications.sort((a, b) {
+            final createdA = a['createdAt'];
+            final createdB = b['createdAt'];
 
-            final dynamic createdB =
-                b['createdAt'];
-
-            if (createdA is Timestamp &&
-                createdB is Timestamp) {
-              return createdB
-                  .toDate()
-                  .compareTo(
-                    createdA.toDate(),
-                  );
+            if (createdA is Timestamp && createdB is Timestamp) {
+              return createdB.compareTo(createdA);
             }
 
-            if (createdA is Timestamp) {
-              return -1;
-            }
-
-            if (createdB is Timestamp) {
-              return 1;
-            }
+            if (createdA is Timestamp) return -1;
+            if (createdB is Timestamp) return 1;
 
             return 0;
-          },
-        );
+          });
 
-        return notifications;
-      },
-    );
+          return notifications;
+        });
   }
-
-  // ============================================================
-  // WATCH UNREAD COUNT
-  // ============================================================
 
   Stream<int> watchUnreadCount() {
-    final User? user =
-        _auth.currentUser;
-
-    if (user == null) {
-      return Stream.value(
-        0,
-      );
-    }
-
-    return _firestore
-        .collection('notifications')
-        .where(
-          'userId',
-          isEqualTo: user.uid,
-        )
-        .snapshots()
-        .map(
-      (snapshot) {
-        int count =
-            0;
-
-        for (final document
-            in snapshot.docs) {
-          final Map<String, dynamic> data =
-              document.data();
-
-          if (data['isRead'] != true) {
-            count++;
-          }
-        }
-
-        return count;
-      },
+    return watchMyNotifications().map(
+      (notifications) => notifications
+          .where((notification) => notification['isRead'] != true)
+          .length,
     );
   }
 
-  // ============================================================
-  // MARK ONE NOTIFICATION AS READ
-  // ============================================================
+  Future<void> markAsRead(String notificationId) async {
+    final user = _auth.currentUser;
 
-  Future<void> markAsRead(
-    String notificationId,
-  ) async {
-    try {
-      final User? user =
-          _auth.currentUser;
-
-      if (user == null) {
-        throw NotificationServiceException(
-          'No user is currently logged in.',
-        );
-      }
-
-      if (notificationId.trim().isEmpty) {
-        return;
-      }
-
-      final DocumentReference<
-              Map<String, dynamic>>
-          reference =
-          _firestore
-              .collection('notifications')
-              .doc(notificationId);
-
-      final DocumentSnapshot<
-              Map<String, dynamic>>
-          document =
-          await reference.get();
-
-      if (!document.exists) {
-        return;
-      }
-
-      final Map<String, dynamic>? data =
-          document.data();
-
-      if (data == null) {
-        return;
-      }
-
-      final String receiverId =
-          (data['userId'] ?? '')
-              .toString();
-
-      if (receiverId != user.uid) {
-        throw NotificationServiceException(
-          'You cannot modify this notification.',
-        );
-      }
-
-      if (data['isRead'] == true) {
-        return;
-      }
-
-      await reference.update({
-        'isRead':
-            true,
-
-        'readAt':
-            FieldValue.serverTimestamp(),
-      });
-    } on NotificationServiceException {
-      rethrow;
-    } on FirebaseException catch (e) {
+    if (user == null) {
       throw NotificationServiceException(
-        e.message ??
-            'Unable to update notification.',
-      );
-    } catch (_) {
-      throw NotificationServiceException(
-        'Unable to update notification.',
+        'No user is currently logged in.',
       );
     }
+
+    if (notificationId.trim().isEmpty) {
+      return;
+    }
+
+    final reference = _firestore
+        .collection('notifications')
+        .doc(notificationId);
+
+    final document = await reference.get();
+    final data = document.data();
+
+    if (data == null) {
+      return;
+    }
+
+    if (data['userId'] != user.uid) {
+      throw NotificationServiceException(
+        'You cannot modify this notification.',
+      );
+    }
+
+    if (data['isRead'] == true) {
+      return;
+    }
+
+    await reference.update({
+      'isRead': true,
+      'readAt': FieldValue.serverTimestamp(),
+    });
   }
 
-  // ============================================================
-  // MARK ALL AS READ
-  // ============================================================
-
   Future<void> markAllAsRead() async {
-    try {
-      final User? user =
-          _auth.currentUser;
+    final user = _auth.currentUser;
 
-      if (user == null) {
-        throw NotificationServiceException(
-          'No user is currently logged in.',
-        );
-      }
-
-      final QuerySnapshot<Map<String, dynamic>>
-          snapshot =
-          await _firestore
-              .collection('notifications')
-              .where(
-                'userId',
-                isEqualTo: user.uid,
-              )
-              .get();
-
-      final List<
-              QueryDocumentSnapshot<
-                  Map<String, dynamic>>>
-          unreadDocuments =
-          snapshot.docs.where(
-        (document) {
-          return document.data()['isRead'] !=
-              true;
-        },
-      ).toList();
-
-      if (unreadDocuments.isEmpty) {
-        return;
-      }
-
-      const int chunkSize =
-          400;
-
-      for (
-        int start = 0;
-        start < unreadDocuments.length;
-        start += chunkSize
-      ) {
-        final int end =
-            start + chunkSize >
-                    unreadDocuments.length
-                ? unreadDocuments.length
-                : start + chunkSize;
-
-        final WriteBatch batch =
-            _firestore.batch();
-
-        for (
-          int index = start;
-          index < end;
-          index++
-        ) {
-          batch.update(
-            unreadDocuments[index]
-                .reference,
-            {
-              'isRead':
-                  true,
-
-              'readAt':
-                  FieldValue.serverTimestamp(),
-            },
-          );
-        }
-
-        await batch.commit();
-      }
-    } on NotificationServiceException {
-      rethrow;
-    } on FirebaseException catch (e) {
+    if (user == null) {
       throw NotificationServiceException(
-        e.message ??
-            'Unable to mark notifications as read.',
+        'No user is currently logged in.',
       );
-    } catch (_) {
-      throw NotificationServiceException(
-        'Unable to mark notifications as read.',
-      );
+    }
+
+    final snapshot = await _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: user.uid)
+        .get();
+
+    final unread = snapshot.docs
+        .where((document) => document.data()['isRead'] != true)
+        .toList();
+
+    const chunkSize = 400;
+
+    for (int start = 0; start < unread.length; start += chunkSize) {
+      final end = start + chunkSize > unread.length
+          ? unread.length
+          : start + chunkSize;
+
+      final batch = _firestore.batch();
+
+      for (int index = start; index < end; index++) {
+        batch.update(unread[index].reference, {
+          'isRead': true,
+          'readAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      await batch.commit();
     }
   }
 }
 
-// ============================================================
-// CUSTOM EXCEPTION
-// ============================================================
+class NotificationServiceException implements Exception {
+  NotificationServiceException(this.message);
 
-class NotificationServiceException
-    implements Exception {
   final String message;
 
-  NotificationServiceException(
-    this.message,
-  );
-
   @override
-  String toString() =>
-      message;
+  String toString() => message;
 }

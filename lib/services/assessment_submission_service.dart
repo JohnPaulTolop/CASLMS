@@ -12,166 +12,82 @@ class AssessmentSubmissionService {
   final FirebaseAuth _auth;
 
   static const String submissionsCollection = 'assessmentSubmissions';
-
   static const String assessmentsCollection = 'assessments';
 
-  // ============================================================
-  // CURRENT USER
-  // ============================================================
-
-  User _requireAuthenticatedUser() {
-    final User? user = _auth.currentUser;
+  Future<Map<String, dynamic>> _requireRole(String requiredRole) async {
+    final user = _auth.currentUser;
 
     if (user == null) {
       throw AssessmentSubmissionException('You must be logged in.');
     }
 
-    return user;
-  }
-
-  // ============================================================
-  // REQUIRE ACTIVE STUDENT
-  // ============================================================
-
-  Future<Map<String, dynamic>> _requireStudent() async {
-    final User user = _requireAuthenticatedUser();
-
-    final DocumentSnapshot<Map<String, dynamic>> userDocument = await _firestore
+    final document = await _firestore
         .collection('users')
         .doc(user.uid)
         .get();
 
-    if (!userDocument.exists || userDocument.data() == null) {
-      throw AssessmentSubmissionException(
-        'Student profile could not be found.',
-      );
+    final data = document.data();
+
+    if (data == null) {
+      throw AssessmentSubmissionException('Your profile could not be found.');
     }
 
-    final Map<String, dynamic> data = userDocument.data()!;
-
-    final String role = (data['role'] ?? '').toString().trim().toLowerCase();
-
-    if (role != 'student') {
+    if (data['role'] != requiredRole || data['status'] != 'active') {
       throw AssessmentSubmissionException(
-        'Only students can submit assessments.',
-      );
-    }
-
-    final String status = (data['status'] ?? 'active')
-        .toString()
-        .trim()
-        .toLowerCase();
-
-    if (status != 'active') {
-      throw AssessmentSubmissionException(
-        'Your student account is not active.',
+        'An active $requiredRole account is required.',
       );
     }
 
     return {...data, 'id': user.uid, 'uid': user.uid};
   }
 
-  // ============================================================
-  // REQUIRE ACTIVE INSTRUCTOR
-  // ============================================================
+  Future<Map<String, dynamic>> _requireAssessment(
+    String assessmentId,
+  ) async {
+    final id = assessmentId.trim();
 
-  Future<Map<String, dynamic>> _requireInstructor() async {
-    final User user = _requireAuthenticatedUser();
-
-    final DocumentSnapshot<Map<String, dynamic>> userDocument = await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    if (!userDocument.exists || userDocument.data() == null) {
-      throw AssessmentSubmissionException(
-        'Instructor profile could not be found.',
-      );
-    }
-
-    final Map<String, dynamic> data = userDocument.data()!;
-
-    final String role = (data['role'] ?? '').toString().trim().toLowerCase();
-
-    if (role != 'instructor') {
-      throw AssessmentSubmissionException(
-        'Only instructors can grade assessments.',
-      );
-    }
-
-    final String status = (data['status'] ?? 'active')
-        .toString()
-        .trim()
-        .toLowerCase();
-
-    if (status != 'active') {
-      throw AssessmentSubmissionException(
-        'Your instructor account is not active.',
-      );
-    }
-
-    return {...data, 'id': user.uid, 'uid': user.uid};
-  }
-
-  // ============================================================
-  // GET ASSESSMENT
-  // ============================================================
-
-  Future<Map<String, dynamic>> _requireAssessment(String assessmentId) async {
-    final String cleanId = assessmentId.trim();
-
-    if (cleanId.isEmpty) {
+    if (id.isEmpty) {
       throw AssessmentSubmissionException('Assessment ID is required.');
     }
 
-    final DocumentSnapshot<Map<String, dynamic>> assessmentDocument =
-        await _firestore.collection(assessmentsCollection).doc(cleanId).get();
+    final document = await _firestore
+        .collection(assessmentsCollection)
+        .doc(id)
+        .get();
 
-    if (!assessmentDocument.exists || assessmentDocument.data() == null) {
+    final data = document.data();
+
+    if (data == null) {
       throw AssessmentSubmissionException('Assessment could not be found.');
     }
 
     return {
-      ...assessmentDocument.data()!,
-      'id': assessmentDocument.id,
-      'assessmentId': assessmentDocument.id,
+      ...data,
+      'id': document.id,
+      'assessmentId': document.id,
     };
   }
-
-  // ============================================================
-  // CHECK STUDENT ENROLLMENT
-  // ============================================================
 
   Future<void> _requireEnrollment({
     required String courseId,
     required String studentId,
   }) async {
-    final String enrollmentId = '${courseId}_$studentId';
+    final document = await _firestore
+        .collection('enrollments')
+        .doc('${courseId}_$studentId')
+        .get();
 
-    final DocumentSnapshot<Map<String, dynamic>> enrollmentDocument =
-        await _firestore.collection('enrollments').doc(enrollmentId).get();
+    final enrollment = document.data();
 
-    if (!enrollmentDocument.exists || enrollmentDocument.data() == null) {
+    if (enrollment == null ||
+        enrollment['status'] != 'active' ||
+        enrollment['courseId'] != courseId ||
+        enrollment['studentId'] != studentId) {
       throw AssessmentSubmissionException(
-        'You are not enrolled in this course.',
-      );
-    }
-
-    final String status = (enrollmentDocument.data()!['status'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
-
-    if (status != 'active') {
-      throw AssessmentSubmissionException(
-        'Your enrollment in this course is not active.',
+        'You do not have an active enrollment in this course.',
       );
     }
   }
-
-  // ============================================================
-  // DETERMINISTIC SUBMISSION ID
-  // ============================================================
 
   String buildSubmissionId({
     required String assessmentId,
@@ -180,66 +96,36 @@ class AssessmentSubmissionService {
     return '${assessmentId.trim()}_${studentId.trim()}';
   }
 
-  // ============================================================
-  // GET CURRENT STUDENT SUBMISSION
-  // ============================================================
-
   Future<Map<String, dynamic>?> getMySubmission({
     required String assessmentId,
   }) async {
-    final Map<String, dynamic> student = await _requireStudent();
+    final student = await _requireRole('student');
 
-    final String studentId = student['id'].toString();
-
-    final String submissionId = buildSubmissionId(
+    final id = buildSubmissionId(
       assessmentId: assessmentId,
-      studentId: studentId,
+      studentId: student['id'].toString(),
     );
 
-    final DocumentSnapshot<Map<String, dynamic>> document = await _firestore
+    final document = await _firestore
         .collection(submissionsCollection)
-        .doc(submissionId)
+        .doc(id)
         .get();
 
-    if (!document.exists || document.data() == null) {
-      return null;
-    }
+    final data = document.data();
+    if (data == null) return null;
 
-    return {
-      ...document.data()!,
-      'id': document.id,
-      'submissionId': document.id,
-    };
+    return {...data, 'id': document.id, 'submissionId': document.id};
   }
-
-  // ============================================================
-  // MARK AS SUBMITTED
-  // ============================================================
 
   Future<Map<String, dynamic>> markAsSubmitted({
     required String assessmentId,
   }) async {
-    final Map<String, dynamic> student = await _requireStudent();
+    final student = await _requireRole('student');
+    final assessment = await _requireAssessment(assessmentId);
 
-    final Map<String, dynamic> assessment = await _requireAssessment(
-      assessmentId,
-    );
-
-    final String studentId = student['id'].toString();
-
-    final String courseId = (assessment['courseId'] ?? '').toString().trim();
-
-    final String moduleId = (assessment['moduleId'] ?? '').toString().trim();
-
-    final String assessmentStatus = (assessment['status'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
-
-    final String deliveryType = (assessment['deliveryType'] ?? '')
-        .toString()
-        .trim()
-        .toLowerCase();
+    final studentId = student['id'].toString();
+    final courseId = (assessment['courseId'] ?? '').toString().trim();
+    final moduleId = (assessment['moduleId'] ?? '').toString().trim();
 
     if (courseId.isEmpty || moduleId.isEmpty) {
       throw AssessmentSubmissionException(
@@ -247,282 +133,277 @@ class AssessmentSubmissionService {
       );
     }
 
-    if (assessmentStatus != 'published') {
+    if (assessment['status'] != 'published') {
       throw AssessmentSubmissionException(
         'This assessment is not currently available.',
       );
     }
 
-    if (deliveryType != 'external_link') {
+    if (assessment['deliveryType'] != 'external_link') {
       throw AssessmentSubmissionException(
         'This assessment is not an external-link assessment.',
       );
     }
 
-    await _requireEnrollment(courseId: courseId, studentId: studentId);
+    await _requireEnrollment(
+      courseId: courseId,
+      studentId: studentId,
+    );
 
-    // ----------------------------------------------------------
-    // Due date check
-    // ----------------------------------------------------------
+    final dueValue = assessment['dueAt'];
 
-    final dynamic dueValue = assessment['dueAt'];
-
-    if (dueValue is Timestamp) {
-      final DateTime dueAt = dueValue.toDate();
-
-      if (DateTime.now().isAfter(dueAt)) {
-        throw AssessmentSubmissionException(
-          'The deadline for this assessment has already passed.',
-        );
-      }
+    if (dueValue is Timestamp &&
+        DateTime.now().isAfter(dueValue.toDate())) {
+      throw AssessmentSubmissionException(
+        'The deadline for this assessment has already passed.',
+      );
     }
 
-    final String submissionId = buildSubmissionId(
+    final id = buildSubmissionId(
       assessmentId: assessmentId,
       studentId: studentId,
     );
 
-    final DocumentReference<Map<String, dynamic>> submissionDocument =
-        _firestore.collection(submissionsCollection).doc(submissionId);
+    final reference = _firestore
+        .collection(submissionsCollection)
+        .doc(id);
 
-    final DocumentSnapshot<Map<String, dynamic>> existingDocument =
-        await submissionDocument.get();
+    final existing = await reference.get();
+    final existingStatus = existing.data()?['status'];
 
-    // ----------------------------------------------------------
-    // Prevent submitted / graded assessments from being
-    // repeatedly recreated.
-    // ----------------------------------------------------------
-
-    if (existingDocument.exists && existingDocument.data() != null) {
-      final String existingStatus = (existingDocument.data()!['status'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-
-      if (existingStatus == 'submitted') {
-        throw AssessmentSubmissionException(
-          'You already marked this assessment as submitted.',
-        );
-      }
-
-      if (existingStatus == 'graded') {
-        throw AssessmentSubmissionException(
-          'This assessment has already been graded.',
-        );
-      }
+    if (existingStatus == 'submitted' || existingStatus == 'graded') {
+      throw AssessmentSubmissionException(
+        'This assessment has already been submitted.',
+      );
     }
 
-    String studentName = (student['name'] ?? student['displayName'] ?? '')
-        .toString()
-        .trim();
+    var studentName =
+        (student['name'] ?? student['displayName'] ?? '').toString().trim();
 
     if (studentName.isEmpty) {
       studentName =
-          (_auth.currentUser?.displayName ??
-                  _auth.currentUser?.email ??
-                  'Student')
-              .toString()
-              .trim();
+          _auth.currentUser?.displayName ??
+          _auth.currentUser?.email ??
+          'Student';
     }
 
-    final Map<String, dynamic> data = {
+    final data = <String, dynamic>{
       'assessmentId': assessment['assessmentId'].toString(),
-
       'courseId': courseId,
-
       'moduleId': moduleId,
-
       'studentId': studentId,
-
       'studentName': studentName,
-
       'status': 'submitted',
-
       'submittedAt': FieldValue.serverTimestamp(),
-
-      // Grading fields remain empty until instructor grades.
       'score': null,
-
       'feedback': null,
-
       'gradedAt': null,
-
       'gradedBy': null,
-
       'createdAt': FieldValue.serverTimestamp(),
-
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
-    await submissionDocument.set(data, SetOptions(merge: true));
+    await reference.set(data, SetOptions(merge: true));
 
-    return {...data, 'id': submissionId, 'submissionId': submissionId};
+    return {...data, 'id': id, 'submissionId': id};
   }
-
-  // ============================================================
-  // GET STUDENT SUBMISSIONS FOR MODULE
-  // ============================================================
 
   Future<List<Map<String, dynamic>>> getMyModuleSubmissions({
     required String courseId,
     required String moduleId,
   }) async {
-    final Map<String, dynamic> student = await _requireStudent();
+    final student = await _requireRole('student');
 
-    final String studentId = student['id'].toString();
-
-    final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
+    final snapshot = await _firestore
         .collection(submissionsCollection)
-        .where('studentId', isEqualTo: studentId)
+        .where('studentId', isEqualTo: student['id'])
         .get();
 
-    final List<Map<String, dynamic>> results = [];
-
-    for (final document in snapshot.docs) {
-      final Map<String, dynamic> data = document.data();
-
-      if ((data['courseId'] ?? '').toString() != courseId) {
-        continue;
-      }
-
-      if ((data['moduleId'] ?? '').toString() != moduleId) {
-        continue;
-      }
-
-      results.add({...data, 'id': document.id, 'submissionId': document.id});
-    }
-
-    return results;
+    return snapshot.docs
+        .where((document) {
+          final data = document.data();
+          return data['courseId'] == courseId &&
+              data['moduleId'] == moduleId;
+        })
+        .map((document) {
+          return <String, dynamic>{
+            ...document.data(),
+            'id': document.id,
+            'submissionId': document.id,
+          };
+        })
+        .toList();
   }
-
-  // ============================================================
-  // GET ASSESSMENT SUBMISSIONS - INSTRUCTOR
-  // ============================================================
 
   Future<List<Map<String, dynamic>>> getAssessmentSubmissions({
     required String assessmentId,
   }) async {
-    final Map<String, dynamic> instructor = await _requireInstructor();
+    final instructor = await _requireRole('instructor');
+    final assessment = await _requireAssessment(assessmentId);
 
-    final Map<String, dynamic> assessment = await _requireAssessment(
-      assessmentId,
-    );
+    final courseId = (assessment['courseId'] ?? '').toString();
 
-    final String courseId = (assessment['courseId'] ?? '').toString();
-
-    final DocumentSnapshot<Map<String, dynamic>> courseDocument =
-        await _firestore.collection('courses').doc(courseId).get();
-
-    if (!courseDocument.exists || courseDocument.data() == null) {
-      throw AssessmentSubmissionException('Course could not be found.');
+    if (courseId.isEmpty) {
+      throw AssessmentSubmissionException('Course information is missing.');
     }
 
-    final String courseInstructorId =
-        (courseDocument.data()!['instructorId'] ?? '').toString();
+    final course = await _firestore
+        .collection('courses')
+        .doc(courseId)
+        .get();
 
-    if (courseInstructorId != instructor['id'].toString()) {
+    if (course.data()?['instructorId'] != instructor['id']) {
       throw AssessmentSubmissionException(
         'You can only view submissions from your own courses.',
       );
     }
 
-    final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
+    final snapshot = await _firestore
         .collection(submissionsCollection)
         .where('assessmentId', isEqualTo: assessmentId.trim())
         .get();
 
-    final List<Map<String, dynamic>> submissions = snapshot.docs
-        .map(
-          (document) => {
-            ...document.data(),
-            'id': document.id,
-            'submissionId': document.id,
-          },
-        )
-        .toList();
-
-    return submissions;
+    return snapshot.docs.map((document) {
+      return <String, dynamic>{
+        ...document.data(),
+        'id': document.id,
+        'submissionId': document.id,
+      };
+    }).toList();
   }
 
-  // ============================================================
-  // INSTRUCTOR GRADE SUBMISSION
-  // ============================================================
-
+  // Retain the old method signature, but reject manual score changes.
   Future<void> gradeSubmission({
     required String submissionId,
     required num score,
     String feedback = '',
   }) async {
-    final Map<String, dynamic> instructor = await _requireInstructor();
+    throw AssessmentSubmissionException(
+      'Assessment scores are read-only. Use Save Feedback instead.',
+    );
+  }
 
-    final String cleanSubmissionId = submissionId.trim();
+  Future<void> saveFeedback({
+    required String submissionId,
+    required String feedback,
+  }) async {
+    final instructor = await _requireRole('instructor');
 
-    if (cleanSubmissionId.isEmpty) {
+    final cleanId = submissionId.trim();
+    final cleanFeedback = feedback.trim();
+    final instructorId = instructor['id'].toString();
+
+    if (cleanId.isEmpty) {
       throw AssessmentSubmissionException('Submission ID is required.');
     }
 
-    final DocumentReference<Map<String, dynamic>> submissionReference =
-        _firestore.collection(submissionsCollection).doc(cleanSubmissionId);
-
-    final DocumentSnapshot<Map<String, dynamic>> submissionDocument =
-        await submissionReference.get();
-
-    if (!submissionDocument.exists || submissionDocument.data() == null) {
-      throw AssessmentSubmissionException('Submission could not be found.');
+    if (cleanFeedback.isEmpty) {
+      throw AssessmentSubmissionException('Please enter feedback.');
     }
 
-    final Map<String, dynamic> submission = submissionDocument.data()!;
-
-    final String assessmentId = (submission['assessmentId'] ?? '').toString();
-
-    final Map<String, dynamic> assessment = await _requireAssessment(
-      assessmentId,
-    );
-
-    final String courseId = (assessment['courseId'] ?? '').toString();
-
-    final DocumentSnapshot<Map<String, dynamic>> courseDocument =
-        await _firestore.collection('courses').doc(courseId).get();
-
-    if (!courseDocument.exists || courseDocument.data() == null) {
-      throw AssessmentSubmissionException('Course could not be found.');
-    }
-
-    final String courseInstructorId =
-        (courseDocument.data()!['instructorId'] ?? '').toString();
-
-    if (courseInstructorId != instructor['id'].toString()) {
+    if (cleanFeedback.length > 5000) {
       throw AssessmentSubmissionException(
-        'You can only grade submissions from your own courses.',
+        'Feedback must not exceed 5,000 characters.',
       );
     }
 
-    final num totalPoints = (assessment['totalPoints'] as num?) ?? 0;
+    final submissionReference = _firestore
+        .collection(submissionsCollection)
+        .doc(cleanId);
 
-    if (score < 0) {
-      throw AssessmentSubmissionException('Score cannot be negative.');
-    }
+    // Allocate once; retries of this transaction reuse this ID.
+    final notificationReference = _firestore
+        .collection('notifications')
+        .doc();
 
-    if (score > totalPoints) {
-      throw AssessmentSubmissionException(
-        'Score cannot be greater than $totalPoints.',
+    await _firestore.runTransaction((transaction) async {
+      final submissionDocument = await transaction.get(
+        submissionReference,
       );
-    }
 
-    await submissionReference.update({
-      'score': score,
-      'feedback': feedback.trim(),
-      'status': 'graded',
-      'gradedBy': instructor['id'].toString(),
-      'gradedAt': FieldValue.serverTimestamp(),
-      'updatedAt': FieldValue.serverTimestamp(),
+      final submission = submissionDocument.data();
+
+      if (submission == null) {
+        throw AssessmentSubmissionException(
+          'Submission could not be found.',
+        );
+      }
+
+      final assessmentId =
+          (submission['assessmentId'] ?? '').toString();
+
+      if (assessmentId.isEmpty) {
+        throw AssessmentSubmissionException(
+          'Assessment information is missing.',
+        );
+      }
+
+      final assessmentDocument = await transaction.get(
+        _firestore.collection(assessmentsCollection).doc(assessmentId),
+      );
+
+      final assessment = assessmentDocument.data();
+
+      if (assessment == null) {
+        throw AssessmentSubmissionException(
+          'Assessment could not be found.',
+        );
+      }
+
+      final courseId = (assessment['courseId'] ?? '').toString();
+      final studentId = (submission['studentId'] ?? '').toString();
+
+      if (courseId.isEmpty ||
+          studentId.isEmpty ||
+          submission['courseId'] != courseId) {
+        throw AssessmentSubmissionException(
+          'Submission information is invalid.',
+        );
+      }
+
+      final courseDocument = await transaction.get(
+        _firestore.collection('courses').doc(courseId),
+      );
+
+      if (courseDocument.data()?['instructorId'] != instructorId) {
+        throw AssessmentSubmissionException(
+          'You can only give feedback in your own courses.',
+        );
+      }
+
+      // An unchanged save does not create another notification.
+      if (submission['feedback'] == cleanFeedback &&
+          submission['feedbackBy'] == instructorId) {
+        return;
+      }
+
+      transaction.update(submissionReference, {
+        'feedback': cleanFeedback,
+        'feedbackBy': instructorId,
+        'feedbackAt': FieldValue.serverTimestamp(),
+        'feedbackNotificationId': notificationReference.id,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      transaction.set(notificationReference, {
+        'userId': studentId,
+        'type': 'feedback',
+        'sourceType': 'assessmentFeedback',
+        'sourceId': cleanId,
+        'actorId': instructorId,
+        'actorName':
+            (instructor['name'] ?? 'Your instructor').toString(),
+        'title': 'Feedback: ${assessment['title']}',
+        'message': cleanFeedback,
+        'courseId': courseId,
+        'moduleId': (assessment['moduleId'] ?? '').toString(),
+        'isRead': false,
+        'readAt': null,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
     });
   }
 }
-
-// ============================================================
-// EXCEPTION
-// ============================================================
 
 class AssessmentSubmissionException implements Exception {
   AssessmentSubmissionException(this.message);

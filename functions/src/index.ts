@@ -11,6 +11,15 @@ import {
 
 import {setGlobalOptions} from "firebase-functions/v2";
 
+export {
+  notifyAssessmentGrade,
+  notifyLegacyAssignmentGrade,
+  notifyPublishedAssessment,
+  notifyPublishedLegacyAssignment,
+  notifyPublishedModule,
+  notifyPublishedResource,
+} from "./course_notifications.js";
+
 // ============================================================
 // FIREBASE ADMIN
 // ============================================================

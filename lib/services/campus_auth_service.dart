@@ -6,25 +6,20 @@ class CampusAuthService {
     FirebaseAuth? auth,
     FirebaseFirestore? firestore,
   })  : _auth = auth ?? FirebaseAuth.instance,
-        _firestore = firestore ?? FirebaseFirestore.instance;
+        _firestore =
+            firestore ?? FirebaseFirestore.instance;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
 
-  static const String _internalDomain = 'caslms.app';
+  static const String _internalDomain =
+      'caslms.app';
 
-  // ============================================================
-  // CURRENT USER
-  // ============================================================
-
-  User? get currentUser => _auth.currentUser;
+  User? get currentUser =>
+      _auth.currentUser;
 
   Stream<User?> get authStateChanges =>
       _auth.authStateChanges();
-
-  // ============================================================
-  // NORMALIZE CAMPUS ID
-  // ============================================================
 
   String normalizeCampusId(
     String campusId,
@@ -34,10 +29,6 @@ class CampusAuthService {
           '',
         );
   }
-
-  // ============================================================
-  // VALIDATE CAMPUS ID
-  // ============================================================
 
   bool isValidCampusId(
     String campusId,
@@ -50,10 +41,6 @@ class CampusAuthService {
     ).hasMatch(id);
   }
 
-  // ============================================================
-  // VALIDATE EMAIL
-  // ============================================================
-
   bool isValidEmail(
     String email,
   ) {
@@ -64,16 +51,6 @@ class CampusAuthService {
     );
   }
 
-  // ============================================================
-  // INTERNAL FIREBASE AUTH EMAIL
-  //
-  // User enters:
-  // 231577
-  //
-  // Firebase internally uses:
-  // 231577@caslms.app
-  // ============================================================
-
   String firebaseEmailForCampusId(
     String campusId,
   ) {
@@ -82,10 +59,6 @@ class CampusAuthService {
 
     return '$id@$_internalDomain';
   }
-
-  // ============================================================
-  // STUDENT SIGN UP
-  // ============================================================
 
   Future<CampusAuthResult> signUpStudent({
     required String fullName,
@@ -110,16 +83,6 @@ class CampusAuthService {
     final String cleanCourse =
         course.trim();
 
-    // ==========================================================
-    // VALIDATION
-    // ==========================================================
-
-    if (cleanName.isEmpty) {
-      throw CampusAuthException(
-        'Full name is required.',
-      );
-    }
-
     if (cleanName.length < 2) {
       throw CampusAuthException(
         'Enter your complete name.',
@@ -132,7 +95,9 @@ class CampusAuthService {
       );
     }
 
-    if (!isValidCampusId(cleanCampusId)) {
+    if (!isValidCampusId(
+      cleanCampusId,
+    )) {
       throw CampusAuthException(
         'Enter a valid campus ID number.',
       );
@@ -156,10 +121,6 @@ class CampusAuthService {
       );
     }
 
-    // ==========================================================
-    // INTERNAL FIREBASE EMAIL
-    // ==========================================================
-
     final String authEmail =
         firebaseEmailForCampusId(
       cleanCampusId,
@@ -169,13 +130,14 @@ class CampusAuthService {
 
     try {
       credential =
-          await _auth.createUserWithEmailAndPassword(
+          await _auth
+              .createUserWithEmailAndPassword(
         email: authEmail,
         password: password,
       );
-    } on FirebaseAuthException catch (e) {
+    } on FirebaseAuthException catch (error) {
       throw CampusAuthException(
-        _firebaseMessage(e),
+        _firebaseMessage(error),
       );
     }
 
@@ -189,47 +151,28 @@ class CampusAuthService {
     }
 
     try {
-      // ========================================================
-      // FIREBASE DISPLAY NAME
-      // ========================================================
-
       await user.updateDisplayName(
         cleanName,
       );
 
-      // ========================================================
-      // FIRESTORE USER PROFILE
-      // ========================================================
-
       final Map<String, dynamic> profile = {
         'uid': user.uid,
-
         'name': cleanName,
-
-        // Real email entered by student.
         'email': cleanEmail,
-
-        // Campus / University ID.
-        'universityId': cleanCampusId,
-
-        // Hidden Firebase Authentication email.
+        'universityId':
+            cleanCampusId,
         'authEmail': authEmail,
-
-        'department': cleanDepartment,
-
+        'department':
+            cleanDepartment,
         'course': cleanCourse,
-
-        // Public registration creates students only.
         'role': 'student',
-
         'status': 'active',
-
+        'approvalStatus':
+            'not_required',
         'createdAt':
             FieldValue.serverTimestamp(),
-
         'updatedAt':
             FieldValue.serverTimestamp(),
-
         'lastLoginAt':
             FieldValue.serverTimestamp(),
       };
@@ -239,46 +182,30 @@ class CampusAuthService {
           .doc(user.uid)
           .set(profile);
 
-      // IMPORTANT:
-      //
-      // createUserWithEmailAndPassword automatically
-      // keeps the new Firebase user signed in.
-      //
-      // We intentionally DO NOT sign out here.
-
       return CampusAuthResult(
         user: user,
         profile: {
           ...profile,
-
           'createdAt':
               DateTime.now(),
-
           'updatedAt':
               DateTime.now(),
-
           'lastLoginAt':
               DateTime.now(),
         },
       );
-    } catch (e) {
-      // If Firestore profile creation fails,
-      // remove the Firebase Auth account too so
-      // we don't leave an incomplete account.
-
+    } catch (error) {
       try {
         await user.delete();
-      } catch (_) {}
+      } catch (_) {
+        // Preserve the original profile error.
+      }
 
       throw CampusAuthException(
-        'Unable to create your CASLMS profile: $e',
+        'Unable to create your CASLMS profile: $error',
       );
     }
   }
-
-  // ============================================================
-  // LOGIN USING CAMPUS ID + PASSWORD
-  // ============================================================
 
   Future<CampusAuthResult> signIn({
     required String campusId,
@@ -301,10 +228,6 @@ class CampusAuthService {
       );
     }
 
-    // ==========================================================
-    // CONVERT CAMPUS ID → FIREBASE EMAIL
-    // ==========================================================
-
     final String authEmail =
         firebaseEmailForCampusId(
       cleanCampusId,
@@ -314,13 +237,14 @@ class CampusAuthService {
 
     try {
       credential =
-          await _auth.signInWithEmailAndPassword(
+          await _auth
+              .signInWithEmailAndPassword(
         email: authEmail,
         password: password,
       );
-    } on FirebaseAuthException catch (e) {
+    } on FirebaseAuthException catch (error) {
       throw CampusAuthException(
-        _firebaseMessage(e),
+        _firebaseMessage(error),
       );
     }
 
@@ -334,32 +258,23 @@ class CampusAuthService {
     }
 
     try {
-      // ========================================================
-      // LOAD FIRESTORE PROFILE
-      // ========================================================
-
-      final DocumentSnapshot<
-          Map<String, dynamic>> profileDocument =
+      final document =
           await _firestore
               .collection('users')
               .doc(user.uid)
               .get();
 
-      if (!profileDocument.exists ||
-          profileDocument.data() == null) {
+      final Map<String, dynamic>?
+          profile = document.data();
+
+      if (!document.exists ||
+          profile == null) {
         await _auth.signOut();
 
         throw CampusAuthException(
           'Your CASLMS profile could not be found.',
         );
       }
-
-      final Map<String, dynamic> profile =
-          profileDocument.data()!;
-
-      // ========================================================
-      // CHECK CAMPUS ID
-      // ========================================================
 
       final String storedCampusId =
           (profile['universityId'] ?? '')
@@ -375,28 +290,6 @@ class CampusAuthService {
         );
       }
 
-      // ========================================================
-      // CHECK ACCOUNT STATUS
-      // ========================================================
-
-      final String status =
-          (profile['status'] ?? '')
-              .toString()
-              .trim()
-              .toLowerCase();
-
-      if (status != 'active') {
-        await _auth.signOut();
-
-        throw CampusAuthException(
-          'Your CASLMS account is currently inactive.',
-        );
-      }
-
-      // ========================================================
-      // CHECK ROLE
-      // ========================================================
-
       final String role =
           (profile['role'] ?? '')
               .toString()
@@ -409,9 +302,7 @@ class CampusAuthService {
         'admin',
       };
 
-      if (!allowedRoles.contains(
-        role,
-      )) {
+      if (!allowedRoles.contains(role)) {
         await _auth.signOut();
 
         throw CampusAuthException(
@@ -419,20 +310,71 @@ class CampusAuthService {
         );
       }
 
-      // ========================================================
-      // UPDATE LAST LOGIN
-      // ========================================================
+      final String status =
+          (profile['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
 
-      await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .update({
-        'lastLoginAt':
-            FieldValue.serverTimestamp(),
+      // Pending instructors remain authenticated so
+      // SessionGate can display the approval screen.
+      if (role == 'instructor' &&
+          status == 'pending') {
+        return CampusAuthResult(
+          user: user,
+          profile: {
+            ...profile,
+            'uid': user.uid,
+          },
+        );
+      }
 
-        'updatedAt':
-            FieldValue.serverTimestamp(),
-      });
+      if (status == 'denied') {
+        await _auth.signOut();
+
+        final String reason =
+            (profile['denialReason'] ?? '')
+                .toString()
+                .trim();
+
+        throw CampusAuthException(
+          reason.isEmpty
+              ? 'Your instructor application was denied.'
+              : 'Your instructor application was denied: $reason',
+        );
+      }
+
+      if (status == 'suspended') {
+        await _auth.signOut();
+
+        throw CampusAuthException(
+          'Your CASLMS account is suspended.',
+        );
+      }
+
+      if (status != 'active') {
+        await _auth.signOut();
+
+        throw CampusAuthException(
+          'Your CASLMS account is currently inactive.',
+        );
+      }
+
+      // Updating login time should not prevent a valid
+      // user from entering if this optional write fails.
+      try {
+        await _firestore
+            .collection('users')
+            .doc(user.uid)
+            .update({
+          'lastLoginAt':
+              FieldValue.serverTimestamp(),
+          'updatedAt':
+              FieldValue.serverTimestamp(),
+        });
+      } catch (_) {
+        // Login remains successful.
+      }
 
       return CampusAuthResult(
         user: user,
@@ -443,18 +385,14 @@ class CampusAuthService {
       );
     } on CampusAuthException {
       rethrow;
-    } catch (e) {
+    } catch (error) {
       await _auth.signOut();
 
       throw CampusAuthException(
-        'Unable to load your CASLMS account: $e',
+        'Unable to load your CASLMS account: $error',
       );
     }
   }
-
-  // ============================================================
-  // GET CURRENT PROFILE
-  // ============================================================
 
   Future<Map<String, dynamic>?>
       getCurrentProfile() async {
@@ -465,48 +403,68 @@ class CampusAuthService {
       return null;
     }
 
-    final DocumentSnapshot<
-        Map<String, dynamic>> document =
+    final document =
         await _firestore
             .collection('users')
             .doc(user.uid)
             .get();
 
+    final Map<String, dynamic>?
+        profile = document.data();
+
     if (!document.exists ||
-        document.data() == null) {
+        profile == null) {
       return null;
     }
 
     return {
-      ...document.data()!,
+      ...profile,
       'uid': user.uid,
     };
   }
 
-  // ============================================================
-  // SIGN OUT
-  // ============================================================
+  Stream<Map<String, dynamic>?>
+      watchProfile(
+    String userId,
+  ) {
+    return _firestore
+        .collection('users')
+        .doc(userId)
+        .snapshots()
+        .map(
+      (document) {
+        final Map<String, dynamic>?
+            profile = document.data();
+
+        if (!document.exists ||
+            profile == null) {
+          return null;
+        }
+
+        return {
+          ...profile,
+          'uid': document.id,
+        };
+      },
+    );
+  }
 
   Future<void> signOut() async {
     await _auth.signOut();
   }
 
-  // ============================================================
-  // FIREBASE AUTH ERROR MESSAGES
-  // ============================================================
-
   String _firebaseMessage(
-    FirebaseAuthException e,
+    FirebaseAuthException error,
   ) {
-    switch (e.code) {
+    switch (error.code) {
       case 'email-already-in-use':
-        return 'This campus ID is already registered.';
+        return 'This campus or faculty ID is already registered.';
 
       case 'weak-password':
         return 'Please choose a stronger password.';
 
       case 'invalid-email':
-        return 'The campus ID could not be processed.';
+        return 'The ID number could not be processed.';
 
       case 'invalid-credential':
       case 'wrong-password':
@@ -514,7 +472,7 @@ class CampusAuthService {
         return 'Incorrect ID number or password.';
 
       case 'user-disabled':
-        return 'This account has been disabled.';
+        return 'This account is disabled. If you registered as an instructor, your application may have been denied.';
 
       case 'too-many-requests':
         return 'Too many login attempts. Please try again later.';
@@ -523,15 +481,11 @@ class CampusAuthService {
         return 'Check your internet connection and try again.';
 
       default:
-        return e.message ??
+        return error.message ??
             'Authentication failed.';
     }
   }
 }
-
-// ============================================================
-// AUTH RESULT
-// ============================================================
 
 class CampusAuthResult {
   CampusAuthResult({
@@ -540,11 +494,16 @@ class CampusAuthResult {
   });
 
   final User user;
-
   final Map<String, dynamic> profile;
 
   String get role =>
       (profile['role'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+
+  String get status =>
+      (profile['status'] ?? '')
           .toString()
           .trim()
           .toLowerCase();
@@ -569,10 +528,6 @@ class CampusAuthResult {
       (profile['course'] ?? '')
           .toString();
 }
-
-// ============================================================
-// CUSTOM EXCEPTION
-// ============================================================
 
 class CampusAuthException
     implements Exception {

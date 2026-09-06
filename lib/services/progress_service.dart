@@ -1,109 +1,333 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+typedef ProgressRow = Map<String, dynamic>;
+
 class ProgressService {
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+  ProgressService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+  })  : _firestore =
+            firestore ?? FirebaseFirestore.instance,
+        _auth = auth ?? FirebaseAuth.instance;
 
-  final FirebaseAuth _auth =
-      FirebaseAuth.instance;
-
-  // ============================================================
-  // CURRENT USER
-  // ============================================================
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
 
   String? get currentUserId =>
       _auth.currentUser?.uid;
 
-  // ============================================================
-  // MODULE PROGRESS DOCUMENT ID
-  // ============================================================
-
-  String buildModuleProgressId({
-    required String moduleId,
-    required String studentId,
-  }) {
-    final String cleanModuleId =
-        moduleId.trim();
-
-    final String cleanStudentId =
-        studentId.trim();
-
-    if (cleanModuleId.isEmpty ||
-        cleanStudentId.isEmpty) {
-      return '';
-    }
-
-    return '${cleanModuleId}_$cleanStudentId';
+  ProgressRow _row(
+    String id,
+    ProgressRow data,
+  ) {
+    return {
+      for (final entry in data.entries)
+        entry.key: entry.value is Timestamp
+            ? (entry.value as Timestamp).toDate()
+            : entry.value,
+      'id': id,
+    };
   }
 
-  // ============================================================
-  // REQUIRE CURRENT STUDENT
-  // ============================================================
+  Stream<List<ProgressRow>> _rows(
+    Query<ProgressRow> query,
+  ) {
+    return query.snapshots().map(
+      (snapshot) {
+        return snapshot.docs.map(
+          (document) {
+            return _row(
+              document.id,
+              document.data(),
+            );
+          },
+        ).toList();
+      },
+    );
+  }
 
-  Future<User> _requireCurrentStudent() async {
+  Stream<ProgressRow>
+      watchStudentProgress() async* {
     final User? user =
         _auth.currentUser;
 
     if (user == null) {
       throw ProgressServiceException(
-        'No student is currently logged in.',
+        'Please sign in.',
       );
     }
 
-    final DocumentSnapshot<Map<String, dynamic>>
-        userDocument =
-        await _firestore
-            .collection('users')
-            .doc(user.uid)
-            .get();
+    final profile = await _firestore
+        .collection('users')
+        .doc(user.uid)
+        .get();
 
-    if (!userDocument.exists ||
-        userDocument.data() == null) {
+    final role = _ProgressCalculator.lower(
+      profile.data()?['role'],
+    );
+
+    final status =
+        _ProgressCalculator.lower(
+      profile.data()?['status'] ?? 'active',
+    );
+
+    if (role != 'student' ||
+        status != 'active') {
       throw ProgressServiceException(
-        'Student profile could not be found.',
+        'An active student account is required.',
       );
     }
 
-    final Map<String, dynamic> data =
-        userDocument.data()!;
+    final enrollmentStream = _rows(
+      _firestore
+          .collection('enrollments')
+          .where(
+            'studentId',
+            isEqualTo: user.uid,
+          ),
+    );
 
-    final String role =
-        (data['role'] ?? '')
-            .toString()
-            .trim()
-            .toLowerCase();
+    final courseIds = enrollmentStream
+        .map(
+          (rows) {
+            final result = rows
+                .where(
+                  (row) =>
+                      _ProgressCalculator.lower(
+                        row['status'],
+                      ) ==
+                      'active',
+                )
+                .map(
+                  (row) =>
+                      _ProgressCalculator.text(
+                        row['courseId'],
+                      ),
+                )
+                .where(
+                  (id) => id.isNotEmpty,
+                )
+                .toSet()
+                .toList();
 
-    if (role != 'student') {
-      throw ProgressServiceException(
-        'This feature is available to students only.',
-      );
-    }
+            result.sort();
+            return result;
+          },
+        )
+        .distinct(
+          (previous, next) =>
+              previous.join('|') ==
+              next.join('|'),
+        );
 
-    final String status =
-        (data['status'] ?? 'active')
-            .toString()
-            .trim()
-            .toLowerCase();
-
-    if (status != 'active') {
-      throw ProgressServiceException(
-        'This student account is not active.',
-      );
-    }
-
-    return user;
+    yield* _switchLatest(
+      courseIds.map(
+        (ids) => _watchCourses(
+          user.uid,
+          ids,
+        ),
+      ),
+    );
   }
 
-  // ============================================================
-  // VERIFY ACTIVE ENROLLMENT
-  // ============================================================
+  Stream<ProgressRow> _watchCourses(
+    String studentId,
+    List<String> courseIds,
+  ) {
+    if (courseIds.isEmpty) {
+      return Stream.value(
+        _ProgressCalculator.overall([]),
+      );
+    }
 
-  Future<void> _verifyActiveEnrollment({
+    final streams =
+        <Stream<List<ProgressRow>>>[
+      _rows(
+        _firestore
+            .collection(
+              'assessmentSubmissions',
+            )
+            .where(
+              'studentId',
+              isEqualTo: studentId,
+            ),
+      ),
+      _rows(
+        _firestore
+            .collection('submissions')
+            .where(
+              'studentId',
+              isEqualTo: studentId,
+            ),
+      ),
+      _rows(
+        _firestore
+            .collection('quiz_attempts')
+            .where(
+              'studentId',
+              isEqualTo: studentId,
+            ),
+      ),
+    ];
+
+    for (final courseId in courseIds) {
+      streams.add(
+        _firestore
+            .collection('courses')
+            .doc(courseId)
+            .snapshots()
+            .map(
+          (document) {
+            final data =
+                document.data();
+
+            if (!document.exists ||
+                data == null) {
+              return <ProgressRow>[];
+            }
+
+            return [
+              _row(
+                document.id,
+                data,
+              ),
+            ];
+          },
+        ),
+      );
+
+      for (final collection in [
+        'modules',
+        'assessments',
+        'assignments',
+        'quizzes',
+      ]) {
+        streams.add(
+          _rows(
+            _firestore
+                .collection(collection)
+                .where(
+                  'courseId',
+                  isEqualTo: courseId,
+                ),
+          ),
+        );
+      }
+    }
+
+    return _combineLatest(streams).map(
+      (data) {
+        final courses =
+            <ProgressRow>[];
+
+        for (var index = 0;
+            index < courseIds.length;
+            index++) {
+          final offset =
+              3 + index * 5;
+
+          if (data[offset].isEmpty) {
+            continue;
+          }
+
+          final course =
+              data[offset].first;
+
+          if (_ProgressCalculator.lower(
+                course['status'],
+              ) !=
+              'active') {
+            continue;
+          }
+
+          courses.add(
+            _ProgressCalculator.course(
+              course: course,
+              modules: data[offset + 1],
+              assessments:
+                  data[offset + 2],
+              assignments:
+                  data[offset + 3],
+              quizzes: data[offset + 4],
+              assessmentSubmissions:
+                  data[0],
+              assignmentSubmissions:
+                  data[1],
+              quizAttempts: data[2],
+            ),
+          );
+        }
+
+        courses.sort(
+          (a, b) {
+            return _ProgressCalculator.text(
+              a['code'],
+            ).compareTo(
+              _ProgressCalculator.text(
+                b['code'],
+              ),
+            );
+          },
+        );
+
+        return _ProgressCalculator.overall(
+          courses,
+        );
+      },
+    );
+  }
+
+  Future<ProgressRow>
+      getProgressDashboard() {
+    return watchStudentProgress().first;
+  }
+
+  Future<ProgressRow>
+      getOverallLearningProgress() {
+    return getProgressDashboard();
+  }
+
+  Future<ProgressRow>
+      getOverallAcademicPerformance() {
+    return getProgressDashboard();
+  }
+
+  Future<ProgressRow>
+      getOverallModuleProgress() {
+    return getProgressDashboard();
+  }
+
+  Future<List<ProgressRow>>
+      getStudentCourses() async {
+    final report =
+        await getProgressDashboard();
+
+    final dynamic rawCourses =
+        report['courses'];
+
+    if (rawCourses is! List) {
+      return [];
+    }
+
+    return rawCourses
+        .whereType<Map>()
+        .map(
+          (course) =>
+              Map<String, dynamic>.from(
+            course,
+          ),
+        )
+        .toList();
+  }
+
+  Future<ProgressRow>
+      getCourseModuleProgress({
     required String courseId,
-    required String studentId,
   }) async {
-    final String cleanCourseId =
+    final cleanCourseId =
         courseId.trim();
 
     if (cleanCourseId.isEmpty) {
@@ -112,2202 +336,1170 @@ class ProgressService {
       );
     }
 
-    final String enrollmentId =
-        '${cleanCourseId}_$studentId';
+    final courses =
+        await getStudentCourses();
 
-    final DocumentSnapshot<Map<String, dynamic>>
-        enrollmentDocument =
-        await _firestore
-            .collection('enrollments')
-            .doc(enrollmentId)
-            .get();
-
-    if (!enrollmentDocument.exists ||
-        enrollmentDocument.data() == null) {
-      throw ProgressServiceException(
-        'You are not enrolled in this course.',
-      );
-    }
-
-    final String status =
-        (enrollmentDocument
-                    .data()?['status'] ??
-                '')
-            .toString()
-            .trim()
-            .toLowerCase();
-
-    if (status != 'active') {
-      throw ProgressServiceException(
-        'Your enrollment in this course is not active.',
-      );
-    }
+    return courses.firstWhere(
+      (course) =>
+          _ProgressCalculator.text(
+            course['courseId'],
+          ) ==
+          cleanCourseId,
+      orElse: () {
+        throw ProgressServiceException(
+          'No active enrollment for this course.',
+        );
+      },
+    );
   }
 
-  // ============================================================
-  // MARK MODULE COMPLETE
-  // ============================================================
+  Future<ProgressRow>
+      getCourseLearningProgress({
+    required String courseId,
+  }) {
+    return getCourseModuleProgress(
+      courseId: courseId,
+    );
+  }
+
+  Future<ProgressRow>
+      getCourseAcademicPerformance({
+    required String courseId,
+  }) {
+    return getCourseModuleProgress(
+      courseId: courseId,
+    );
+  }
+
+  Stream<ProgressRow>
+      watchCourseProgress({
+    required String courseId,
+  }) {
+    final cleanCourseId =
+        courseId.trim();
+
+    return watchStudentProgress().map(
+      (report) {
+        final dynamic rawCourses =
+            report['courses'];
+
+        if (rawCourses is List) {
+          for (final rawCourse
+              in rawCourses) {
+            if (rawCourse is! Map) {
+              continue;
+            }
+
+            final course =
+                Map<String, dynamic>.from(
+              rawCourse,
+            );
+
+            if (_ProgressCalculator.text(
+                  course['courseId'],
+                ) ==
+                cleanCourseId) {
+              return course;
+            }
+          }
+        }
+
+        throw ProgressServiceException(
+          'No active enrollment for this course.',
+        );
+      },
+    );
+  }
+
+  Future<List<ProgressRow>>
+      getPublishedModulesForCourse({
+    required String courseId,
+  }) async {
+    final course =
+        await getCourseModuleProgress(
+      courseId: courseId,
+    );
+
+    final dynamic rawModules =
+        course['modules'];
+
+    if (rawModules is! List) {
+      return [];
+    }
+
+    return rawModules
+        .whereType<Map>()
+        .map(
+          (module) =>
+              Map<String, dynamic>.from(
+            module,
+          ),
+        )
+        .toList();
+  }
+
+  Future<ProgressRow>
+      getCourseQuizProgress({
+    required String courseId,
+  }) async {
+    final course =
+        await getCourseModuleProgress(
+      courseId: courseId,
+    );
+
+    return {
+      ...course,
+      'progress':
+          course['quizProgress'],
+      'earnedPoints':
+          course['quizEarnedPoints'],
+      'availablePoints':
+          course['quizAvailablePoints'],
+      'scorePercentage':
+          course['quizPercentage'],
+      'percentage':
+          course['quizPercentage'],
+    };
+  }
+
+  Future<ProgressRow>
+      getCourseQuizPerformance({
+    required String courseId,
+  }) {
+    return getCourseQuizProgress(
+      courseId: courseId,
+    );
+  }
+
+  Future<ProgressRow>
+      getCourseAssignmentProgress({
+    required String courseId,
+  }) async {
+    final course =
+        await getCourseModuleProgress(
+      courseId: courseId,
+    );
+
+    return {
+      ...course,
+      'progress':
+          course['assignmentProgress'],
+      'earnedPoints':
+          course[
+              'assignmentEarnedPoints'],
+      'availablePoints':
+          course[
+              'assignmentAvailablePoints'],
+      'percentage':
+          course[
+              'assignmentPercentage'],
+    };
+  }
+
+  Future<ProgressRow>
+      getCourseAssignmentPerformance({
+    required String courseId,
+  }) {
+    return getCourseAssignmentProgress(
+      courseId: courseId,
+    );
+  }
+
+  Stream<bool> watchModuleCompleted({
+    required String moduleId,
+  }) {
+    final cleanModuleId =
+        moduleId.trim();
+
+    return watchStudentProgress().map(
+      (report) {
+        final dynamic rawCourses =
+            report['courses'];
+
+        if (rawCourses is! List) {
+          return false;
+        }
+
+        for (final rawCourse
+            in rawCourses) {
+          if (rawCourse is! Map) {
+            continue;
+          }
+
+          final dynamic rawModules =
+              rawCourse['modules'];
+
+          if (rawModules is! List) {
+            continue;
+          }
+
+          for (final rawModule
+              in rawModules) {
+            if (rawModule is! Map) {
+              continue;
+            }
+
+            if (_ProgressCalculator.text(
+                      rawModule[
+                          'moduleId'],
+                    ) ==
+                    cleanModuleId &&
+                rawModule['completed'] ==
+                    true) {
+              return true;
+            }
+          }
+        }
+
+        return false;
+      },
+    );
+  }
+
+  Stream<List<ProgressRow>>
+      watchCompletedModulesForCourse({
+    required String courseId,
+  }) {
+    return watchCourseProgress(
+      courseId: courseId,
+    ).map(
+      (course) {
+        final dynamic rawModules =
+            course['modules'];
+
+        if (rawModules is! List) {
+          return <ProgressRow>[];
+        }
+
+        return rawModules
+            .whereType<Map>()
+            .where(
+              (module) =>
+                  module['completed'] ==
+                  true,
+            )
+            .map(
+              (module) =>
+                  Map<String, dynamic>.from(
+                module,
+              ),
+            )
+            .toList();
+      },
+    );
+  }
+
+  String buildModuleProgressId({
+    required String moduleId,
+    required String studentId,
+  }) {
+    return '${moduleId.trim()}_${studentId.trim()}';
+  }
 
   Future<void> markModuleComplete({
     required String moduleId,
     required String courseId,
   }) async {
-    try {
-      final User user =
-          await _requireCurrentStudent();
-
-      final String cleanModuleId =
-          moduleId.trim();
-
-      final String cleanCourseId =
-          courseId.trim();
-
-      if (cleanModuleId.isEmpty ||
-          cleanCourseId.isEmpty) {
-        throw ProgressServiceException(
-          'Module information is incomplete.',
-        );
-      }
-
-      await _verifyActiveEnrollment(
-        courseId: cleanCourseId,
-        studentId: user.uid,
-      );
-
-      final DocumentSnapshot<Map<String, dynamic>>
-          moduleDocument =
-          await _firestore
-              .collection('modules')
-              .doc(cleanModuleId)
-              .get();
-
-      if (!moduleDocument.exists ||
-          moduleDocument.data() == null) {
-        throw ProgressServiceException(
-          'Module could not be found.',
-        );
-      }
-
-      final Map<String, dynamic> module =
-          moduleDocument.data()!;
-
-      final String moduleCourseId =
-          (module['courseId'] ?? '')
-              .toString()
-              .trim();
-
-      if (moduleCourseId !=
-          cleanCourseId) {
-        throw ProgressServiceException(
-          'This module does not belong to the selected course.',
-        );
-      }
-
-      final String moduleStatus =
-          (module['status'] ?? '')
-              .toString()
-              .trim()
-              .toLowerCase();
-
-      if (moduleStatus != 'published') {
-        throw ProgressServiceException(
-          'This module is not currently available.',
-        );
-      }
-
-      final String progressId =
-          buildModuleProgressId(
-        moduleId: cleanModuleId,
-        studentId: user.uid,
-      );
-
-      if (progressId.isEmpty) {
-        throw ProgressServiceException(
-          'Unable to create module progress record.',
-        );
-      }
-
-      final DocumentReference<Map<String, dynamic>>
-          reference =
-          _firestore
-              .collection('moduleProgress')
-              .doc(progressId);
-
-      final DocumentSnapshot<Map<String, dynamic>>
-          existing =
-          await reference.get();
-
-      if (existing.exists) {
-        await reference.set(
-          {
-            'moduleId':
-                cleanModuleId,
-            'courseId':
-                cleanCourseId,
-            'studentId':
-                user.uid,
-            'isCompleted':
-                true,
-            'completedAt':
-                FieldValue.serverTimestamp(),
-            'updatedAt':
-                FieldValue.serverTimestamp(),
-          },
-          SetOptions(
-            merge: true,
-          ),
-        );
-
-        return;
-      }
-
-      await reference.set({
-        'moduleId':
-            cleanModuleId,
-        'courseId':
-            cleanCourseId,
-        'studentId':
-            user.uid,
-        'isCompleted':
-            true,
-        'completedAt':
-            FieldValue.serverTimestamp(),
-        'createdAt':
-            FieldValue.serverTimestamp(),
-        'updatedAt':
-            FieldValue.serverTimestamp(),
-      });
-    } on ProgressServiceException {
-      rethrow;
-    } on FirebaseException catch (e) {
-      throw ProgressServiceException(
-        e.message ??
-            'Unable to update module progress.',
-      );
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to update module progress.',
-      );
-    }
+    throw ProgressServiceException(
+      'Module progress is calculated automatically from completed tasks.',
+    );
   }
-
-  // ============================================================
-  // MARK MODULE INCOMPLETE
-  // ============================================================
 
   Future<void> markModuleIncomplete({
     required String moduleId,
   }) async {
-    try {
-      final User user =
-          await _requireCurrentStudent();
-
-      final String cleanModuleId =
-          moduleId.trim();
-
-      if (cleanModuleId.isEmpty) {
-        return;
-      }
-
-      final String progressId =
-          buildModuleProgressId(
-        moduleId: cleanModuleId,
-        studentId: user.uid,
-      );
-
-      if (progressId.isEmpty) {
-        return;
-      }
-
-      final DocumentReference<Map<String, dynamic>>
-          reference =
-          _firestore
-              .collection('moduleProgress')
-              .doc(progressId);
-
-      final DocumentSnapshot<Map<String, dynamic>>
-          existing =
-          await reference.get();
-
-      if (!existing.exists) {
-        return;
-      }
-
-      await reference.set(
-        {
-          'isCompleted':
-              false,
-          'completedAt':
-              null,
-          'updatedAt':
-              FieldValue.serverTimestamp(),
-        },
-        SetOptions(
-          merge: true,
-        ),
-      );
-    } on ProgressServiceException {
-      rethrow;
-    } on FirebaseException catch (e) {
-      throw ProgressServiceException(
-        e.message ??
-            'Unable to update module progress.',
-      );
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to update module progress.',
-      );
-    }
-  }
-
-  // ============================================================
-  // WATCH MODULE COMPLETION
-  // ============================================================
-
-  Stream<bool> watchModuleCompleted({
-    required String moduleId,
-  }) {
-    final User? user =
-        _auth.currentUser;
-
-    if (user == null) {
-      return Stream.value(false);
-    }
-
-    final String cleanModuleId =
-        moduleId.trim();
-
-    if (cleanModuleId.isEmpty) {
-      return Stream.value(false);
-    }
-
-    final String progressId =
-        buildModuleProgressId(
-      moduleId: cleanModuleId,
-      studentId: user.uid,
+    throw ProgressServiceException(
+      'Module progress is calculated automatically from completed tasks.',
     );
-
-    if (progressId.isEmpty) {
-      return Stream.value(false);
-    }
-
-    return _firestore
-        .collection('moduleProgress')
-        .doc(progressId)
-        .snapshots()
-        .map(
-      (document) {
-        if (!document.exists ||
-            document.data() == null) {
-          return false;
-        }
-
-        return document.data()![
-                'isCompleted'] ==
-            true;
-      },
-    );
-  }
-
-  // ============================================================
-  // WATCH COMPLETED COURSE MODULES
-  // ============================================================
-
-  Stream<List<Map<String, dynamic>>>
-      watchCompletedModulesForCourse({
-    required String courseId,
-  }) {
-    final User? user =
-        _auth.currentUser;
-
-    if (user == null ||
-        courseId.trim().isEmpty) {
-      return Stream.value(
-        <Map<String, dynamic>>[],
-      );
-    }
-
-    return _firestore
-        .collection('moduleProgress')
-        .where(
-          'studentId',
-          isEqualTo: user.uid,
-        )
-        .snapshots()
-        .map(
-      (snapshot) {
-        return snapshot.docs
-            .where(
-          (document) {
-            final data =
-                document.data();
-
-            return (data['courseId'] ?? '')
-                        .toString() ==
-                    courseId.trim() &&
-                data['isCompleted'] ==
-                    true;
-          },
-        )
-            .map(
-          (document) {
-            return {
-              ...document.data(),
-              'id': document.id,
-            };
-          },
-        ).toList();
-      },
-    );
-  }
-
-  // ============================================================
-  // GET PUBLISHED MODULES FOR COURSE
-  // ============================================================
-
-  Future<List<Map<String, dynamic>>>
-      getPublishedModulesForCourse({
-    required String courseId,
-  }) async {
-    try {
-      final User user =
-          await _requireCurrentStudent();
-
-      final String cleanCourseId =
-          courseId.trim();
-
-      if (cleanCourseId.isEmpty) {
-        return [];
-      }
-
-      await _verifyActiveEnrollment(
-        courseId: cleanCourseId,
-        studentId: user.uid,
-      );
-
-      final QuerySnapshot<Map<String, dynamic>>
-          snapshot =
-          await _firestore
-              .collection('modules')
-              .where(
-                'courseId',
-                isEqualTo: cleanCourseId,
-              )
-              .get();
-
-      final List<Map<String, dynamic>> modules =
-          snapshot.docs
-              .where(
-        (document) {
-          final String status =
-              (document.data()['status'] ??
-                      '')
-                  .toString()
-                  .trim()
-                  .toLowerCase();
-
-          return status ==
-              'published';
-        },
-      )
-              .map(
-        (document) {
-          return {
-            ...document.data(),
-            'id': document.id,
-            'moduleId': document.id,
-          };
-        },
-      ).toList();
-
-      modules.sort(
-        (a, b) {
-          final int orderA =
-              (a['order'] as num?)
-                      ?.toInt() ??
-                  0;
-
-          final int orderB =
-              (b['order'] as num?)
-                      ?.toInt() ??
-                  0;
-
-          return orderA.compareTo(
-            orderB,
-          );
-        },
-      );
-
-      return modules;
-    } on ProgressServiceException {
-      rethrow;
-    } on FirebaseException catch (e) {
-      throw ProgressServiceException(
-        e.message ??
-            'Unable to load modules.',
-      );
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to load modules.',
-      );
-    }
-  }
-
-  // ============================================================
-  // COURSE MODULE PROGRESS
-  // ============================================================
-
-  Future<Map<String, dynamic>>
-      getCourseModuleProgress({
-    required String courseId,
-  }) async {
-    try {
-      final User user =
-          await _requireCurrentStudent();
-
-      final String cleanCourseId =
-          courseId.trim();
-
-      if (cleanCourseId.isEmpty) {
-        return _emptyModuleProgress();
-      }
-
-      final QuerySnapshot<Map<String, dynamic>>
-          moduleSnapshot =
-          await _firestore
-              .collection('modules')
-              .where(
-                'courseId',
-                isEqualTo: cleanCourseId,
-              )
-              .get();
-
-      final List<
-              QueryDocumentSnapshot<
-                  Map<String, dynamic>>>
-          publishedModules =
-          moduleSnapshot.docs.where(
-        (document) {
-          return (document
-                      .data()['status'] ??
-                  '')
-              .toString()
-              .trim()
-              .toLowerCase() ==
-              'published';
-        },
-      ).toList();
-
-      final int totalModules =
-          publishedModules.length;
-
-      if (totalModules == 0) {
-        return _emptyModuleProgress();
-      }
-
-      final Set<String> moduleIds =
-          publishedModules
-              .map(
-                (document) =>
-                    document.id,
-              )
-              .toSet();
-
-      final QuerySnapshot<Map<String, dynamic>>
-          progressSnapshot =
-          await _firestore
-              .collection(
-                'moduleProgress',
-              )
-              .where(
-                'studentId',
-                isEqualTo: user.uid,
-              )
-              .get();
-
-      final Set<String>
-          completedIds =
-          {};
-
-      for (final document
-          in progressSnapshot.docs) {
-        final Map<String, dynamic> data =
-            document.data();
-
-        final String progressCourseId =
-            (data['courseId'] ?? '')
-                .toString();
-
-        final String moduleId =
-            (data['moduleId'] ?? '')
-                .toString();
-
-        if (progressCourseId ==
-                cleanCourseId &&
-            data['isCompleted'] ==
-                true &&
-            moduleIds.contains(
-              moduleId,
-            )) {
-          completedIds.add(
-            moduleId,
-          );
-        }
-      }
-
-      final int completedModules =
-          completedIds.length;
-
-      final int remainingModules =
-          totalModules -
-              completedModules;
-
-      final double progress =
-          (completedModules /
-                  totalModules)
-              .clamp(
-                0.0,
-                1.0,
-              )
-              .toDouble();
-
-      return {
-        'totalModules':
-            totalModules,
-        'completedModules':
-            completedModules,
-        'remainingModules':
-            remainingModules,
-        'progress':
-            progress,
-      };
-    } on ProgressServiceException {
-      rethrow;
-    } on FirebaseException catch (e) {
-      throw ProgressServiceException(
-        e.message ??
-            'Unable to calculate module progress.',
-      );
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to calculate module progress.',
-      );
-    }
-  }
-
-  Map<String, dynamic>
-      _emptyModuleProgress() {
-    return {
-      'totalModules': 0,
-      'completedModules': 0,
-      'remainingModules': 0,
-      'progress': 0.0,
-    };
-  }
-
-  // ============================================================
-  // COURSE ASSIGNMENT PROGRESS
-  // ============================================================
-
-  Future<Map<String, dynamic>>
-      getCourseAssignmentProgress({
-    required String courseId,
-  }) async {
-    try {
-      final User user =
-          await _requireCurrentStudent();
-
-      final String cleanCourseId =
-          courseId.trim();
-
-      if (cleanCourseId.isEmpty) {
-        return _emptyAssignmentProgress();
-      }
-
-      final QuerySnapshot<Map<String, dynamic>>
-          assignmentSnapshot =
-          await _firestore
-              .collection('assignments')
-              .where(
-                'courseId',
-                isEqualTo: cleanCourseId,
-              )
-              .get();
-
-      final List<
-              QueryDocumentSnapshot<
-                  Map<String, dynamic>>>
-          publishedAssignments =
-          assignmentSnapshot.docs.where(
-        (document) {
-          return (document
-                      .data()['status'] ??
-                  '')
-              .toString()
-              .trim()
-              .toLowerCase() ==
-              'published';
-        },
-      ).toList();
-
-      final int totalAssignments =
-          publishedAssignments.length;
-
-      if (totalAssignments == 0) {
-        return _emptyAssignmentProgress();
-      }
-
-      final Set<String> assignmentIds =
-          publishedAssignments
-              .map(
-                (document) =>
-                    document.id,
-              )
-              .toSet();
-
-      final QuerySnapshot<Map<String, dynamic>>
-          submissionSnapshot =
-          await _firestore
-              .collection('submissions')
-              .where(
-                'studentId',
-                isEqualTo: user.uid,
-              )
-              .get();
-
-      final Set<String>
-          submittedIds =
-          {};
-
-      final Set<String>
-          gradedIds =
-          {};
-
-      for (final document
-          in submissionSnapshot.docs) {
-        final Map<String, dynamic> data =
-            document.data();
-
-        final String submissionCourseId =
-            (data['courseId'] ?? '')
-                .toString()
-                .trim();
-
-        final String assignmentId =
-            (data['assignmentId'] ?? '')
-                .toString()
-                .trim();
-
-        if (submissionCourseId !=
-                cleanCourseId ||
-            !assignmentIds.contains(
-              assignmentId,
-            )) {
-          continue;
-        }
-
-        final String status =
-            (data['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
-
-        final bool completed =
-            status == 'submitted' ||
-                status ==
-                    'under_review' ||
-                status == 'late' ||
-                status == 'graded';
-
-        if (completed) {
-          submittedIds.add(
-            assignmentId,
-          );
-        }
-
-        if (status == 'graded') {
-          gradedIds.add(
-            assignmentId,
-          );
-        }
-      }
-
-      final int submittedAssignments =
-          submittedIds.length;
-
-      final int gradedAssignments =
-          gradedIds.length;
-
-      final int remainingAssignments =
-          totalAssignments -
-              submittedAssignments;
-
-      final double progress =
-          (submittedAssignments /
-                  totalAssignments)
-              .clamp(
-                0.0,
-                1.0,
-              )
-              .toDouble();
-
-      return {
-        'totalAssignments':
-            totalAssignments,
-        'submittedAssignments':
-            submittedAssignments,
-        'gradedAssignments':
-            gradedAssignments,
-        'remainingAssignments':
-            remainingAssignments,
-        'progress':
-            progress,
-      };
-    } on ProgressServiceException {
-      rethrow;
-    } on FirebaseException catch (e) {
-      throw ProgressServiceException(
-        e.message ??
-            'Unable to calculate assignment progress.',
-      );
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to calculate assignment progress.',
-      );
-    }
-  }
-
-  Map<String, dynamic>
-      _emptyAssignmentProgress() {
-    return {
-      'totalAssignments': 0,
-      'submittedAssignments': 0,
-      'gradedAssignments': 0,
-      'remainingAssignments': 0,
-      'progress': 0.0,
-    };
-  }
-
-  // ============================================================
-  // COURSE QUIZ PROGRESS
-  // ============================================================
-
-  Future<Map<String, dynamic>>
-      getCourseQuizProgress({
-    required String courseId,
-  }) async {
-    try {
-      final User user =
-          await _requireCurrentStudent();
-
-      final String cleanCourseId =
-          courseId.trim();
-
-      if (cleanCourseId.isEmpty) {
-        return _emptyQuizProgress();
-      }
-
-      final QuerySnapshot<Map<String, dynamic>>
-          quizSnapshot =
-          await _firestore
-              .collection('quizzes')
-              .where(
-                'courseId',
-                isEqualTo: cleanCourseId,
-              )
-              .get();
-
-      final List<
-              QueryDocumentSnapshot<
-                  Map<String, dynamic>>>
-          publishedQuizzes =
-          quizSnapshot.docs.where(
-        (document) {
-          return (document
-                      .data()['status'] ??
-                  '')
-              .toString()
-              .trim()
-              .toLowerCase() ==
-              'published';
-        },
-      ).toList();
-
-      final int totalQuizzes =
-          publishedQuizzes.length;
-
-      if (totalQuizzes == 0) {
-        return _emptyQuizProgress();
-      }
-
-      final Map<String, Map<String, dynamic>>
-          quizById = {
-        for (final document
-            in publishedQuizzes)
-          document.id:
-              document.data(),
-      };
-
-      final QuerySnapshot<Map<String, dynamic>>
-          attemptSnapshot =
-          await _firestore
-              .collection('quiz_attempts')
-              .where(
-                'studentId',
-                isEqualTo: user.uid,
-              )
-              .get();
-
-      final Set<String>
-          completedQuizIds =
-          {};
-
-      final Set<String>
-          inProgressQuizIds =
-          {};
-
-      final Set<String>
-          passedQuizIds =
-          {};
-
-      int earnedPoints = 0;
-      int availablePoints = 0;
-
-      for (final document
-          in attemptSnapshot.docs) {
-        final Map<String, dynamic> attempt =
-            document.data();
-
-        final String attemptCourseId =
-            (attempt['courseId'] ?? '')
-                .toString()
-                .trim();
-
-        final String quizId =
-            (attempt['quizId'] ?? '')
-                .toString()
-                .trim();
-
-        if (attemptCourseId !=
-                cleanCourseId ||
-            !quizById.containsKey(
-              quizId,
-            )) {
-          continue;
-        }
-
-        final String status =
-            (attempt['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
-
-        if (status == 'in_progress') {
-          if (!completedQuizIds.contains(
-            quizId,
-          )) {
-            inProgressQuizIds.add(
-              quizId,
-            );
-          }
-
-          continue;
-        }
-
-        if (status != 'submitted') {
-          continue;
-        }
-
-        if (completedQuizIds.contains(
-          quizId,
-        )) {
-          continue;
-        }
-
-        completedQuizIds.add(
-          quizId,
-        );
-
-        inProgressQuizIds.remove(
-          quizId,
-        );
-
-        final Map<String, dynamic> quiz =
-            quizById[quizId] ??
-                {};
-
-        final int score =
-            attempt['score'] is num
-                ? (attempt['score'] as num)
-                    .toInt()
-                : 0;
-
-        final int totalPoints =
-            attempt['totalPoints']
-                    is num
-                ? (attempt['totalPoints']
-                        as num)
-                    .toInt()
-                : quiz['totalPoints']
-                        is num
-                    ? (quiz['totalPoints']
-                            as num)
-                        .toInt()
-                    : 0;
-
-        final int passingScore =
-            quiz['passingScore'] is num
-                ? (quiz['passingScore']
-                        as num)
-                    .toInt()
-                : 0;
-
-        earnedPoints +=
-            score;
-
-        if (totalPoints > 0) {
-          availablePoints +=
-              totalPoints;
-        }
-
-        if (score >= passingScore) {
-          passedQuizIds.add(
-            quizId,
-          );
-        }
-      }
-
-      final int completedQuizzes =
-          completedQuizIds.length;
-
-      final int inProgressQuizzes =
-          inProgressQuizIds.length;
-
-      final int passedQuizzes =
-          passedQuizIds.length;
-
-      final int remainingQuizzes =
-          totalQuizzes -
-              completedQuizzes;
-
-      final double progress =
-          (completedQuizzes /
-                  totalQuizzes)
-              .clamp(
-                0.0,
-                1.0,
-              )
-              .toDouble();
-
-      final double scorePercentage =
-          availablePoints == 0
-              ? 0.0
-              : (earnedPoints /
-                      availablePoints)
-                  .clamp(
-                    0.0,
-                    1.0,
-                  )
-                  .toDouble();
-
-      return {
-        'totalQuizzes':
-            totalQuizzes,
-        'completedQuizzes':
-            completedQuizzes,
-        'inProgressQuizzes':
-            inProgressQuizzes,
-        'passedQuizzes':
-            passedQuizzes,
-        'remainingQuizzes':
-            remainingQuizzes,
-        'earnedPoints':
-            earnedPoints,
-        'availablePoints':
-            availablePoints,
-        'scorePercentage':
-            scorePercentage,
-        'progress':
-            progress,
-      };
-    } on ProgressServiceException {
-      rethrow;
-    } on FirebaseException catch (e) {
-      throw ProgressServiceException(
-        e.message ??
-            'Unable to calculate quiz progress.',
-      );
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to calculate quiz progress.',
-      );
-    }
-  }
-
-  Map<String, dynamic>
-      _emptyQuizProgress() {
-    return {
-      'totalQuizzes': 0,
-      'completedQuizzes': 0,
-      'inProgressQuizzes': 0,
-      'passedQuizzes': 0,
-      'remainingQuizzes': 0,
-      'earnedPoints': 0,
-      'availablePoints': 0,
-      'scorePercentage': 0.0,
-      'progress': 0.0,
-    };
-  }
-
-  // ============================================================
-  // COURSE LEARNING PROGRESS
-  // ============================================================
-
-  Future<Map<String, dynamic>>
-      getCourseLearningProgress({
-    required String courseId,
-  }) async {
-    try {
-      final List<Map<String, dynamic>>
-          results =
-          await Future.wait([
-        getCourseModuleProgress(
-          courseId: courseId,
-        ),
-        getCourseAssignmentProgress(
-          courseId: courseId,
-        ),
-        getCourseQuizProgress(
-          courseId: courseId,
-        ),
-      ]);
-
-      final Map<String, dynamic>
-          modules =
-          results[0];
-
-      final Map<String, dynamic>
-          assignments =
-          results[1];
-
-      final Map<String, dynamic>
-          quizzes =
-          results[2];
-
-      final int totalModules =
-          (modules['totalModules']
-                      as num?)
-                  ?.toInt() ??
-              0;
-
-      final int completedModules =
-          (modules['completedModules']
-                      as num?)
-                  ?.toInt() ??
-              0;
-
-      final int totalAssignments =
-          (assignments[
-                      'totalAssignments']
-                  as num?)
-              ?.toInt() ??
-          0;
-
-      final int submittedAssignments =
-          (assignments[
-                      'submittedAssignments']
-                  as num?)
-              ?.toInt() ??
-          0;
-
-      final int totalQuizzes =
-          (quizzes['totalQuizzes']
-                      as num?)
-                  ?.toInt() ??
-              0;
-
-      final int completedQuizzes =
-          (quizzes[
-                      'completedQuizzes']
-                  as num?)
-              ?.toInt() ??
-          0;
-
-      final int totalItems =
-          totalModules +
-              totalAssignments +
-              totalQuizzes;
-
-      final int completedItems =
-          completedModules +
-              submittedAssignments +
-              completedQuizzes;
-
-      final int remainingItems =
-          totalItems -
-              completedItems;
-
-      final double learningProgress =
-          totalItems == 0
-              ? 0.0
-              : (completedItems /
-                      totalItems)
-                  .clamp(
-                    0.0,
-                    1.0,
-                  )
-                  .toDouble();
-
-      return {
-        'moduleProgress':
-            modules['progress'],
-        'totalModules':
-            totalModules,
-        'completedModules':
-            completedModules,
-        'remainingModules':
-            modules[
-                'remainingModules'],
-
-        'assignmentProgress':
-            assignments[
-                'progress'],
-        'totalAssignments':
-            totalAssignments,
-        'submittedAssignments':
-            submittedAssignments,
-        'gradedAssignments':
-            assignments[
-                'gradedAssignments'],
-        'remainingAssignments':
-            assignments[
-                'remainingAssignments'],
-
-        'quizProgress':
-            quizzes['progress'],
-        'totalQuizzes':
-            totalQuizzes,
-        'completedQuizzes':
-            completedQuizzes,
-        'inProgressQuizzes':
-            quizzes[
-                'inProgressQuizzes'],
-        'passedQuizzes':
-            quizzes[
-                'passedQuizzes'],
-        'remainingQuizzes':
-            quizzes[
-                'remainingQuizzes'],
-        'quizEarnedPoints':
-            quizzes[
-                'earnedPoints'],
-        'quizAvailablePoints':
-            quizzes[
-                'availablePoints'],
-        'quizScorePercentage':
-            quizzes[
-                'scorePercentage'],
-
-        'totalItems':
-            totalItems,
-        'completedItems':
-            completedItems,
-        'remainingItems':
-            remainingItems,
-        'learningProgress':
-            learningProgress,
-      };
-    } on ProgressServiceException {
-      rethrow;
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to calculate course learning progress.',
-      );
-    }
-  }
-
-  // ============================================================
-  // ASSIGNMENT ACADEMIC PERFORMANCE
-  //
-  // ONLY graded assignments contribute.
-  // Ungraded submissions are not counted as zero.
-  // ============================================================
-
-  Future<Map<String, dynamic>>
-      getCourseAssignmentPerformance({
-    required String courseId,
-  }) async {
-    try {
-      final User user =
-          await _requireCurrentStudent();
-
-      final String cleanCourseId =
-          courseId.trim();
-
-      if (cleanCourseId.isEmpty) {
-        return _emptyPerformance();
-      }
-
-      final QuerySnapshot<Map<String, dynamic>>
-          assignmentSnapshot =
-          await _firestore
-              .collection('assignments')
-              .where(
-                'courseId',
-                isEqualTo: cleanCourseId,
-              )
-              .get();
-
-      final Map<String, Map<String, dynamic>>
-          publishedAssignments =
-          {};
-
-      for (final document
-          in assignmentSnapshot.docs) {
-        final Map<String, dynamic> data =
-            document.data();
-
-        final String status =
-            (data['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
-
-        if (status == 'published') {
-          publishedAssignments[
-              document.id] = data;
-        }
-      }
-
-      if (publishedAssignments.isEmpty) {
-        return _emptyPerformance();
-      }
-
-      final QuerySnapshot<Map<String, dynamic>>
-          submissionSnapshot =
-          await _firestore
-              .collection('submissions')
-              .where(
-                'studentId',
-                isEqualTo: user.uid,
-              )
-              .get();
-
-      final Set<String>
-          countedAssignments =
-          {};
-
-      int gradedAssignments = 0;
-      int earnedPoints = 0;
-      int availablePoints = 0;
-
-      for (final document
-          in submissionSnapshot.docs) {
-        final Map<String, dynamic> submission =
-            document.data();
-
-        final String submissionCourseId =
-            (submission['courseId'] ?? '')
-                .toString()
-                .trim();
-
-        final String assignmentId =
-            (submission['assignmentId'] ?? '')
-                .toString()
-                .trim();
-
-        if (submissionCourseId !=
-                cleanCourseId ||
-            !publishedAssignments.containsKey(
-              assignmentId,
-            )) {
-          continue;
-        }
-
-        final String status =
-            (submission['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
-
-        if (status != 'graded') {
-          continue;
-        }
-
-        if (countedAssignments.contains(
-          assignmentId,
-        )) {
-          continue;
-        }
-
-        final Map<String, dynamic>
-            assignment =
-            publishedAssignments[
-                    assignmentId] ??
-                {};
-
-        final int maximumPoints =
-            assignment['points'] is num
-                ? (assignment['points']
-                        as num)
-                    .toInt()
-                : 0;
-
-        final int score =
-            submission['score'] is num
-                ? (submission['score']
-                        as num)
-                    .toInt()
-                : 0;
-
-        countedAssignments.add(
-          assignmentId,
-        );
-
-        gradedAssignments++;
-
-        earnedPoints +=
-            score;
-
-        if (maximumPoints > 0) {
-          availablePoints +=
-              maximumPoints;
-        }
-      }
-
-      final double percentage =
-          availablePoints == 0
-              ? 0.0
-              : (earnedPoints /
-                      availablePoints)
-                  .clamp(
-                    0.0,
-                    1.0,
-                  )
-                  .toDouble();
-
-      return {
-        'gradedAssignments':
-            gradedAssignments,
-        'earnedPoints':
-            earnedPoints,
-        'availablePoints':
-            availablePoints,
-        'percentage':
-            percentage,
-        'hasGrades':
-            availablePoints > 0,
-      };
-    } on ProgressServiceException {
-      rethrow;
-    } on FirebaseException catch (e) {
-      throw ProgressServiceException(
-        e.message ??
-            'Unable to calculate assignment performance.',
-      );
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to calculate assignment performance.',
-      );
-    }
-  }
-
-  Map<String, dynamic>
-      _emptyPerformance() {
-    return {
-      'gradedAssignments': 0,
-      'earnedPoints': 0,
-      'availablePoints': 0,
-      'percentage': 0.0,
-      'hasGrades': false,
-    };
-  }
-
-  // ============================================================
-  // QUIZ ACADEMIC PERFORMANCE
-  // ============================================================
-
-  Future<Map<String, dynamic>>
-      getCourseQuizPerformance({
-    required String courseId,
-  }) async {
-    try {
-      final Map<String, dynamic> quiz =
-          await getCourseQuizProgress(
-        courseId: courseId,
-      );
-
-      final int earned =
-          (quiz['earnedPoints']
-                      as num?)
-                  ?.toInt() ??
-              0;
-
-      final int available =
-          (quiz['availablePoints']
-                      as num?)
-                  ?.toInt() ??
-              0;
-
-      return {
-        'completedQuizzes':
-            quiz[
-                'completedQuizzes'],
-        'passedQuizzes':
-            quiz[
-                'passedQuizzes'],
-        'earnedPoints':
-            earned,
-        'availablePoints':
-            available,
-        'percentage':
-            quiz[
-                'scorePercentage'],
-        'hasGrades':
-            available > 0,
-      };
-    } on ProgressServiceException {
-      rethrow;
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to calculate quiz performance.',
-      );
-    }
-  }
-
-  // ============================================================
-  // COMBINED COURSE ACADEMIC PERFORMANCE
-  // ============================================================
-
-  Future<Map<String, dynamic>>
-      getCourseAcademicPerformance({
-    required String courseId,
-  }) async {
-    try {
-      final List<Map<String, dynamic>>
-          results =
-          await Future.wait([
-        getCourseAssignmentPerformance(
-          courseId: courseId,
-        ),
-        getCourseQuizPerformance(
-          courseId: courseId,
-        ),
-      ]);
-
-      final Map<String, dynamic>
-          assignment =
-          results[0];
-
-      final Map<String, dynamic> quiz =
-          results[1];
-
-      final int assignmentEarned =
-          (assignment[
-                      'earnedPoints']
-                  as num?)
-              ?.toInt() ??
-          0;
-
-      final int assignmentAvailable =
-          (assignment[
-                      'availablePoints']
-                  as num?)
-              ?.toInt() ??
-          0;
-
-      final int quizEarned =
-          (quiz['earnedPoints']
-                      as num?)
-                  ?.toInt() ??
-              0;
-
-      final int quizAvailable =
-          (quiz['availablePoints']
-                      as num?)
-                  ?.toInt() ??
-              0;
-
-      final int earnedPoints =
-          assignmentEarned +
-              quizEarned;
-
-      final int availablePoints =
-          assignmentAvailable +
-              quizAvailable;
-
-      final double percentage =
-          availablePoints == 0
-              ? 0.0
-              : (earnedPoints /
-                      availablePoints)
-                  .clamp(
-                    0.0,
-                    1.0,
-                  )
-                  .toDouble();
-
-      return {
-        'gradedAssignments':
-            assignment[
-                'gradedAssignments'],
-
-        'assignmentEarnedPoints':
-            assignmentEarned,
-
-        'assignmentAvailablePoints':
-            assignmentAvailable,
-
-        'assignmentPercentage':
-            assignment[
-                'percentage'],
-
-        'completedQuizzes':
-            quiz[
-                'completedQuizzes'],
-
-        'passedQuizzes':
-            quiz[
-                'passedQuizzes'],
-
-        'quizEarnedPoints':
-            quizEarned,
-
-        'quizAvailablePoints':
-            quizAvailable,
-
-        'quizPercentage':
-            quiz['percentage'],
-
-        'earnedPoints':
-            earnedPoints,
-
-        'availablePoints':
-            availablePoints,
-
-        'percentage':
-            percentage,
-
-        'hasGrades':
-            availablePoints > 0,
-      };
-    } on ProgressServiceException {
-      rethrow;
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to calculate academic performance.',
-      );
-    }
-  }
-
-  // ============================================================
-  // STUDENT ACTIVE COURSES
-  // ============================================================
-
-  Future<List<Map<String, dynamic>>>
-      getStudentCourses() async {
-    try {
-      final User user =
-          await _requireCurrentStudent();
-
-      final QuerySnapshot<Map<String, dynamic>>
-          enrollmentSnapshot =
-          await _firestore
-              .collection('enrollments')
-              .where(
-                'studentId',
-                isEqualTo: user.uid,
-              )
-              .get();
-
-      final List<Map<String, dynamic>> courses =
-          [];
-
-      final Set<String> addedCourseIds =
-          {};
-
-      for (final enrollment
-          in enrollmentSnapshot.docs) {
-        final Map<String, dynamic> enrollmentData =
-            enrollment.data();
-
-        final String enrollmentStatus =
-            (enrollmentData['status'] ??
-                    '')
-                .toString()
-                .trim()
-                .toLowerCase();
-
-        if (enrollmentStatus != 'active') {
-          continue;
-        }
-
-        final String courseId =
-            (enrollmentData['courseId'] ??
-                    '')
-                .toString()
-                .trim();
-
-        if (courseId.isEmpty ||
-            addedCourseIds.contains(
-              courseId,
-            )) {
-          continue;
-        }
-
-        final DocumentSnapshot<Map<String, dynamic>>
-            courseDocument =
-            await _firestore
-                .collection('courses')
-                .doc(courseId)
-                .get();
-
-        if (!courseDocument.exists ||
-            courseDocument.data() == null) {
-          continue;
-        }
-
-        final Map<String, dynamic> course =
-            courseDocument.data()!;
-
-        final String courseStatus =
-            (course['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
-
-        if (courseStatus != 'active') {
-          continue;
-        }
-
-        final Map<String, dynamic>
-            learning =
-            await getCourseLearningProgress(
-          courseId: courseId,
-        );
-
-        addedCourseIds.add(
-          courseId,
-        );
-
-        courses.add({
-          ...course,
-
-          'id':
-              courseDocument.id,
-
-          'courseId':
-              courseDocument.id,
-
-          ...learning,
-        });
-      }
-
-      courses.sort(
-        (a, b) {
-          return (a['code'] ?? '')
-              .toString()
-              .toLowerCase()
-              .compareTo(
-                (b['code'] ?? '')
-                    .toString()
-                    .toLowerCase(),
-              );
-        },
-      );
-
-      return courses;
-    } on ProgressServiceException {
-      rethrow;
-    } on FirebaseException catch (e) {
-      throw ProgressServiceException(
-        e.message ??
-            'Unable to load student progress.',
-      );
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to load student progress.',
-      );
-    }
-  }
-
-  // ============================================================
-  // OVERALL MODULE PROGRESS
-  // ============================================================
-
-  Future<Map<String, dynamic>>
-      getOverallModuleProgress() async {
-    try {
-      final List<Map<String, dynamic>>
-          courses =
-          await getStudentCourses();
-
-      int totalModules = 0;
-      int completedModules = 0;
-
-      for (final course in courses) {
-        totalModules +=
-            (course['totalModules']
-                        as num?)
-                    ?.toInt() ??
-                0;
-
-        completedModules +=
-            (course['completedModules']
-                        as num?)
-                    ?.toInt() ??
-                0;
-      }
-
-      final int remainingModules =
-          totalModules -
-              completedModules;
-
-      final double progress =
-          totalModules == 0
-              ? 0.0
-              : (completedModules /
-                      totalModules)
-                  .clamp(
-                    0.0,
-                    1.0,
-                  )
-                  .toDouble();
-
-      return {
-        'courseCount':
-            courses.length,
-        'totalModules':
-            totalModules,
-        'completedModules':
-            completedModules,
-        'remainingModules':
-            remainingModules,
-        'progress':
-            progress,
-        'courses':
-            courses,
-      };
-    } on ProgressServiceException {
-      rethrow;
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to calculate overall module progress.',
-      );
-    }
-  }
-
-  // ============================================================
-  // OVERALL LEARNING PROGRESS
-  // ============================================================
-
-  Future<Map<String, dynamic>>
-      getOverallLearningProgress() async {
-    try {
-      final List<Map<String, dynamic>>
-          courses =
-          await getStudentCourses();
-
-      int totalModules = 0;
-      int completedModules = 0;
-
-      int totalAssignments = 0;
-      int submittedAssignments = 0;
-      int gradedAssignments = 0;
-
-      int totalQuizzes = 0;
-      int completedQuizzes = 0;
-      int passedQuizzes = 0;
-      int inProgressQuizzes = 0;
-
-      int totalItems = 0;
-      int completedItems = 0;
-
-      for (final course in courses) {
-        totalModules +=
-            (course['totalModules']
-                        as num?)
-                    ?.toInt() ??
-                0;
-
-        completedModules +=
-            (course['completedModules']
-                        as num?)
-                    ?.toInt() ??
-                0;
-
-        totalAssignments +=
-            (course['totalAssignments']
-                        as num?)
-                    ?.toInt() ??
-                0;
-
-        submittedAssignments +=
-            (course['submittedAssignments']
-                        as num?)
-                    ?.toInt() ??
-                0;
-
-        gradedAssignments +=
-            (course['gradedAssignments']
-                        as num?)
-                    ?.toInt() ??
-                0;
-
-        totalQuizzes +=
-            (course['totalQuizzes']
-                        as num?)
-                    ?.toInt() ??
-                0;
-
-        completedQuizzes +=
-            (course['completedQuizzes']
-                        as num?)
-                    ?.toInt() ??
-                0;
-
-        passedQuizzes +=
-            (course['passedQuizzes']
-                        as num?)
-                    ?.toInt() ??
-                0;
-
-        inProgressQuizzes +=
-            (course['inProgressQuizzes']
-                        as num?)
-                    ?.toInt() ??
-                0;
-
-        totalItems +=
-            (course['totalItems']
-                        as num?)
-                    ?.toInt() ??
-                0;
-
-        completedItems +=
-            (course['completedItems']
-                        as num?)
-                    ?.toInt() ??
-                0;
-      }
-
-      final int remainingModules =
-          totalModules -
-              completedModules;
-
-      final int remainingAssignments =
-          totalAssignments -
-              submittedAssignments;
-
-      final int remainingQuizzes =
-          totalQuizzes -
-              completedQuizzes;
-
-      final int remainingItems =
-          totalItems -
-              completedItems;
-
-      final double moduleProgress =
-          totalModules == 0
-              ? 0.0
-              : completedModules /
-                  totalModules;
-
-      final double assignmentProgress =
-          totalAssignments == 0
-              ? 0.0
-              : submittedAssignments /
-                  totalAssignments;
-
-      final double quizProgress =
-          totalQuizzes == 0
-              ? 0.0
-              : completedQuizzes /
-                  totalQuizzes;
-
-      final double learningProgress =
-          totalItems == 0
-              ? 0.0
-              : completedItems /
-                  totalItems;
-
-      return {
-        'courseCount':
-            courses.length,
-
-        'totalModules':
-            totalModules,
-        'completedModules':
-            completedModules,
-        'remainingModules':
-            remainingModules,
-        'moduleProgress':
-            moduleProgress,
-
-        'totalAssignments':
-            totalAssignments,
-        'submittedAssignments':
-            submittedAssignments,
-        'gradedAssignments':
-            gradedAssignments,
-        'remainingAssignments':
-            remainingAssignments,
-        'assignmentProgress':
-            assignmentProgress,
-
-        'totalQuizzes':
-            totalQuizzes,
-        'completedQuizzes':
-            completedQuizzes,
-        'passedQuizzes':
-            passedQuizzes,
-        'inProgressQuizzes':
-            inProgressQuizzes,
-        'remainingQuizzes':
-            remainingQuizzes,
-        'quizProgress':
-            quizProgress,
-
-        'totalItems':
-            totalItems,
-        'completedItems':
-            completedItems,
-        'remainingItems':
-            remainingItems,
-        'learningProgress':
-            learningProgress,
-
-        'courses':
-            courses,
-      };
-    } on ProgressServiceException {
-      rethrow;
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to calculate learning progress.',
-      );
-    }
-  }
-
-  // ============================================================
-  // OVERALL ACADEMIC PERFORMANCE
-  // ============================================================
-
-  Future<Map<String, dynamic>>
-      getOverallAcademicPerformance() async {
-    try {
-      final List<Map<String, dynamic>>
-          courses =
-          await getStudentCourses();
-
-      final List<Map<String, dynamic>>
-          results =
-          [];
-
-      int assignmentEarned = 0;
-      int assignmentAvailable = 0;
-
-      int quizEarned = 0;
-      int quizAvailable = 0;
-
-      int gradedAssignments = 0;
-      int completedQuizzes = 0;
-      int passedQuizzes = 0;
-
-      for (final course in courses) {
-        final String courseId =
-            (course['courseId'] ??
-                    course['id'] ??
-                    '')
-                .toString();
-
-        if (courseId.isEmpty) {
-          continue;
-        }
-
-        final Map<String, dynamic>
-            performance =
-            await getCourseAcademicPerformance(
-          courseId: courseId,
-        );
-
-        assignmentEarned +=
-            (performance[
-                        'assignmentEarnedPoints']
-                    as num?)
-                ?.toInt() ??
-            0;
-
-        assignmentAvailable +=
-            (performance[
-                        'assignmentAvailablePoints']
-                    as num?)
-                ?.toInt() ??
-            0;
-
-        quizEarned +=
-            (performance[
-                        'quizEarnedPoints']
-                    as num?)
-                ?.toInt() ??
-            0;
-
-        quizAvailable +=
-            (performance[
-                        'quizAvailablePoints']
-                    as num?)
-                ?.toInt() ??
-            0;
-
-        gradedAssignments +=
-            (performance[
-                        'gradedAssignments']
-                    as num?)
-                ?.toInt() ??
-            0;
-
-        completedQuizzes +=
-            (performance[
-                        'completedQuizzes']
-                    as num?)
-                ?.toInt() ??
-            0;
-
-        passedQuizzes +=
-            (performance[
-                        'passedQuizzes']
-                    as num?)
-                ?.toInt() ??
-            0;
-
-        results.add({
-          ...course,
-
-          'academicPerformance':
-              performance[
-                  'percentage'],
-
-          'academicEarnedPoints':
-              performance[
-                  'earnedPoints'],
-
-          'academicAvailablePoints':
-              performance[
-                  'availablePoints'],
-
-          'hasGrades':
-              performance[
-                  'hasGrades'],
-
-          'assignmentPerformance':
-              performance[
-                  'assignmentPercentage'],
-
-          'quizPerformance':
-              performance[
-                  'quizPercentage'],
-        });
-      }
-
-      final int earnedPoints =
-          assignmentEarned +
-              quizEarned;
-
-      final int availablePoints =
-          assignmentAvailable +
-              quizAvailable;
-
-      final double assignmentPercentage =
-          assignmentAvailable == 0
-              ? 0.0
-              : assignmentEarned /
-                  assignmentAvailable;
-
-      final double quizPercentage =
-          quizAvailable == 0
-              ? 0.0
-              : quizEarned /
-                  quizAvailable;
-
-      final double percentage =
-          availablePoints == 0
-              ? 0.0
-              : earnedPoints /
-                  availablePoints;
-
-      return {
-        'courseCount':
-            courses.length,
-
-        'gradedAssignments':
-            gradedAssignments,
-
-        'assignmentEarnedPoints':
-            assignmentEarned,
-
-        'assignmentAvailablePoints':
-            assignmentAvailable,
-
-        'assignmentPercentage':
-            assignmentPercentage,
-
-        'completedQuizzes':
-            completedQuizzes,
-
-        'passedQuizzes':
-            passedQuizzes,
-
-        'quizEarnedPoints':
-            quizEarned,
-
-        'quizAvailablePoints':
-            quizAvailable,
-
-        'quizPercentage':
-            quizPercentage,
-
-        'earnedPoints':
-            earnedPoints,
-
-        'availablePoints':
-            availablePoints,
-
-        'percentage':
-            percentage,
-
-        'hasGrades':
-            availablePoints > 0,
-
-        'courses':
-            results,
-      };
-    } on ProgressServiceException {
-      rethrow;
-    } on FirebaseException catch (e) {
-      throw ProgressServiceException(
-        e.message ??
-            'Unable to calculate academic performance.',
-      );
-    } catch (_) {
-      throw ProgressServiceException(
-        'Unable to calculate academic performance.',
-      );
-    }
   }
 }
 
-// ============================================================
-// CUSTOM EXCEPTION
-// ============================================================
+class _ProgressCalculator {
+  static String text(dynamic value) =>
+      (value ?? '').toString().trim();
 
-class ProgressServiceException implements Exception {
-  final String message;
+  static String lower(dynamic value) =>
+      text(value).toLowerCase();
 
+  static double ratio(
+    num completed,
+    num total,
+  ) {
+    if (total <= 0) {
+      return 0;
+    }
+
+    return (completed / total)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+
+  static int _time(
+    ProgressRow row,
+  ) {
+    for (final key in [
+      'gradedAt',
+      'submittedAt',
+      'updatedAt',
+    ]) {
+      final value = row[key];
+
+      if (value is DateTime) {
+        return value.millisecondsSinceEpoch;
+      }
+
+      if (value is Timestamp) {
+        return value
+            .millisecondsSinceEpoch;
+      }
+
+      if (value is int) {
+        return value;
+      }
+    }
+
+    return 0;
+  }
+
+  static num? _total(
+    ProgressRow result,
+    ProgressRow task,
+  ) {
+    final value =
+        result['totalPoints'] ??
+        task['totalPoints'] ??
+        task['points'];
+
+    if (value is num &&
+        value.isFinite &&
+        value > 0) {
+      return value;
+    }
+
+    return null;
+  }
+
+  static bool _isScored(
+    ProgressRow result,
+    ProgressRow task,
+    String source,
+  ) {
+    final status = lower(
+      result['status'],
+    );
+
+    final validStatus =
+        status == 'graded' ||
+        (
+          source == 'quiz' &&
+          status == 'submitted'
+        );
+
+    final score =
+        result['score'];
+
+    final total = _total(
+      result,
+      task,
+    );
+
+    return validStatus &&
+        score is num &&
+        score.isFinite &&
+        total != null &&
+        score >= 0 &&
+        score <= total;
+  }
+
+  static ProgressRow course({
+    required ProgressRow course,
+    required List<ProgressRow> modules,
+    required List<ProgressRow> assessments,
+    required List<ProgressRow> assignments,
+    required List<ProgressRow> quizzes,
+    required List<ProgressRow>
+        assessmentSubmissions,
+    required List<ProgressRow>
+        assignmentSubmissions,
+    required List<ProgressRow>
+        quizAttempts,
+  }) {
+    final courseId = text(
+      course['id'],
+    );
+
+    final publishedModules =
+        modules.where(
+      (module) {
+        return text(module['courseId']) ==
+                courseId &&
+            lower(module['status']) ==
+                'published';
+      },
+    ).toList();
+
+    final moduleIds = publishedModules
+        .map(
+          (module) =>
+              text(module['id']),
+        )
+        .toSet();
+
+    final modernAssessmentIds =
+        assessments
+            .map(
+              (assessment) =>
+                  text(assessment['id']),
+            )
+            .toSet();
+
+    final tasks =
+        <ProgressRow>[];
+
+    num quizEarned = 0;
+    num quizAvailable = 0;
+
+    num assignmentEarned = 0;
+    num assignmentAvailable = 0;
+
+    int gradedQuizzes = 0;
+    int gradedAssignments = 0;
+    int passedQuizzes = 0;
+
+    void addTasks(
+      List<ProgressRow> definitions,
+      List<ProgressRow> results,
+      String source,
+      String parentKey,
+    ) {
+      for (final task
+          in definitions) {
+        if (text(task['courseId']) !=
+            courseId) {
+          continue;
+        }
+
+        // Avoid counting a legacy task twice when
+        // it is linked to a modern assessment.
+        if (source != 'assessment' &&
+            modernAssessmentIds.contains(
+              text(task['assessmentId']),
+            )) {
+          continue;
+        }
+
+        final taskStatus =
+            lower(task['status']);
+
+        final available =
+            taskStatus == 'published' ||
+            (
+              source == 'assessment' &&
+              taskStatus == 'closed'
+            );
+
+        if (!available) {
+          continue;
+        }
+
+        final taskId =
+            text(task['id']);
+
+        final bool isQuiz =
+            source == 'quiz' ||
+            lower(
+                  task['assessmentType'],
+                ) ==
+                'quiz';
+
+        final matches = results.where(
+          (result) {
+            return text(
+                      result['courseId'],
+                    ) ==
+                    courseId &&
+                text(result[parentKey]) ==
+                    taskId;
+          },
+        ).toList();
+
+        matches.sort(
+          (a, b) {
+            final timeOrder =
+                _time(b).compareTo(
+              _time(a),
+            );
+
+            if (timeOrder != 0) {
+              return timeOrder;
+            }
+
+            return text(a['id'])
+                .compareTo(
+              text(b['id']),
+            );
+          },
+        );
+
+        ProgressRow? grade;
+
+        for (final result
+            in matches) {
+          if (_isScored(
+            result,
+            task,
+            source,
+          )) {
+            grade = result;
+            break;
+          }
+        }
+
+        if (grade != null) {
+          final score =
+              grade['score'] as num;
+
+          final total = _total(
+            grade,
+            task,
+          )!;
+
+          if (isQuiz) {
+            quizEarned += score;
+            quizAvailable += total;
+            gradedQuizzes++;
+
+            final passingScore =
+                task['passingScore'];
+
+            if (passingScore is! num ||
+                score >= passingScore) {
+              passedQuizzes++;
+            }
+          } else {
+            assignmentEarned +=
+                score;
+
+            assignmentAvailable +=
+                total;
+
+            gradedAssignments++;
+          }
+        }
+
+        final moduleId =
+            text(task['moduleId']);
+
+        // A task in an unpublished module is not
+        // included in learning progress.
+        if (moduleId.isNotEmpty &&
+            !moduleIds.contains(
+              moduleId,
+            )) {
+          continue;
+        }
+
+        final submittedAssignment =
+            source == 'assignment' &&
+            matches.any(
+              (result) {
+                final status = lower(
+                  result['status'],
+                );
+
+                final hasWork =
+                    text(
+                          result[
+                              'answerText'],
+                        ).isNotEmpty ||
+                    text(
+                          result[
+                              'fileUrl'],
+                        ).isNotEmpty;
+
+                return [
+                      'submitted',
+                      'graded',
+                    ].contains(status) &&
+                    result['submittedAt'] !=
+                        null &&
+                    hasWork;
+              },
+            );
+
+        // External links cannot be independently
+        // verified without an external backend.
+        // The submission record is the completion
+        // signal available to the app.
+        final submittedExternal =
+            source == 'assessment' &&
+            lower(task['deliveryType']) !=
+                'ai_generated' &&
+            matches.any(
+              (result) {
+                final status = lower(
+                  result['status'],
+                );
+
+                return [
+                      'submitted',
+                      'graded',
+                    ].contains(status) &&
+                    result['submittedAt'] !=
+                        null;
+              },
+            );
+
+        final inProgress = matches.any(
+          (result) {
+            return lower(
+                  result['status'],
+                ) ==
+                'in_progress';
+          },
+        );
+
+        tasks.add({
+          'id': '$source:$taskId',
+          'title': text(
+            task['title'],
+          ),
+          'moduleId': moduleId,
+          'isQuiz': isQuiz,
+          'completed':
+              grade != null ||
+              submittedAssignment ||
+              submittedExternal,
+          'inProgress': inProgress,
+          'graded': grade != null,
+        });
+      }
+    }
+
+    addTasks(
+      assessments,
+      assessmentSubmissions,
+      'assessment',
+      'assessmentId',
+    );
+
+    addTasks(
+      assignments,
+      assignmentSubmissions,
+      'assignment',
+      'assignmentId',
+    );
+
+    addTasks(
+      quizzes,
+      quizAttempts,
+      'quiz',
+      'quizId',
+    );
+
+    final moduleReports =
+        publishedModules.map(
+      (module) {
+        final moduleId =
+            text(module['id']);
+
+        final moduleTasks =
+            tasks.where(
+          (task) =>
+              text(task['moduleId']) ==
+              moduleId,
+        ).toList();
+
+        final completedTasks =
+            moduleTasks.where(
+          (task) =>
+              task['completed'] == true,
+        ).length;
+
+        return <String, dynamic>{
+          ...module,
+          'moduleId': moduleId,
+          'totalTasks':
+              moduleTasks.length,
+          'completedTasks':
+              completedTasks,
+          'taskProgress': ratio(
+            completedTasks,
+            moduleTasks.length,
+          ),
+
+          // Empty modules stay incomplete.
+          'completed':
+              moduleTasks.isNotEmpty &&
+              completedTasks ==
+                  moduleTasks.length,
+        };
+      },
+    ).toList();
+
+    moduleReports.sort(
+      (a, b) {
+        final orderA =
+            (a['order'] as num?) ?? 0;
+
+        final orderB =
+            (b['order'] as num?) ?? 0;
+
+        return orderA.compareTo(
+          orderB,
+        );
+      },
+    );
+
+    final completedModules =
+        moduleReports.where(
+      (module) =>
+          module['completed'] == true,
+    ).length;
+
+    final quizTasks =
+        tasks.where(
+      (task) =>
+          task['isQuiz'] == true,
+    ).toList();
+
+    final assignmentTasks =
+        tasks.where(
+      (task) =>
+          task['isQuiz'] != true,
+    ).toList();
+
+    final completedQuizzes =
+        quizTasks.where(
+      (task) =>
+          task['completed'] == true,
+    ).length;
+
+    final inProgressQuizzes =
+        quizTasks.where(
+      (task) =>
+          task['completed'] != true &&
+          task['inProgress'] == true,
+    ).length;
+
+    final completedAssignments =
+        assignmentTasks.where(
+      (task) =>
+          task['completed'] == true,
+    ).length;
+
+    final completedTasks =
+        tasks.where(
+      (task) =>
+          task['completed'] == true,
+    ).length;
+
+    final earnedPoints =
+        quizEarned +
+        assignmentEarned;
+
+    final availablePoints =
+        quizAvailable +
+        assignmentAvailable;
+
+    return {
+      ...course,
+      'courseId': courseId,
+      'modules': moduleReports,
+      'tasks': tasks,
+
+      'totalModules':
+          moduleReports.length,
+      'completedModules':
+          completedModules,
+      'remainingModules':
+          moduleReports.length -
+          completedModules,
+      'moduleProgress': ratio(
+        completedModules,
+        moduleReports.length,
+      ),
+      'progress': ratio(
+        completedModules,
+        moduleReports.length,
+      ),
+
+      'totalItems': tasks.length,
+      'completedItems':
+          completedTasks,
+      'remainingItems':
+          tasks.length -
+          completedTasks,
+      'learningProgress': ratio(
+        completedTasks,
+        tasks.length,
+      ),
+
+      'totalQuizzes':
+          quizTasks.length,
+      'completedQuizzes':
+          completedQuizzes,
+      'inProgressQuizzes':
+          inProgressQuizzes,
+      'passedQuizzes':
+          passedQuizzes,
+      'remainingQuizzes':
+          quizTasks.length -
+          completedQuizzes,
+      'quizProgress': ratio(
+        completedQuizzes,
+        quizTasks.length,
+      ),
+
+      'totalAssignments':
+          assignmentTasks.length,
+      'submittedAssignments':
+          completedAssignments,
+      'remainingAssignments':
+          assignmentTasks.length -
+          completedAssignments,
+      'assignmentProgress': ratio(
+        completedAssignments,
+        assignmentTasks.length,
+      ),
+
+      'gradedAssignments':
+          gradedAssignments,
+      'gradedQuizzes':
+          gradedQuizzes,
+      'gradedItems':
+          gradedAssignments +
+          gradedQuizzes,
+
+      'quizEarnedPoints':
+          quizEarned,
+      'quizAvailablePoints':
+          quizAvailable,
+      'quizPercentage': ratio(
+        quizEarned,
+        quizAvailable,
+      ),
+
+      'assignmentEarnedPoints':
+          assignmentEarned,
+      'assignmentAvailablePoints':
+          assignmentAvailable,
+      'assignmentPercentage': ratio(
+        assignmentEarned,
+        assignmentAvailable,
+      ),
+
+      'earnedPoints':
+          earnedPoints,
+      'availablePoints':
+          availablePoints,
+      'percentage': ratio(
+        earnedPoints,
+        availablePoints,
+      ),
+      'hasGrades':
+          availablePoints > 0,
+
+      'academicPerformance': ratio(
+        earnedPoints,
+        availablePoints,
+      ),
+      'academicEarnedPoints':
+          earnedPoints,
+      'academicAvailablePoints':
+          availablePoints,
+    };
+  }
+
+  static ProgressRow overall(
+    List<ProgressRow> courses,
+  ) {
+    num sum(String key) {
+      return courses.fold<num>(
+        0,
+        (total, course) {
+          return total +
+              (
+                (course[key] as num?) ??
+                0
+              );
+        },
+      );
+    }
+
+    final result =
+        <String, dynamic>{
+      'courses': courses,
+      'courseCount': courses.length,
+    };
+
+    for (final key in [
+      'totalModules',
+      'completedModules',
+      'remainingModules',
+      'totalItems',
+      'completedItems',
+      'remainingItems',
+      'totalQuizzes',
+      'completedQuizzes',
+      'inProgressQuizzes',
+      'passedQuizzes',
+      'remainingQuizzes',
+      'totalAssignments',
+      'submittedAssignments',
+      'remainingAssignments',
+      'gradedAssignments',
+      'gradedQuizzes',
+      'gradedItems',
+      'quizEarnedPoints',
+      'quizAvailablePoints',
+      'assignmentEarnedPoints',
+      'assignmentAvailablePoints',
+      'earnedPoints',
+      'availablePoints',
+    ]) {
+      result[key] = sum(key);
+    }
+
+    result.addAll({
+      'moduleProgress': ratio(
+        sum('completedModules'),
+        sum('totalModules'),
+      ),
+      'progress': ratio(
+        sum('completedModules'),
+        sum('totalModules'),
+      ),
+      'learningProgress': ratio(
+        sum('completedItems'),
+        sum('totalItems'),
+      ),
+      'quizProgress': ratio(
+        sum('completedQuizzes'),
+        sum('totalQuizzes'),
+      ),
+      'assignmentProgress': ratio(
+        sum('submittedAssignments'),
+        sum('totalAssignments'),
+      ),
+      'quizPercentage': ratio(
+        sum('quizEarnedPoints'),
+        sum('quizAvailablePoints'),
+      ),
+      'assignmentPercentage': ratio(
+        sum('assignmentEarnedPoints'),
+        sum(
+          'assignmentAvailablePoints',
+        ),
+      ),
+      'percentage': ratio(
+        sum('earnedPoints'),
+        sum('availablePoints'),
+      ),
+      'hasGrades':
+          sum('availablePoints') > 0,
+    });
+
+    return result;
+  }
+}
+
+Stream<List<T>> _combineLatest<T>(
+  List<Stream<T>> streams,
+) {
+  if (streams.isEmpty) {
+    return Stream.value(<T>[]);
+  }
+
+  late StreamController<List<T>>
+      controller;
+
+  final subscriptions =
+      <StreamSubscription<T>>[];
+
+  final values =
+      List<T?>.filled(
+    streams.length,
+    null,
+  );
+
+  final ready =
+      List<bool>.filled(
+    streams.length,
+    false,
+  );
+
+  var completedStreams = 0;
+
+  controller =
+      StreamController<List<T>>(
+    onListen: () {
+      for (var index = 0;
+          index < streams.length;
+          index++) {
+        final currentIndex = index;
+
+        subscriptions.add(
+          streams[index].listen(
+            (value) {
+              values[currentIndex] =
+                  value;
+
+              ready[currentIndex] =
+                  true;
+
+              if (ready.every(
+                    (item) => item,
+                  ) &&
+                  !controller.isClosed) {
+                controller.add(
+                  values
+                      .map(
+                        (item) =>
+                            item as T,
+                      )
+                      .toList(),
+                );
+              }
+            },
+            onError: (
+              Object error,
+              StackTrace stackTrace,
+            ) {
+              if (!controller.isClosed) {
+                controller.addError(
+                  error,
+                  stackTrace,
+                );
+              }
+            },
+            onDone: () {
+              completedStreams++;
+
+              if (completedStreams ==
+                      streams.length &&
+                  !controller.isClosed) {
+                controller.close();
+              }
+            },
+          ),
+        );
+      }
+    },
+    onCancel: () async {
+      for (final subscription
+          in subscriptions) {
+        await subscription.cancel();
+      }
+    },
+  );
+
+  return controller.stream;
+}
+
+Stream<T> _switchLatest<T>(
+  Stream<Stream<T>> streams,
+) {
+  late StreamController<T> controller;
+
+  StreamSubscription<Stream<T>>?
+      outerSubscription;
+
+  StreamSubscription<T>?
+      innerSubscription;
+
+  var generation = 0;
+  var outerFinished = false;
+
+  controller = StreamController<T>(
+    onListen: () {
+      outerSubscription =
+          streams.listen(
+        (stream) {
+          final currentGeneration =
+              ++generation;
+
+          unawaited(
+            innerSubscription?.cancel(),
+          );
+
+          innerSubscription =
+              stream.listen(
+            (value) {
+              if (currentGeneration ==
+                      generation &&
+                  !controller.isClosed) {
+                controller.add(value);
+              }
+            },
+            onError: (
+              Object error,
+              StackTrace stackTrace,
+            ) {
+              if (currentGeneration ==
+                      generation &&
+                  !controller.isClosed) {
+                controller.addError(
+                  error,
+                  stackTrace,
+                );
+              }
+            },
+            onDone: () {
+              if (currentGeneration !=
+                  generation) {
+                return;
+              }
+
+              innerSubscription = null;
+
+              if (outerFinished &&
+                  !controller.isClosed) {
+                controller.close();
+              }
+            },
+          );
+        },
+        onError: (
+          Object error,
+          StackTrace stackTrace,
+        ) {
+          if (!controller.isClosed) {
+            controller.addError(
+              error,
+              stackTrace,
+            );
+          }
+        },
+        onDone: () {
+          outerFinished = true;
+
+          if (innerSubscription == null &&
+              !controller.isClosed) {
+            controller.close();
+          }
+        },
+      );
+    },
+    onCancel: () async {
+      generation++;
+
+      await outerSubscription?.cancel();
+      await innerSubscription?.cancel();
+    },
+  );
+
+  return controller.stream;
+}
+
+class ProgressServiceException
+    implements Exception {
   ProgressServiceException(
     this.message,
   );
 
+  final String message;
+
   @override
-  String toString() =>
-      message;
+  String toString() => message;
 }

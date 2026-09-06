@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -5,19 +7,25 @@ import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../config/supabase_config.dart';
+import 'notification_service.dart';
 
 class LearningMaterialService {
   LearningMaterialService({
     FirebaseFirestore? firestore,
     fb.FirebaseAuth? auth,
     sb.SupabaseClient? supabaseClient,
+    NotificationService? notificationService,
   }) : _firestore = firestore ?? FirebaseFirestore.instance,
        _auth = auth ?? fb.FirebaseAuth.instance,
-       _supabase = supabaseClient ?? sb.Supabase.instance.client;
+       _supabase = supabaseClient ?? sb.Supabase.instance.client,
+       _notificationService =
+           notificationService ??
+           NotificationService(firestore: firestore, auth: auth);
 
   final FirebaseFirestore _firestore;
   final fb.FirebaseAuth _auth;
   final sb.SupabaseClient _supabase;
+  final NotificationService _notificationService;
 
   static const String collectionName = 'moduleResources';
 
@@ -597,6 +605,10 @@ class LearningMaterialService {
 
       await resourceReference.set(data);
 
+      if (normalizedStatus == 'published') {
+        await _createPublishedNotificationsBestEffort(resourceId);
+      }
+
       return {...data, 'id': resourceId, 'resourceId': resourceId};
     } catch (e) {
       // --------------------------------------------------------
@@ -710,6 +722,10 @@ class LearningMaterialService {
     };
 
     await document.set(data);
+
+    if (normalizedStatus == 'published') {
+      await _createPublishedNotificationsBestEffort(document.id);
+    }
 
     return {...data, 'id': document.id, 'resourceId': document.id};
   }
@@ -1029,6 +1045,28 @@ class LearningMaterialService {
 
       'updatedAt': FieldValue.serverTimestamp(),
     });
+
+    if (normalizedStatus == 'published') {
+      await _createPublishedNotificationsBestEffort(cleanId);
+    }
+  }
+
+  Future<void> _createPublishedNotificationsBestEffort(
+    String resourceId,
+  ) async {
+    try {
+      await _notificationService.createLearningMaterialNotifications(
+        resourceId: resourceId,
+      );
+    } catch (error, stackTrace) {
+      // The content was saved. Retrying publication delivers missing notices.
+      developer.log(
+        'Content saved, but notification delivery needs a retry.',
+        name: 'LearningMaterialService',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   // ============================================================

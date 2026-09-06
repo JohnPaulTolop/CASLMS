@@ -263,138 +263,18 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
   ) async {
     if (_isBusy) return;
 
-    final codeController =
-        TextEditingController(text: _courseCode(course));
-
-    final titleController =
-        TextEditingController(text: _courseTitle(course));
-
-    final classCodeController = TextEditingController(
-      text: (course['classCode'] ?? '').toString(),
-    );
-
-    String selectedInstructorId =
-        (course['instructorId'] ?? '').toString();
-
-    if (selectedInstructorId.isEmpty &&
-        _instructors.isNotEmpty) {
-      selectedInstructorId =
-          (_instructors.first['uid'] ?? '').toString();
-    }
-
-    final result =
-        await showDialog<Map<String, String>>(
+    final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final bool hasSelectedInstructor = _instructors.any(
-              (item) =>
-                  (item['uid'] ?? '').toString() ==
-                  selectedInstructorId,
-            );
-
-            return AlertDialog(
-              title: const Text(
-                'Edit Course',
-                style: TextStyle(fontWeight: FontWeight.w800),
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: codeController,
-                      textCapitalization:
-                          TextCapitalization.characters,
-                      decoration: const InputDecoration(
-                        labelText: 'Course Code',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: titleController,
-                      decoration: const InputDecoration(
-                        labelText: 'Course Title',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: classCodeController,
-                      textCapitalization:
-                          TextCapitalization.characters,
-                      decoration: const InputDecoration(
-                        labelText: 'Class Code',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_instructors.isNotEmpty)
-                      DropdownButtonFormField<String>(
-                        value: hasSelectedInstructor
-                            ? selectedInstructorId
-                            : null,
-                        decoration: const InputDecoration(
-                          labelText: 'Instructor',
-                        ),
-                        items: _instructors.map((instructor) {
-                          return DropdownMenuItem<String>(
-                            value:
-                                (instructor['uid'] ?? '').toString(),
-                            child: Text(
-                              (instructor['name'] ?? 'Instructor')
-                                  .toString(),
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value == null) return;
-
-                          setDialogState(() {
-                            selectedInstructorId = value;
-                          });
-                        },
-                      )
-                    else
-                      const Text(
-                        'No active instructors are available.',
-                        style: TextStyle(color: textGrey),
-                      ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(
-                      dialogContext,
-                      <String, String>{
-                        'code': codeController.text,
-                        'title': titleController.text,
-                        'classCode': classCodeController.text,
-                        'instructorId': selectedInstructorId,
-                      },
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: adminTheme,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (_) => _AdminCourseEditDialog(
+        initialCode: _courseCode(course),
+        initialTitle: _courseTitle(course),
+        initialClassCode:
+            (course['classCode'] ?? '').toString(),
+        initialInstructorId:
+            (course['instructorId'] ?? '').toString(),
+        instructors: _instructors,
+      ),
     );
-
-    codeController.dispose();
-    titleController.dispose();
-    classCodeController.dispose();
 
     if (result == null) return;
 
@@ -406,8 +286,12 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
     final instructorId =
         (result['instructorId'] ?? '').trim();
 
-    if (code.isEmpty || title.isEmpty) {
-      _showError('Course code and title are required.');
+    if (code.isEmpty ||
+        title.isEmpty ||
+        instructorId.isEmpty) {
+      _showError(
+        'Course code, title, and instructor are required.',
+      );
       return;
     }
 
@@ -927,6 +811,165 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
         backgroundColor: red,
         behavior: SnackBarBehavior.floating,
       ),
+    );
+  }
+}
+
+class _AdminCourseEditDialog extends StatefulWidget {
+  const _AdminCourseEditDialog({
+    required this.initialCode,
+    required this.initialTitle,
+    required this.initialClassCode,
+    required this.initialInstructorId,
+    required this.instructors,
+  });
+
+  final String initialCode;
+  final String initialTitle;
+  final String initialClassCode;
+  final String initialInstructorId;
+  final List<Map<String, dynamic>> instructors;
+
+  @override
+  State<_AdminCourseEditDialog> createState() => _AdminCourseEditDialogState();
+}
+
+class _AdminCourseEditDialogState extends State<_AdminCourseEditDialog> {
+  static const Color adminTheme = Color(0xFF4F46E5);
+  static const Color textGrey = Color(0xFF68738A);
+
+  late final TextEditingController _codeController;
+  late final TextEditingController _titleController;
+  late final TextEditingController _classCodeController;
+  late final List<Map<String, dynamic>> _instructors;
+
+  String? _selectedInstructorId;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _codeController = TextEditingController(text: widget.initialCode);
+    _titleController = TextEditingController(text: widget.initialTitle);
+    _classCodeController = TextEditingController(text: widget.initialClassCode);
+
+    final Map<String, Map<String, dynamic>> uniqueInstructors = {};
+
+    for (final instructor in widget.instructors) {
+      final String uid = (instructor['uid'] ?? '').toString().trim();
+
+      if (uid.isNotEmpty) {
+        uniqueInstructors[uid] = instructor;
+      }
+    }
+
+    _instructors = uniqueInstructors.values.toList();
+
+    final String initialId = widget.initialInstructorId.trim();
+    final bool initialIdIsAvailable = _instructors.any(
+      (instructor) => (instructor['uid'] ?? '').toString().trim() == initialId,
+    );
+
+    if (initialIdIsAvailable) {
+      _selectedInstructorId = initialId;
+    } else if (_instructors.isNotEmpty) {
+      _selectedInstructorId = (_instructors.first['uid'] ?? '')
+          .toString()
+          .trim();
+    }
+  }
+
+  @override
+  void dispose() {
+    _codeController.dispose();
+    _titleController.dispose();
+    _classCodeController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    Navigator.pop(context, <String, String>{
+      'code': _codeController.text,
+      'title': _titleController.text,
+      'classCode': _classCodeController.text,
+      'instructorId': _selectedInstructorId ?? '',
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text(
+        'Edit Course',
+        style: TextStyle(fontWeight: FontWeight.w800),
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _codeController,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(labelText: 'Course Code'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(labelText: 'Course Title'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _classCodeController,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(labelText: 'Class Code'),
+            ),
+            const SizedBox(height: 12),
+            if (_instructors.isNotEmpty)
+              DropdownButtonFormField<String>(
+                initialValue: _selectedInstructorId,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Instructor'),
+                items: _instructors.map((instructor) {
+                  final String uid = (instructor['uid'] ?? '')
+                      .toString()
+                      .trim();
+
+                  return DropdownMenuItem<String>(
+                    value: uid,
+                    child: Text(
+                      (instructor['name'] ?? 'Instructor').toString(),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _selectedInstructorId = value;
+                  });
+                },
+              )
+            else
+              const Text(
+                'No active instructors are available.',
+                style: TextStyle(color: textGrey),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _instructors.isEmpty ? null : _save,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: adminTheme,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }

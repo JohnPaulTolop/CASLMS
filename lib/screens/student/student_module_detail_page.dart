@@ -255,8 +255,17 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
       final List<Map<String, dynamic>> resources = resourceSnapshot.docs
           .map((document) => {...document.data(), 'id': document.id})
           .where(
-            (resource) =>
-                (resource['courseId'] ?? '').toString() == widget.courseId,
+            (resource) {
+              final String status =
+                  (resource['status'] ?? 'published')
+                      .toString()
+                      .trim()
+                      .toLowerCase();
+
+              return (resource['courseId'] ?? '').toString() ==
+                      widget.courseId &&
+                  status == 'published';
+            },
           )
           .toList();
 
@@ -437,6 +446,75 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
       }
 
       _showError('Unable to open assessment: $e');
+    }
+  }
+
+  // ============================================================
+  // OPEN LEARNING RESOURCE
+  // ============================================================
+
+  Future<void> _openResource(
+    Map<String, dynamic> resource,
+  ) async {
+    final String deliveryType =
+        (resource['deliveryType'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+
+    final String uploadedUrl =
+        (resource['fileUrl'] ?? '').toString().trim();
+
+    final String externalUrl =
+        (resource['externalUrl'] ?? '').toString().trim();
+
+    final String url = deliveryType == 'uploaded_file'
+        ? uploadedUrl
+        : externalUrl.isNotEmpty
+            ? externalUrl
+            : uploadedUrl;
+
+    if (url.isEmpty) {
+      _showError(
+        'This resource does not have a valid file or link.',
+      );
+
+      return;
+    }
+
+    final Uri? uri = Uri.tryParse(url);
+
+    if (uri == null ||
+        !uri.hasScheme ||
+        !uri.hasAuthority ||
+        (uri.scheme != 'http' && uri.scheme != 'https')) {
+      _showError('This resource link is invalid.');
+
+      return;
+    }
+
+    try {
+      bool opened = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!opened) {
+        opened = await launchUrl(
+          uri,
+          mode: LaunchMode.platformDefault,
+        );
+      }
+
+      if (!opened && mounted) {
+        _showError('Unable to open this resource.');
+      }
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      _showError('Unable to open resource: $e');
     }
   }
 
@@ -1336,55 +1414,87 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
   }
 
   Widget _buildResourceCard(Map<String, dynamic> resource) {
-    final String title = (resource['title'] ?? resource['name'] ?? 'Resource')
-        .toString();
+    final String title =
+        (resource['title'] ??
+                resource['fileName'] ??
+                resource['name'] ??
+                'Resource')
+            .toString();
 
-    final String type = (resource['type'] ?? 'file').toString();
+    final String type =
+        (resource['resourceType'] ??
+                resource['type'] ??
+                'file')
+            .toString();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 11),
-      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: borderColor),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 43,
-            height: 43,
-            decoration: BoxDecoration(
-              color: primaryBlue.withValues(alpha: 0.09),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.description_outlined, color: primaryBlue),
-          ),
-
-          const SizedBox(width: 12),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: () => _openResource(resource),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(15),
+            child: Row(
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: textDark,
-                    fontWeight: FontWeight.w700,
+                Container(
+                  width: 43,
+                  height: 43,
+                  decoration: BoxDecoration(
+                    color: primaryBlue.withValues(alpha: 0.09),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.description_outlined,
+                    color: primaryBlue,
                   ),
                 ),
 
-                const SizedBox(height: 3),
+                const SizedBox(width: 12),
 
-                Text(
-                  type,
-                  style: const TextStyle(color: textGrey, fontSize: 10.5),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          color: textDark,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+
+                      const SizedBox(height: 3),
+
+                      Text(
+                        type,
+                        style: const TextStyle(
+                          color: textGrey,
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
+                const Icon(
+                  Icons.open_in_new_rounded,
+                  color: textGrey,
+                  size: 19,
                 ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
