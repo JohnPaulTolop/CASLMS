@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'instructor_ui.dart';
+
 import 'instructor_chat_page.dart';
 import 'instructor_module_builder_page.dart';
 import 'instructor_module_detail_page.dart';
@@ -586,7 +588,8 @@ class _InstructorClassDetailsScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return instructorScaffold(
+      context: context,
       backgroundColor: background,
 
       appBar: AppBar(

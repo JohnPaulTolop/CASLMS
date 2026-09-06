@@ -9,84 +9,46 @@ import 'notifications_page.dart';
 class StudentDashboardScreen extends StatefulWidget {
   final Function(int)? onNavigateToTab;
 
-  const StudentDashboardScreen({
-    super.key,
-    this.onNavigateToTab,
-  });
+  const StudentDashboardScreen({super.key, this.onNavigateToTab});
 
   @override
-  State<StudentDashboardScreen> createState() =>
-      _StudentDashboardScreenState();
+  State<StudentDashboardScreen> createState() => _StudentDashboardScreenState();
 }
 
-class _StudentDashboardScreenState
-    extends State<StudentDashboardScreen> {
+class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   // ============================================================
   // COLORS
   // ============================================================
 
-  static const Color primaryBlue =
-      Color(
-    0xFF1769FF,
-  );
+  static const Color primaryBlue = Color(0xFF1769FF);
 
-  static const Color background =
-      Color(
-    0xFFF8FAFD,
-  );
+  static const Color background = Color(0xFFF8FAFD);
 
-  static const Color textDark =
-      Color(
-    0xFF111827,
-  );
+  static const Color textDark = Color(0xFF111827);
 
-  static const Color textGrey =
-      Color(
-    0xFF6B7280,
-  );
+  static const Color textGrey = Color(0xFF6B7280);
 
-  static const Color orange =
-      Color(
-    0xFFFFA800,
-  );
+  static const Color orange = Color(0xFFFFA800);
 
-  static const Color green =
-      Color(
-    0xFF25A55F,
-  );
+  static const Color green = Color(0xFF25A55F);
 
-  static const Color purple =
-      Color(
-    0xFF7B4DFF,
-  );
+  static const Color purple = Color(0xFF7B4DFF);
 
-  static const Color red =
-      Color(
-    0xFFFF4B4B,
-  );
+  static const Color red = Color(0xFFFF4B4B);
 
-  static const Color lightBlue =
-      Color(
-    0xFFEAF3FF,
-  );
+  static const Color lightBlue = Color(0xFFEAF3FF);
 
-  static const Color borderColor =
-      Color(
-    0xFFE5EAF0,
-  );
+  static const Color borderColor = Color(0xFFE5EAF0);
 
   // ============================================================
   // SERVICES
   // ============================================================
 
-  final EnrollmentService _enrollmentService =
-      EnrollmentService();
+  final EnrollmentService _enrollmentService = EnrollmentService();
 
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  final FirebaseAuth _auth =
-      FirebaseAuth.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // ============================================================
   // STATE
@@ -100,8 +62,7 @@ class _StudentDashboardScreenState
 
   List<Map<String, dynamic>> _courses = [];
 
-  List<Map<String, dynamic>>
-      _upcomingAssessments = [];
+  List<Map<String, dynamic>> _upcomingAssessments = [];
 
   int _pendingTaskCount = 0;
 
@@ -128,14 +89,10 @@ class _StudentDashboardScreenState
   // LOAD DASHBOARD
   // ============================================================
 
-  Future<void> _loadDashboard({
-    bool showLoading = true,
-  }) async {
-    final int generation =
-        ++_loadGeneration;
+  Future<void> _loadDashboard({bool showLoading = true}) async {
+    final int generation = ++_loadGeneration;
 
-    if (showLoading &&
-        mounted) {
+    if (showLoading && mounted) {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
@@ -147,71 +104,49 @@ class _StudentDashboardScreenState
       // CURRENT STUDENT
       // --------------------------------------------------------
 
-      final Map<String, dynamic> student =
-          await _enrollmentService
-              .getCurrentStudentProfile();
+      final Map<String, dynamic> student = await _enrollmentService
+          .getCurrentStudentProfile();
 
       // --------------------------------------------------------
       // REAL ACTIVE COURSES
       // --------------------------------------------------------
 
-      final List<Map<String, dynamic>> courses =
-          await _enrollmentService
-              .getMyActiveCourses();
+      final List<Map<String, dynamic>> courses = await _enrollmentService
+          .getMyActiveCourses();
 
-      final String studentId =
-          _auth.currentUser?.uid ?? '';
+      final String studentId = _auth.currentUser?.uid ?? '';
 
       if (studentId.isEmpty) {
-        throw EnrollmentServiceException(
-          'No student is currently logged in.',
-        );
+        throw EnrollmentServiceException('No student is currently logged in.');
       }
 
       // --------------------------------------------------------
       // ASSESSMENT SUBMISSIONS
       // --------------------------------------------------------
 
-      final QuerySnapshot<
-              Map<String, dynamic>>
-          submissionSnapshot =
+      final QuerySnapshot<Map<String, dynamic>> submissionSnapshot =
           await _firestore
-              .collection(
-                'assessmentSubmissions',
-              )
-              .where(
-                'studentId',
-                isEqualTo:
-                    studentId,
-              )
+              .collection('assessmentSubmissions')
+              .where('studentId', isEqualTo: studentId)
               .get();
 
-      final Map<
-              String,
-              Map<String, dynamic>>
-          submissionByAssessmentId =
-          {};
+      final Map<String, Map<String, dynamic>> submissionByAssessmentId = {};
 
-      for (final document
-          in submissionSnapshot.docs) {
-        final Map<String, dynamic> data =
-            document.data();
+      for (final document in submissionSnapshot.docs) {
+        final Map<String, dynamic> data = document.data();
 
-        final String assessmentId =
-            (data['assessmentId'] ?? '')
-                .toString()
-                .trim();
+        final String assessmentId = (data['assessmentId'] ?? '')
+            .toString()
+            .trim();
 
         if (assessmentId.isEmpty) {
           continue;
         }
 
-        submissionByAssessmentId[
-            assessmentId] = {
+        submissionByAssessmentId[assessmentId] = {
           ...data,
           'id': document.id,
-          'submissionId':
-              document.id,
+          'submissionId': document.id,
         };
       }
 
@@ -219,88 +154,59 @@ class _StudentDashboardScreenState
       // PENDING ASSESSMENTS
       // --------------------------------------------------------
 
-      final List<Map<String, dynamic>>
-          pendingAssessments = [];
+      final List<Map<String, dynamic>> pendingAssessments = [];
 
       for (final course in courses) {
-        final String courseId =
-            (course['courseId'] ??
-                    course['id'] ??
-                    '')
-                .toString()
-                .trim();
+        final String courseId = (course['courseId'] ?? course['id'] ?? '')
+            .toString()
+            .trim();
 
         if (courseId.isEmpty) {
           continue;
         }
 
-        final QuerySnapshot<
-                Map<String, dynamic>>
-            assessmentSnapshot =
+        final QuerySnapshot<Map<String, dynamic>> assessmentSnapshot =
             await _firestore
-                .collection(
-                  'assessments',
-                )
-                .where(
-                  'courseId',
-                  isEqualTo:
-                      courseId,
-                )
+                .collection('assessments')
+                .where('courseId', isEqualTo: courseId)
                 .get();
 
-        for (final document
-            in assessmentSnapshot.docs) {
-          final Map<String, dynamic>
-              assessment =
-              document.data();
+        for (final document in assessmentSnapshot.docs) {
+          final Map<String, dynamic> assessment = document.data();
 
-          final String status =
-              (assessment['status'] ?? '')
-                  .toString()
-                  .trim()
-                  .toLowerCase();
+          final String status = (assessment['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
 
           if (status != 'published') {
             continue;
           }
 
-          final Map<String, dynamic>?
-              submission =
-              submissionByAssessmentId[
-                  document.id];
+          final Map<String, dynamic>? submission =
+              submissionByAssessmentId[document.id];
 
-          final String submissionStatus =
-              (submission?['status'] ?? '')
-                  .toString()
-                  .trim()
-                  .toLowerCase();
+          final String submissionStatus = (submission?['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
 
-          if (submissionStatus ==
-                  'submitted' ||
-              submissionStatus ==
-                  'graded') {
+          if (submissionStatus == 'submitted' || submissionStatus == 'graded') {
             continue;
           }
 
           pendingAssessments.add({
             ...assessment,
 
-            'id':
-                document.id,
+            'id': document.id,
 
-            'assessmentId':
-                document.id,
+            'assessmentId': document.id,
 
-            'courseId':
-                courseId,
+            'courseId': courseId,
 
-            'courseCode':
-                (course['code'] ?? '')
-                    .toString(),
+            'courseCode': (course['code'] ?? '').toString(),
 
-            'courseTitle':
-                (course['title'] ?? '')
-                    .toString(),
+            'courseTitle': (course['title'] ?? '').toString(),
           });
         }
       }
@@ -309,203 +215,130 @@ class _StudentDashboardScreenState
       // SORT BY DUE DATE
       // --------------------------------------------------------
 
-      pendingAssessments.sort(
-        (
-          a,
-          b,
-        ) {
-          final DateTime? first =
-              _dateFrom(
-            a['dueAt'],
-          );
+      pendingAssessments.sort((a, b) {
+        final DateTime? first = _dateFrom(a['dueAt']);
 
-          final DateTime? second =
-              _dateFrom(
-            b['dueAt'],
-          );
+        final DateTime? second = _dateFrom(b['dueAt']);
 
-          if (first == null &&
-              second == null) {
-            return 0;
-          }
+        if (first == null && second == null) {
+          return 0;
+        }
 
-          if (first == null) {
-            return 1;
-          }
+        if (first == null) {
+          return 1;
+        }
 
-          if (second == null) {
-            return -1;
-          }
+        if (second == null) {
+          return -1;
+        }
 
-          return first.compareTo(
-            second,
-          );
-        },
-      );
+        return first.compareTo(second);
+      });
 
-      final DateTime now =
-          DateTime.now();
+      final DateTime now = DateTime.now();
 
-      final List<Map<String, dynamic>>
-          upcomingAssessments =
-          pendingAssessments.where(
-        (
-          assessment,
-        ) {
-          final DateTime? dueAt =
-              _dateFrom(
-            assessment['dueAt'],
-          );
+      final List<Map<String, dynamic>> upcomingAssessments = pendingAssessments
+          .where((assessment) {
+            final DateTime? dueAt = _dateFrom(assessment['dueAt']);
 
-          return dueAt != null &&
-              dueAt.isAfter(
-                now,
-              );
-        },
-      ).take(5).toList();
+            return dueAt != null && dueAt.isAfter(now);
+          })
+          .take(5)
+          .toList();
 
       // --------------------------------------------------------
       // ANNOUNCEMENTS
       // --------------------------------------------------------
 
-      int announcementCount =
-          0;
+      int announcementCount = 0;
 
       for (final course in courses) {
-        final String courseId =
-            (course['courseId'] ??
-                    course['id'] ??
-                    '')
-                .toString()
-                .trim();
+        final String courseId = (course['courseId'] ?? course['id'] ?? '')
+            .toString()
+            .trim();
 
         if (courseId.isEmpty) {
           continue;
         }
 
-        final QuerySnapshot<
-                Map<String, dynamic>>
-            announcementSnapshot =
+        final QuerySnapshot<Map<String, dynamic>> announcementSnapshot =
             await _firestore
-                .collection(
-                  'announcements',
-                )
-                .where(
-                  'courseId',
-                  isEqualTo:
-                      courseId,
-                )
+                .collection('announcements')
+                .where('courseId', isEqualTo: courseId)
                 .get();
 
-        announcementCount +=
-            announcementSnapshot
-                .docs.length;
+        announcementCount += announcementSnapshot.docs.length;
       }
 
       // --------------------------------------------------------
       // NOTIFICATIONS
       // --------------------------------------------------------
 
-      final QuerySnapshot<
-              Map<String, dynamic>>
-          notificationSnapshot =
+      final QuerySnapshot<Map<String, dynamic>> notificationSnapshot =
           await _firestore
-              .collection(
-                'notifications',
-              )
-              .where(
-                'userId',
-                isEqualTo:
-                    studentId,
-              )
+              .collection('notifications')
+              .where('userId', isEqualTo: studentId)
               .get();
 
-      int unreadNotifications =
-          0;
+      int unreadNotifications = 0;
 
-      for (final document
-          in notificationSnapshot.docs) {
-        if (document.data()['isRead'] !=
-            true) {
+      for (final document in notificationSnapshot.docs) {
+        if (document.data()['isRead'] != true) {
           unreadNotifications++;
         }
       }
 
       // A newer request already started.
-      if (!mounted ||
-          generation !=
-              _loadGeneration) {
+      if (!mounted || generation != _loadGeneration) {
         return;
       }
 
       setState(() {
-        _student =
-            student;
+        _student = student;
 
-        _courses =
-            courses;
+        _courses = courses;
 
-        _pendingTaskCount =
-            pendingAssessments.length;
+        _pendingTaskCount = pendingAssessments.length;
 
-        _upcomingAssessments =
-            upcomingAssessments;
+        _upcomingAssessments = upcomingAssessments;
 
-        _announcementCount =
-            announcementCount;
+        _announcementCount = announcementCount;
 
-        _unreadNotificationCount =
-            unreadNotifications;
+        _unreadNotificationCount = unreadNotifications;
 
-        _isLoading =
-            false;
+        _isLoading = false;
 
-        _errorMessage =
-            null;
+        _errorMessage = null;
       });
-    } on EnrollmentServiceException
-        catch (e) {
-      if (!mounted ||
-          generation !=
-              _loadGeneration) {
+    } on EnrollmentServiceException catch (e) {
+      if (!mounted || generation != _loadGeneration) {
         return;
       }
 
       setState(() {
-        _isLoading =
-            false;
+        _isLoading = false;
 
-        _errorMessage =
-            e.message;
+        _errorMessage = e.message;
       });
     } on FirebaseException catch (e) {
-      if (!mounted ||
-          generation !=
-              _loadGeneration) {
+      if (!mounted || generation != _loadGeneration) {
         return;
       }
 
       setState(() {
-        _isLoading =
-            false;
+        _isLoading = false;
 
-        _errorMessage =
-            e.message ??
-                'Unable to load dashboard.';
+        _errorMessage = e.message ?? 'Unable to load dashboard.';
       });
     } catch (_) {
-      if (!mounted ||
-          generation !=
-              _loadGeneration) {
+      if (!mounted || generation != _loadGeneration) {
         return;
       }
 
       setState(() {
-        _isLoading =
-            false;
+        _isLoading = false;
 
-        _errorMessage =
-            'Unable to load student dashboard.';
+        _errorMessage = 'Unable to load student dashboard.';
       });
     }
   }
@@ -515,12 +348,9 @@ class _StudentDashboardScreenState
   // ============================================================
 
   String get _studentName {
-    final String name =
-        (_student?['name'] ??
-                _student?['displayName'] ??
-                '')
-            .toString()
-            .trim();
+    final String name = (_student?['name'] ?? _student?['displayName'] ?? '')
+        .toString()
+        .trim();
 
     if (name.isNotEmpty) {
       return name;
@@ -530,25 +360,17 @@ class _StudentDashboardScreenState
   }
 
   String get _firstName {
-    final String name =
-        _studentName.trim();
+    final String name = _studentName.trim();
 
     if (name.isEmpty) {
       return 'Student';
     }
 
-    return name
-        .split(
-          RegExp(
-            r'\s+',
-          ),
-        )
-        .first;
+    return name.split(RegExp(r'\s+')).first;
   }
 
   String get _studentInitial {
-    final String name =
-        _studentName.trim();
+    final String name = _studentName.trim();
 
     if (name.isEmpty) {
       return '?';
@@ -561,9 +383,7 @@ class _StudentDashboardScreenState
   // DATE HELPERS
   // ============================================================
 
-  DateTime? _dateFrom(
-    dynamic value,
-  ) {
+  DateTime? _dateFrom(dynamic value) {
     if (value is Timestamp) {
       return value.toDate();
     }
@@ -575,9 +395,7 @@ class _StudentDashboardScreenState
     return null;
   }
 
-  String _formatDate(
-    DateTime value,
-  ) {
+  String _formatDate(DateTime value) {
     const List<String> months = [
       'Jan',
       'Feb',
@@ -593,27 +411,19 @@ class _StudentDashboardScreenState
       'Dec',
     ];
 
-    final DateTime date =
-        value.toLocal();
+    final DateTime date = value.toLocal();
 
     return '${months[date.month - 1]} '
         '${date.day}, '
         '${date.year}';
   }
 
-  String _formatTime(
-    DateTime value,
-  ) {
-    final DateTime date =
-        value.toLocal();
+  String _formatTime(DateTime value) {
+    final DateTime date = value.toLocal();
 
-    int hour =
-        date.hour;
+    int hour = date.hour;
 
-    final String period =
-        hour >= 12
-            ? 'PM'
-            : 'AM';
+    final String period = hour >= 12 ? 'PM' : 'AM';
 
     if (hour == 0) {
       hour = 12;
@@ -621,13 +431,7 @@ class _StudentDashboardScreenState
       hour -= 12;
     }
 
-    final String minute =
-        date.minute
-            .toString()
-            .padLeft(
-              2,
-              '0',
-            );
+    final String minute = date.minute.toString().padLeft(2, '0');
 
     return '$hour:$minute $period';
   }
@@ -643,54 +447,33 @@ class _StudentDashboardScreenState
 
   Future<void> _showJoinSubjectModal() async {
     final Map<String, dynamic>? joinedCourse =
-        await showModalBottomSheet<
-            Map<String, dynamic>>(
-      context: context,
+        await showModalBottomSheet<Map<String, dynamic>>(
+          context: context,
 
-      isScrollControlled:
-          true,
+          isScrollControlled: true,
 
-      backgroundColor:
-          Colors.transparent,
+          backgroundColor: Colors.transparent,
 
-      // Prevent the parent dashboard from rebuilding
-      // while a reverse overlay animation is tearing down.
-      sheetAnimationStyle:
-          AnimationStyle.noAnimation,
+          // Prevent the parent dashboard from rebuilding
+          // while a reverse overlay animation is tearing down.
+          sheetAnimationStyle: AnimationStyle.noAnimation,
 
-      builder: (
-        BuildContext sheetContext,
-      ) {
-        return _JoinClassSheet(
-          enrollmentService:
-              _enrollmentService,
+          builder: (BuildContext sheetContext) {
+            return _JoinClassSheet(enrollmentService: _enrollmentService);
+          },
         );
-      },
-    );
 
     // This mounted check protects the State.context
     // after awaiting the bottom sheet.
-    if (!mounted ||
-        joinedCourse == null) {
+    if (!mounted || joinedCourse == null) {
       return;
     }
 
-    final String code =
-        (joinedCourse['code'] ?? '')
-            .toString()
-            .trim();
+    final String code = (joinedCourse['code'] ?? '').toString().trim();
 
-    final String title =
-        (joinedCourse['title'] ??
-                'Class')
-            .toString()
-            .trim();
+    final String title = (joinedCourse['title'] ?? 'Class').toString().trim();
 
-    final ScaffoldMessengerState
-        messenger =
-        ScaffoldMessenger.of(
-      context,
-    );
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
 
     messenger.hideCurrentSnackBar();
 
@@ -702,18 +485,14 @@ class _StudentDashboardScreenState
               : 'Successfully joined $code • $title.',
         ),
 
-        backgroundColor:
-            green,
+        backgroundColor: green,
 
-        behavior:
-            SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.floating,
       ),
     );
 
     // Refresh only after the sheet returned.
-    await _loadDashboard(
-      showLoading: false,
-    );
+    await _loadDashboard(showLoading: false);
   }
 
   // ============================================================
@@ -721,35 +500,23 @@ class _StudentDashboardScreenState
   // ============================================================
 
   Future<void> _openNotifications() async {
-    await Navigator.of(
-      context,
-    ).push(
-      MaterialPageRoute(
-        builder: (
-          context,
-        ) =>
-            const NotificationsScreen(),
-      ),
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
     );
 
     if (!mounted) {
       return;
     }
 
-    await _loadDashboard(
-      showLoading: false,
-    );
+    await _loadDashboard(showLoading: false);
   }
 
   // ============================================================
   // ASSESSMENT ICON
   // ============================================================
 
-  IconData _assessmentIcon(
-    String type,
-  ) {
-    switch (
-        type.toLowerCase()) {
+  IconData _assessmentIcon(String type) {
+    switch (type.toLowerCase()) {
       case 'quiz':
         return Icons.quiz_outlined;
 
@@ -767,11 +534,8 @@ class _StudentDashboardScreenState
     }
   }
 
-  Color _assessmentColor(
-    String type,
-  ) {
-    switch (
-        type.toLowerCase()) {
+  Color _assessmentColor(String type) {
+    switch (type.toLowerCase()) {
       case 'quiz':
         return primaryBlue;
 
@@ -794,66 +558,37 @@ class _StudentDashboardScreenState
   // ============================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          background,
+      backgroundColor: background,
 
       body: SafeArea(
         child: RefreshIndicator(
-          color:
-              primaryBlue,
+          color: primaryBlue,
 
-          onRefresh:
-              () {
-            return _loadDashboard(
-              showLoading:
-                  false,
-            );
+          onRefresh: () {
+            return _loadDashboard(showLoading: false);
           },
 
-          child:
-              LayoutBuilder(
-            builder: (
-              context,
-              constraints,
-            ) {
-              final bool desktop =
-                  constraints
-                          .maxWidth >=
-                      850;
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final bool desktop = constraints.maxWidth >= 850;
 
               return ListView(
-                physics:
-                    const AlwaysScrollableScrollPhysics(),
+                physics: const AlwaysScrollableScrollPhysics(),
 
-                padding:
-                    EdgeInsets.symmetric(
-                  horizontal:
-                      desktop
-                          ? 50
-                          : 20,
+                padding: EdgeInsets.symmetric(
+                  horizontal: desktop ? 50 : 20,
 
-                  vertical:
-                      desktop
-                          ? 30
-                          : 18,
+                  vertical: desktop ? 30 : 18,
                 ),
 
                 children: [
                   Center(
-                    child:
-                        ConstrainedBox(
-                      constraints:
-                          const BoxConstraints(
-                        maxWidth:
-                            1150,
-                      ),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1150),
 
-                      child:
-                          _buildContent(),
+                      child: _buildContent(),
                     ),
                   ),
                 ],
@@ -872,17 +607,9 @@ class _StudentDashboardScreenState
   Widget _buildContent() {
     if (_isLoading) {
       return const SizedBox(
-        height:
-            500,
+        height: 500,
 
-        child:
-            Center(
-          child:
-              CircularProgressIndicator(
-            color:
-                primaryBlue,
-          ),
-        ),
+        child: Center(child: CircularProgressIndicator(color: primaryBlue)),
       );
     }
 
@@ -891,178 +618,82 @@ class _StudentDashboardScreenState
     }
 
     return Column(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
 
       children: [
         _buildHeader(),
 
-        const SizedBox(
-          height:
-              28,
-        ),
+        const SizedBox(height: 24),
 
-        Text(
-          'Hello, $_firstName! 👋',
+        _buildWelcomeBanner(),
 
-          style:
-              const TextStyle(
-            color:
-                textDark,
-
-            fontSize:
-                27,
-
-            fontWeight:
-                FontWeight.w800,
-
-            letterSpacing:
-                -0.7,
-          ),
-        ),
-
-        const SizedBox(
-          height:
-              5,
-        ),
-
-        const Text(
-          "Here's what's happening in your classes.",
-
-          style:
-              TextStyle(
-            color:
-                textGrey,
-
-            fontSize:
-                14,
-          ),
-        ),
-
-        const SizedBox(
-          height:
-              24,
-        ),
+        const SizedBox(height: 20),
 
         _buildStatistics(),
 
-        const SizedBox(
-          height:
-              28,
-        ),
+        const SizedBox(height: 28),
 
         _buildSectionHeader(
-          title:
-              'My Classes',
+          title: 'My Classes',
 
-          action:
-              'View all',
+          action: 'View all',
 
-          onTap:
-              () {
-            widget
-                .onNavigateToTab
-                ?.call(
-              1,
-            );
+          onTap: () {
+            widget.onNavigateToTab?.call(1);
           },
         ),
 
-        const SizedBox(
-          height:
-              12,
-        ),
+        const SizedBox(height: 12),
 
         _buildClasses(),
 
-        const SizedBox(
-          height:
-              18,
-        ),
+        const SizedBox(height: 18),
 
         SizedBox(
-          width:
-              double.infinity,
+          width: double.infinity,
 
-          height:
-              52,
+          height: 52,
 
-          child:
-              OutlinedButton.icon(
-            onPressed:
-                _showJoinSubjectModal,
+          child: OutlinedButton.icon(
+            onPressed: _showJoinSubjectModal,
 
-            icon:
-                const Icon(
-              Icons.add_rounded,
-            ),
+            icon: const Icon(Icons.add_rounded),
 
-            label:
-                const Text(
+            label: const Text(
               'Join a Class',
 
-              style:
-                  TextStyle(
-                fontWeight:
-                    FontWeight.w800,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w800),
             ),
 
-            style:
-                OutlinedButton.styleFrom(
-              foregroundColor:
-                  primaryBlue,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: primaryBlue,
 
-              side:
-                  const BorderSide(
-                color:
-                    primaryBlue,
-              ),
+              side: const BorderSide(color: primaryBlue),
 
-              shape:
-                  RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(
-                  15,
-                ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
               ),
             ),
           ),
         ),
 
-        const SizedBox(
-          height:
-              30,
-        ),
+        const SizedBox(height: 30),
 
         _buildSectionHeader(
-          title:
-              'Upcoming',
+          title: 'Upcoming',
 
-          action:
-              'View Tasks',
+          action: 'View Tasks',
 
-          onTap:
-              () {
-            widget
-                .onNavigateToTab
-                ?.call(
-              2,
-            );
+          onTap: () {
+            widget.onNavigateToTab?.call(2);
           },
         ),
 
-        const SizedBox(
-          height:
-              12,
-        ),
+        const SizedBox(height: 12),
 
         _buildUpcoming(),
 
-        const SizedBox(
-          height:
-              30,
-        ),
+        const SizedBox(height: 30),
       ],
     );
   }
@@ -1071,142 +702,275 @@ class _StudentDashboardScreenState
   // HEADER
   // ============================================================
 
+  Widget _buildWelcomeBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1769FF), Color(0xFF5B8CFF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: primaryBlue.withValues(alpha: 0.22),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            right: -30,
+            top: -45,
+            child: Container(
+              width: 130,
+              height: 130,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 44,
+            bottom: -64,
+            child: Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Hello, $_firstName!',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 25,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.7,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _pendingTaskCount == 0
+                              ? 'You are all caught up. Keep learning!'
+                              : 'You have $_pendingTaskCount ${_pendingTaskCount == 1 ? 'task' : 'tasks'} waiting for you.',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.86),
+                            fontSize: 13,
+                            height: 1.4,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(17),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.18),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.school_rounded,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _buildWelcomeChip(
+                    Icons.menu_book_rounded,
+                    '${_courses.length} ${_courses.length == 1 ? 'class' : 'classes'}',
+                  ),
+                  _buildWelcomeChip(
+                    Icons.notifications_active_rounded,
+                    '$_announcementCount updates',
+                  ),
+                  InkWell(
+                    onTap: () => widget.onNavigateToTab?.call(2),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 13,
+                        vertical: 9,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'View tasks',
+                            style: TextStyle(
+                              color: primaryBlue,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          SizedBox(width: 5),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            color: primaryBlue,
+                            size: 16,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWelcomeChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 15),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeader() {
     return Row(
       children: [
         Container(
-          width:
-              46,
+          width: 46,
 
-          height:
-              46,
+          height: 46,
 
-          decoration:
-              BoxDecoration(
-            borderRadius:
-                BorderRadius.circular(
-              14,
-            ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
 
-            border:
-                Border.all(
-              color:
-                  borderColor,
-            ),
+            border: Border.all(color: borderColor),
 
-            image:
-                const DecorationImage(
-              image:
-                  AssetImage(
-                'assets/images/CASlogo.jpg',
-              ),
+            image: const DecorationImage(
+              image: AssetImage('assets/images/CASlogo.jpg'),
 
-              fit:
-                  BoxFit.cover,
+              fit: BoxFit.cover,
             ),
           ),
         ),
 
-        const SizedBox(
-          width:
-              12,
-        ),
+        const SizedBox(width: 12),
 
         const Text(
           'CASLMS',
 
-          style:
-              TextStyle(
-            color:
-                primaryBlue,
+          style: TextStyle(
+            color: primaryBlue,
 
-            fontSize:
-                23,
+            fontSize: 23,
 
-            fontWeight:
-                FontWeight.w900,
+            fontWeight: FontWeight.w900,
           ),
         ),
 
         const Spacer(),
 
         Stack(
-          clipBehavior:
-              Clip.none,
+          clipBehavior: Clip.none,
 
           children: [
             IconButton(
-              onPressed:
-                  _openNotifications,
+              onPressed: _openNotifications,
 
-              icon:
-                  const Icon(
-                Icons
-                    .notifications_none_rounded,
+              icon: const Icon(
+                Icons.notifications_none_rounded,
 
-                color:
-                    textDark,
+                color: textDark,
 
-                size:
-                    27,
+                size: 27,
               ),
             ),
 
-            if (_unreadNotificationCount >
-                0)
+            if (_unreadNotificationCount > 0)
               Positioned(
-                right:
-                    2,
+                right: 2,
 
-                top:
-                    2,
+                top: 2,
 
-                child:
-                    Container(
-                  constraints:
-                      const BoxConstraints(
-                    minWidth:
-                        18,
+                child: Container(
+                  constraints: const BoxConstraints(
+                    minWidth: 18,
 
-                    minHeight:
-                        18,
+                    minHeight: 18,
                   ),
 
-                  padding:
-                      const EdgeInsets.symmetric(
-                    horizontal:
-                        4,
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+
+                  alignment: Alignment.center,
+
+                  decoration: const BoxDecoration(
+                    color: red,
+
+                    shape: BoxShape.circle,
                   ),
 
-                  alignment:
-                      Alignment.center,
-
-                  decoration:
-                      const BoxDecoration(
-                    color:
-                        red,
-
-                    shape:
-                        BoxShape.circle,
-                  ),
-
-                  child:
-                      Text(
-                    _unreadNotificationCount >
-                            9
+                  child: Text(
+                    _unreadNotificationCount > 9
                         ? '9+'
                         : '$_unreadNotificationCount',
 
-                    style:
-                        const TextStyle(
-                      color:
-                          Colors.white,
+                    style: const TextStyle(
+                      color: Colors.white,
 
-                      fontSize:
-                          9,
+                      fontSize: 9,
 
-                      fontWeight:
-                          FontWeight.w800,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
@@ -1214,40 +978,25 @@ class _StudentDashboardScreenState
           ],
         ),
 
-        const SizedBox(
-          width:
-              6,
-        ),
+        const SizedBox(width: 6),
 
         GestureDetector(
-          onTap:
-              () {
-            widget
-                .onNavigateToTab
-                ?.call(
-              4,
-            );
+          onTap: () {
+            widget.onNavigateToTab?.call(4);
           },
 
-          child:
-              CircleAvatar(
-            radius:
-                21,
+          child: CircleAvatar(
+            radius: 21,
 
-            backgroundColor:
-                lightBlue,
+            backgroundColor: lightBlue,
 
-            child:
-                Text(
+            child: Text(
               _studentInitial,
 
-              style:
-                  const TextStyle(
-                color:
-                    primaryBlue,
+              style: const TextStyle(
+                color: primaryBlue,
 
-                fontWeight:
-                    FontWeight.w900,
+                fontWeight: FontWeight.w900,
               ),
             ),
           ),
@@ -1264,54 +1013,36 @@ class _StudentDashboardScreenState
     return Row(
       children: [
         Expanded(
-          child:
-              _buildStatCard(
-            value:
-                '${_courses.length}',
+          child: _buildStatCard(
+            value: '${_courses.length}',
 
-            label:
-                'Classes',
+            label: 'Classes',
 
-            color:
-                primaryBlue,
+            color: primaryBlue,
           ),
         ),
 
-        const SizedBox(
-          width:
-              10,
-        ),
+        const SizedBox(width: 10),
 
         Expanded(
-          child:
-              _buildStatCard(
-            value:
-                '$_pendingTaskCount',
+          child: _buildStatCard(
+            value: '$_pendingTaskCount',
 
-            label:
-                'Tasks',
+            label: 'Tasks',
 
-            color:
-                orange,
+            color: orange,
           ),
         ),
 
-        const SizedBox(
-          width:
-              10,
-        ),
+        const SizedBox(width: 10),
 
         Expanded(
-          child:
-              _buildStatCard(
-            value:
-                '$_announcementCount',
+          child: _buildStatCard(
+            value: '$_announcementCount',
 
-            label:
-                'Announcements',
+            label: 'Announcements',
 
-            color:
-                green,
+            color: green,
           ),
         ),
       ],
@@ -1323,81 +1054,76 @@ class _StudentDashboardScreenState
     required String label,
     required Color color,
   }) {
+    final IconData icon = label == 'Classes'
+        ? Icons.auto_stories_rounded
+        : label == 'Tasks'
+        ? Icons.task_alt_rounded
+        : Icons.campaign_rounded;
+
     return Container(
-      height:
-          105,
+      height: 105,
 
-      padding:
-          const EdgeInsets.all(
-        14,
+      padding: const EdgeInsets.all(14),
+
+      decoration: BoxDecoration(
+        color: Colors.white,
+
+        borderRadius: BorderRadius.circular(17),
+
+        border: Border.all(color: color.withValues(alpha: 0.14)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.07),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
 
-      decoration:
-          BoxDecoration(
-        color:
-            Colors.white,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
 
-        borderRadius:
-            BorderRadius.circular(
-          17,
-        ),
-
-        border:
-            Border.all(
-          color:
-              borderColor,
-        ),
-      ),
-
-      child:
-          Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-
-        mainAxisAlignment:
-            MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
 
         children: [
-          Text(
-            value,
-
-            style:
-                TextStyle(
-              color:
-                  color,
-
-              fontSize:
-                  26,
-
-              fontWeight:
-                  FontWeight.w900,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 29,
+                height: 29,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, color: color, size: 16),
+              ),
+              const Spacer(),
+              Text(
+                value,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
           ),
 
-          const SizedBox(
-            height:
-                3,
-          ),
+          const SizedBox(height: 3),
 
           Text(
             label,
 
-            maxLines:
-                1,
+            maxLines: 1,
 
-            overflow:
-                TextOverflow.ellipsis,
+            overflow: TextOverflow.ellipsis,
 
-            style:
-                const TextStyle(
-              color:
-                  textGrey,
+            style: const TextStyle(
+              color: textGrey,
 
-              fontSize:
-                  10.5,
+              fontSize: 10.5,
 
-              fontWeight:
-                  FontWeight.w600,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -1419,36 +1145,27 @@ class _StudentDashboardScreenState
         Text(
           title,
 
-          style:
-              const TextStyle(
-            color:
-                textDark,
+          style: const TextStyle(
+            color: textDark,
 
-            fontSize:
-                19,
+            fontSize: 19,
 
-            fontWeight:
-                FontWeight.w800,
+            fontWeight: FontWeight.w800,
           ),
         ),
 
         const Spacer(),
 
         TextButton(
-          onPressed:
-              onTap,
+          onPressed: onTap,
 
-          child:
-              Text(
+          child: Text(
             action,
 
-            style:
-                const TextStyle(
-              color:
-                  primaryBlue,
+            style: const TextStyle(
+              color: primaryBlue,
 
-              fontWeight:
-                  FontWeight.w700,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
@@ -1463,235 +1180,118 @@ class _StudentDashboardScreenState
   Widget _buildClasses() {
     if (_courses.isEmpty) {
       return Container(
-        width:
-            double.infinity,
+        width: double.infinity,
 
-        padding:
-            const EdgeInsets.all(
-          24,
+        padding: const EdgeInsets.all(24),
+
+        decoration: BoxDecoration(
+          color: Colors.white,
+
+          borderRadius: BorderRadius.circular(18),
+
+          border: Border.all(color: borderColor),
         ),
 
-        decoration:
-            BoxDecoration(
-          color:
-              Colors.white,
-
-          borderRadius:
-              BorderRadius.circular(
-            18,
-          ),
-
-          border:
-              Border.all(
-            color:
-                borderColor,
-          ),
-        ),
-
-        child:
-            const Column(
+        child: const Column(
           children: [
-            Icon(
-              Icons
-                  .school_outlined,
+            Icon(Icons.school_outlined, color: primaryBlue, size: 35),
 
-              color:
-                  primaryBlue,
-
-              size:
-                  35,
-            ),
-
-            SizedBox(
-              height:
-                  10,
-            ),
+            SizedBox(height: 10),
 
             Text(
               'You have not joined a class yet.',
 
-              textAlign:
-                  TextAlign.center,
+              textAlign: TextAlign.center,
 
-              style:
-                  TextStyle(
-                color:
-                    textDark,
-
-                fontWeight:
-                    FontWeight.w700,
-              ),
+              style: TextStyle(color: textDark, fontWeight: FontWeight.w700),
             ),
           ],
         ),
       );
     }
 
-    final int visibleCount =
-        _courses.length >
-                4
-            ? 4
-            : _courses.length;
+    final int visibleCount = _courses.length > 4 ? 4 : _courses.length;
 
     return Container(
-      decoration:
-          BoxDecoration(
-        color:
-            Colors.white,
+      decoration: BoxDecoration(
+        color: Colors.white,
 
-        borderRadius:
-            BorderRadius.circular(
-          18,
-        ),
+        borderRadius: BorderRadius.circular(18),
 
-        border:
-            Border.all(
-          color:
-              borderColor,
-        ),
+        border: Border.all(color: borderColor),
       ),
 
-      child:
-          Column(
-        children:
-            List.generate(
-          visibleCount,
-          (
-            index,
-          ) {
-            final Map<String, dynamic> course =
-                _courses[
-                    index];
+      child: Column(
+        children: List.generate(visibleCount, (index) {
+          final Map<String, dynamic> course = _courses[index];
 
-            final String courseCode =
-                (course['code'] ??
-                        'Course')
-                    .toString();
+          final String courseCode = (course['code'] ?? 'Course').toString();
 
-            final String courseTitle =
-                (course['title'] ??
-                        '')
-                    .toString();
+          final String courseTitle = (course['title'] ?? '').toString();
 
-            final String instructor =
-                (course['instructorName'] ??
-                        '')
-                    .toString();
+          final String instructor = (course['instructorName'] ?? '').toString();
 
-            return Column(
-              children: [
-                ListTile(
-                  onTap:
-                      () {
-                    widget
-                        .onNavigateToTab
-                        ?.call(
-                      1,
-                    );
-                  },
+          return Column(
+            children: [
+              ListTile(
+                onTap: () {
+                  widget.onNavigateToTab?.call(1);
+                },
 
-                  contentPadding:
-                      const EdgeInsets.symmetric(
-                    horizontal:
-                        16,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
 
-                    vertical:
-                        5,
+                  vertical: 5,
+                ),
+
+                leading: Container(
+                  width: 46,
+
+                  height: 46,
+
+                  decoration: BoxDecoration(
+                    color: lightBlue,
+
+                    borderRadius: BorderRadius.circular(13),
                   ),
 
-                  leading:
-                      Container(
-                    width:
-                        46,
+                  child: const Icon(
+                    Icons.menu_book_rounded,
 
-                    height:
-                        46,
-
-                    decoration:
-                        BoxDecoration(
-                      color:
-                          lightBlue,
-
-                      borderRadius:
-                          BorderRadius.circular(
-                        13,
-                      ),
-                    ),
-
-                    child:
-                        const Icon(
-                      Icons
-                          .menu_book_rounded,
-
-                      color:
-                          primaryBlue,
-                    ),
-                  ),
-
-                  title:
-                      Text(
-                    courseCode,
-
-                    style:
-                        const TextStyle(
-                      color:
-                          textDark,
-
-                      fontWeight:
-                          FontWeight.w800,
-                    ),
-                  ),
-
-                  subtitle:
-                      Text(
-                    [
-                      courseTitle,
-
-                      if (instructor
-                          .trim()
-                          .isNotEmpty)
-                        instructor,
-                    ]
-                        .where(
-                          (
-                            value,
-                          ) =>
-                              value
-                                  .trim()
-                                  .isNotEmpty,
-                        )
-                        .join(
-                          ' • ',
-                        ),
-
-                    maxLines:
-                        2,
-
-                    overflow:
-                        TextOverflow.ellipsis,
-                  ),
-
-                  trailing:
-                      const Icon(
-                    Icons
-                        .chevron_right_rounded,
+                    color: primaryBlue,
                   ),
                 ),
 
-                if (index <
-                    visibleCount -
-                        1)
-                  const Divider(
-                    height:
-                        1,
+                title: Text(
+                  courseCode,
 
-                    indent:
-                        76,
+                  style: const TextStyle(
+                    color: textDark,
+
+                    fontWeight: FontWeight.w800,
                   ),
-              ],
-            );
-          },
-        ),
+                ),
+
+                subtitle: Text(
+                  [
+                    courseTitle,
+
+                    if (instructor.trim().isNotEmpty) instructor,
+                  ].where((value) => value.trim().isNotEmpty).join(' • '),
+
+                  maxLines: 2,
+
+                  overflow: TextOverflow.ellipsis,
+                ),
+
+                trailing: const Icon(Icons.chevron_right_rounded),
+              ),
+
+              if (index < visibleCount - 1)
+                const Divider(height: 1, indent: 76),
+            ],
+          );
+        }),
       ),
     );
   }
@@ -1703,61 +1303,28 @@ class _StudentDashboardScreenState
   Widget _buildUpcoming() {
     if (_upcomingAssessments.isEmpty) {
       return Container(
-        width:
-            double.infinity,
+        width: double.infinity,
 
-        padding:
-            const EdgeInsets.all(
-          24,
+        padding: const EdgeInsets.all(24),
+
+        decoration: BoxDecoration(
+          color: Colors.white,
+
+          borderRadius: BorderRadius.circular(18),
+
+          border: Border.all(color: borderColor),
         ),
 
-        decoration:
-            BoxDecoration(
-          color:
-              Colors.white,
-
-          borderRadius:
-              BorderRadius.circular(
-            18,
-          ),
-
-          border:
-              Border.all(
-            color:
-                borderColor,
-          ),
-        ),
-
-        child:
-            const Column(
+        child: const Column(
           children: [
-            Icon(
-              Icons
-                  .event_available_outlined,
+            Icon(Icons.event_available_outlined, color: green, size: 35),
 
-              color:
-                  green,
-
-              size:
-                  35,
-            ),
-
-            SizedBox(
-              height:
-                  10,
-            ),
+            SizedBox(height: 10),
 
             Text(
               'No upcoming assessments.',
 
-              style:
-                  TextStyle(
-                color:
-                    textDark,
-
-                fontWeight:
-                    FontWeight.w700,
-              ),
+              style: TextStyle(color: textDark, fontWeight: FontWeight.w700),
             ),
           ],
         ),
@@ -1765,186 +1332,89 @@ class _StudentDashboardScreenState
     }
 
     return Column(
-      children:
-          _upcomingAssessments
-              .map(
-        (
-          assessment,
-        ) {
-          final String type =
-              (assessment[
-                          'assessmentType'] ??
-                      'assessment')
-                  .toString();
+      children: _upcomingAssessments.map((assessment) {
+        final String type = (assessment['assessmentType'] ?? 'assessment')
+            .toString();
 
-          final DateTime? dueAt =
-              _dateFrom(
-            assessment[
-                'dueAt'],
-          );
+        final DateTime? dueAt = _dateFrom(assessment['dueAt']);
 
-          final Color typeColor =
-              _assessmentColor(
-            type,
-          );
+        final Color typeColor = _assessmentColor(type);
 
-          return Container(
-            width:
-                double.infinity,
+        return Container(
+          width: double.infinity,
 
-            margin:
-                const EdgeInsets.only(
-              bottom:
-                  10,
-            ),
+          margin: const EdgeInsets.only(bottom: 10),
 
-            padding:
-                const EdgeInsets.all(
-              14,
-            ),
+          padding: const EdgeInsets.all(14),
 
-            decoration:
-                BoxDecoration(
-              color:
-                  Colors.white,
+          decoration: BoxDecoration(
+            color: Colors.white,
 
-              borderRadius:
-                  BorderRadius.circular(
-                17,
+            borderRadius: BorderRadius.circular(17),
+
+            border: Border.all(color: borderColor),
+          ),
+
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+
+                height: 44,
+
+                decoration: BoxDecoration(
+                  color: typeColor.withValues(alpha: 0.10),
+
+                  borderRadius: BorderRadius.circular(12),
+                ),
+
+                child: Icon(_assessmentIcon(type), color: typeColor),
               ),
 
-              border:
-                  Border.all(
-                color:
-                    borderColor,
+              const SizedBox(width: 12),
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+
+                  children: [
+                    Text(
+                      (assessment['title'] ?? 'Assessment').toString(),
+
+                      maxLines: 1,
+
+                      overflow: TextOverflow.ellipsis,
+
+                      style: const TextStyle(
+                        color: textDark,
+
+                        fontSize: 13,
+
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+
+                    const SizedBox(height: 4),
+
+                    Text(
+                      [
+                        (assessment['courseCode'] ?? '').toString(),
+
+                        if (dueAt != null)
+                          '${_formatDate(dueAt)} • ${_formatTime(dueAt)}',
+                      ].where((value) => value.trim().isNotEmpty).join('  •  '),
+
+                      style: const TextStyle(color: textGrey, fontSize: 10.5),
+                    ),
+                  ],
+                ),
               ),
-            ),
 
-            child:
-                Row(
-              children: [
-                Container(
-                  width:
-                      44,
-
-                  height:
-                      44,
-
-                  decoration:
-                      BoxDecoration(
-                    color:
-                        typeColor.withValues(
-                      alpha:
-                          0.10,
-                    ),
-
-                    borderRadius:
-                        BorderRadius.circular(
-                      12,
-                    ),
-                  ),
-
-                  child:
-                      Icon(
-                    _assessmentIcon(
-                      type,
-                    ),
-
-                    color:
-                        typeColor,
-                  ),
-                ),
-
-                const SizedBox(
-                  width:
-                      12,
-                ),
-
-                Expanded(
-                  child:
-                      Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-
-                    children: [
-                      Text(
-                        (assessment[
-                                    'title'] ??
-                                'Assessment')
-                            .toString(),
-
-                        maxLines:
-                            1,
-
-                        overflow:
-                            TextOverflow.ellipsis,
-
-                        style:
-                            const TextStyle(
-                          color:
-                              textDark,
-
-                          fontSize:
-                              13,
-
-                          fontWeight:
-                              FontWeight.w800,
-                        ),
-                      ),
-
-                      const SizedBox(
-                        height:
-                            4,
-                      ),
-
-                      Text(
-                        [
-                          (assessment[
-                                      'courseCode'] ??
-                                  '')
-                              .toString(),
-
-                          if (dueAt !=
-                              null)
-                            '${_formatDate(dueAt)} • ${_formatTime(dueAt)}',
-                        ]
-                            .where(
-                              (
-                                value,
-                              ) =>
-                                  value
-                                      .trim()
-                                      .isNotEmpty,
-                            )
-                            .join(
-                              '  •  ',
-                            ),
-
-                        style:
-                            const TextStyle(
-                          color:
-                              textGrey,
-
-                          fontSize:
-                              10.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const Icon(
-                  Icons
-                      .chevron_right_rounded,
-
-                  color:
-                      textGrey,
-                ),
-              ],
-            ),
-          );
-        },
-      ).toList(),
+              const Icon(Icons.chevron_right_rounded, color: textGrey),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 
@@ -1954,88 +1424,42 @@ class _StudentDashboardScreenState
 
   Widget _buildError() {
     return SizedBox(
-      height:
-          500,
+      height: 500,
 
-      child:
-          Center(
-        child:
-            Padding(
-          padding:
-              const EdgeInsets.all(
-            24,
-          ),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
 
-          child:
-              Column(
-            mainAxisSize:
-                MainAxisSize.min,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
 
             children: [
-              const Icon(
-                Icons
-                    .error_outline_rounded,
+              const Icon(Icons.error_outline_rounded, color: red, size: 48),
 
-                color:
-                    red,
-
-                size:
-                    48,
-              ),
-
-              const SizedBox(
-                height:
-                    12,
-              ),
+              const SizedBox(height: 12),
 
               Text(
-                _errorMessage ??
-                    'Unable to load dashboard.',
+                _errorMessage ?? 'Unable to load dashboard.',
 
-                textAlign:
-                    TextAlign.center,
+                textAlign: TextAlign.center,
 
-                style:
-                    const TextStyle(
-                  color:
-                      textGrey,
-                ),
+                style: const TextStyle(color: textGrey),
               ),
 
-              const SizedBox(
-                height:
-                    18,
-              ),
+              const SizedBox(height: 18),
 
               ElevatedButton.icon(
-                onPressed:
-                    _loadDashboard,
+                onPressed: _loadDashboard,
 
-                icon:
-                    const Icon(
-                  Icons
-                      .refresh_rounded,
+                icon: const Icon(Icons.refresh_rounded, color: Colors.white),
 
-                  color:
-                      Colors.white,
-                ),
-
-                label:
-                    const Text(
+                label: const Text(
                   'Try Again',
 
-                  style:
-                      TextStyle(
-                    color:
-                        Colors.white,
-                  ),
+                  style: TextStyle(color: Colors.white),
                 ),
 
-                style:
-                    ElevatedButton.styleFrom(
-                  backgroundColor:
-                      primaryBlue,
-                ),
+                style: ElevatedButton.styleFrom(backgroundColor: primaryBlue),
               ),
             ],
           ),
@@ -2056,40 +1480,22 @@ class _StudentDashboardScreenState
 class _JoinClassSheet extends StatefulWidget {
   final EnrollmentService enrollmentService;
 
-  const _JoinClassSheet({
-    required this.enrollmentService,
-  });
+  const _JoinClassSheet({required this.enrollmentService});
 
   @override
-  State<_JoinClassSheet> createState() =>
-      _JoinClassSheetState();
+  State<_JoinClassSheet> createState() => _JoinClassSheetState();
 }
 
-class _JoinClassSheetState
-    extends State<_JoinClassSheet> {
-  static const Color primaryBlue =
-      Color(
-    0xFF1769FF,
-  );
+class _JoinClassSheetState extends State<_JoinClassSheet> {
+  static const Color primaryBlue = Color(0xFF1769FF);
 
-  static const Color background =
-      Color(
-    0xFFF8FAFD,
-  );
+  static const Color background = Color(0xFFF8FAFD);
 
-  static const Color textDark =
-      Color(
-    0xFF111827,
-  );
+  static const Color textDark = Color(0xFF111827);
 
-  static const Color textGrey =
-      Color(
-    0xFF6B7280,
-  );
+  static const Color textGrey = Color(0xFF6B7280);
 
-  final TextEditingController
-      _codeController =
-      TextEditingController();
+  final TextEditingController _codeController = TextEditingController();
 
   bool _isSubmitting = false;
 
@@ -2115,39 +1521,27 @@ class _JoinClassSheetState
       return;
     }
 
-    final String classCode =
-        _codeController.text
-            .trim();
+    final String classCode = _codeController.text.trim();
 
     if (classCode.isEmpty) {
       setState(() {
-        _error =
-            'Enter the class code provided by your instructor.';
+        _error = 'Enter the class code provided by your instructor.';
       });
 
       return;
     }
 
-    FocusScope.of(
-      context,
-    ).unfocus();
+    FocusScope.of(context).unfocus();
 
     setState(() {
-      _isSubmitting =
-          true;
+      _isSubmitting = true;
 
-      _error =
-          null;
+      _error = null;
     });
 
     try {
-      final Map<String, dynamic> course =
-          await widget
-              .enrollmentService
-              .joinClass(
-        classCode:
-            classCode,
-      );
+      final Map<String, dynamic> course = await widget.enrollmentService
+          .joinClass(classCode: classCode);
 
       if (!mounted) {
         return;
@@ -2157,23 +1551,16 @@ class _JoinClassSheetState
       // Return the course only.
       //
       // The dashboard refresh happens outside this widget.
-      Navigator.of(
-        context,
-      ).pop(
-        course,
-      );
-    } on EnrollmentServiceException
-        catch (e) {
+      Navigator.of(context).pop(course);
+    } on EnrollmentServiceException catch (e) {
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _isSubmitting =
-            false;
+        _isSubmitting = false;
 
-        _error =
-            e.message;
+        _error = e.message;
       });
     } catch (_) {
       if (!mounted) {
@@ -2181,11 +1568,9 @@ class _JoinClassSheetState
       }
 
       setState(() {
-        _isSubmitting =
-            false;
+        _isSubmitting = false;
 
-        _error =
-            'Unable to join this class.';
+        _error = 'Unable to join this class.';
       });
     }
   }
@@ -2195,372 +1580,218 @@ class _JoinClassSheetState
   // ============================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return PopScope(
-      canPop:
-          !_isSubmitting,
+      canPop: !_isSubmitting,
 
-      child:
-          Container(
-        padding:
-            EdgeInsets.only(
-          left:
-              22,
+      child: Container(
+        padding: EdgeInsets.only(
+          left: 22,
 
-          right:
-              22,
+          right: 22,
 
-          top:
-              12,
+          top: 12,
 
-          bottom:
-              MediaQuery.of(
-                    context,
-                  )
-                      .viewInsets
-                      .bottom +
-                  25,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 25,
         ),
 
-        decoration:
-            const BoxDecoration(
-          color:
-              Colors.white,
+        decoration: const BoxDecoration(
+          color: Colors.white,
 
-          borderRadius:
-              BorderRadius.only(
-            topLeft:
-                Radius.circular(
-              28,
-            ),
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(28),
 
-            topRight:
-                Radius.circular(
-              28,
-            ),
+            topRight: Radius.circular(28),
           ),
         ),
 
-        child:
-            SafeArea(
-          top:
-              false,
+        child: SafeArea(
+          top: false,
 
-          child:
-              SingleChildScrollView(
-            child:
-                Column(
-              mainAxisSize:
-                  MainAxisSize.min,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
 
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
 
               children: [
                 Center(
-                  child:
-                      Container(
-                    width:
-                        42,
+                  child: Container(
+                    width: 42,
 
-                    height:
-                        5,
+                    height: 5,
 
-                    decoration:
-                        BoxDecoration(
-                      color:
-                          const Color(
-                        0xFFD9DEE7,
-                      ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD9DEE7),
 
-                      borderRadius:
-                          BorderRadius.circular(
-                        10,
-                      ),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                 ),
 
-                const SizedBox(
-                  height:
-                      20,
-                ),
+                const SizedBox(height: 20),
 
                 Row(
                   children: [
                     const Expanded(
-                      child:
-                          Text(
+                      child: Text(
                         'Join a Class',
 
-                        style:
-                            TextStyle(
-                          color:
-                              textDark,
+                        style: TextStyle(
+                          color: textDark,
 
-                          fontSize:
-                              21,
+                          fontSize: 21,
 
-                          fontWeight:
-                              FontWeight.w800,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
                     ),
 
                     IconButton(
-                      onPressed:
-                          _isSubmitting
-                              ? null
-                              : () {
-                                  Navigator.of(
-                                    context,
-                                  ).pop();
-                                },
+                      onPressed: _isSubmitting
+                          ? null
+                          : () {
+                              Navigator.of(context).pop();
+                            },
 
-                      icon:
-                          const Icon(
-                        Icons
-                            .close_rounded,
-
-                        color:
-                            textDark,
-                      ),
+                      icon: const Icon(Icons.close_rounded, color: textDark),
                     ),
                   ],
                 ),
 
-                const SizedBox(
-                  height:
-                      8,
-                ),
+                const SizedBox(height: 8),
 
                 const Text(
                   'Enter the class code provided by your instructor.',
 
-                  style:
-                      TextStyle(
-                    color:
-                        textGrey,
-
-                    fontSize:
-                        13,
-
-                    height:
-                        1.5,
-                  ),
+                  style: TextStyle(color: textGrey, fontSize: 13, height: 1.5),
                 ),
 
-                const SizedBox(
-                  height:
-                      24,
-                ),
+                const SizedBox(height: 24),
 
                 TextField(
-                  controller:
-                      _codeController,
+                  controller: _codeController,
 
-                  enabled:
-                      !_isSubmitting,
+                  enabled: !_isSubmitting,
 
-                  textCapitalization:
-                      TextCapitalization.characters,
+                  textCapitalization: TextCapitalization.characters,
 
-                  textInputAction:
-                      TextInputAction.done,
+                  textInputAction: TextInputAction.done,
 
-                  onSubmitted:
-                      (_) {
+                  onSubmitted: (_) {
                     if (!_isSubmitting) {
                       _join();
                     }
                   },
 
-                  decoration:
-                      InputDecoration(
-                    labelText:
-                        'Class Code',
+                  decoration: InputDecoration(
+                    labelText: 'Class Code',
 
-                    hintText:
-                        'Enter instructor class code',
+                    hintText: 'Enter instructor class code',
 
-                    prefixIcon:
-                        const Icon(
-                      Icons
-                          .vpn_key_outlined,
+                    prefixIcon: const Icon(
+                      Icons.vpn_key_outlined,
 
-                      color:
-                          primaryBlue,
+                      color: primaryBlue,
                     ),
 
-                    errorText:
-                        _error,
+                    errorText: _error,
 
-                    filled:
-                        true,
+                    filled: true,
 
-                    fillColor:
-                        background,
+                    fillColor: background,
 
-                    contentPadding:
-                        const EdgeInsets.symmetric(
-                      horizontal:
-                          16,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
 
-                      vertical:
-                          17,
+                      vertical: 17,
                     ),
 
-                    border:
-                        OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(
-                        15,
-                      ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
                     ),
 
-                    enabledBorder:
-                        OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(
-                        15,
-                      ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
 
-                      borderSide:
-                          const BorderSide(
-                        color:
-                            Color(
-                          0xFFE1E5EC,
-                        ),
+                      borderSide: const BorderSide(color: Color(0xFFE1E5EC)),
+                    ),
+
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+
+                      borderSide: const BorderSide(
+                        color: primaryBlue,
+
+                        width: 1.5,
                       ),
                     ),
 
-                    focusedBorder:
-                        OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(
-                        15,
-                      ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
 
-                      borderSide:
-                          const BorderSide(
-                        color:
-                            primaryBlue,
-
-                        width:
-                            1.5,
-                      ),
+                      borderSide: const BorderSide(color: Colors.redAccent),
                     ),
 
-                    errorBorder:
-                        OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(
-                        15,
-                      ),
+                    focusedErrorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
 
-                      borderSide:
-                          const BorderSide(
-                        color:
-                            Colors.redAccent,
-                      ),
-                    ),
+                      borderSide: const BorderSide(
+                        color: Colors.redAccent,
 
-                    focusedErrorBorder:
-                        OutlineInputBorder(
-                      borderRadius:
-                          BorderRadius.circular(
-                        15,
-                      ),
-
-                      borderSide:
-                          const BorderSide(
-                        color:
-                            Colors.redAccent,
-
-                        width:
-                            1.5,
+                        width: 1.5,
                       ),
                     ),
                   ),
                 ),
 
-                const SizedBox(
-                  height:
-                      20,
-                ),
+                const SizedBox(height: 20),
 
                 SizedBox(
-                  width:
-                      double.infinity,
+                  width: double.infinity,
 
-                  height:
-                      54,
+                  height: 54,
 
-                  child:
-                      ElevatedButton(
-                    onPressed:
-                        _isSubmitting
-                            ? null
-                            : _join,
+                  child: ElevatedButton(
+                    onPressed: _isSubmitting ? null : _join,
 
-                    style:
-                        ElevatedButton.styleFrom(
-                      backgroundColor:
-                          primaryBlue,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryBlue,
 
-                      disabledBackgroundColor:
-                          primaryBlue.withValues(
-                        alpha:
-                            0.55,
+                      disabledBackgroundColor: primaryBlue.withValues(
+                        alpha: 0.55,
                       ),
 
-                      elevation:
-                          0,
+                      elevation: 0,
 
-                      shape:
-                          RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(
-                          15,
-                        ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
                       ),
                     ),
 
-                    child:
-                        _isSubmitting
-                            ? const SizedBox(
-                                width:
-                                    22,
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 22,
 
-                                height:
-                                    22,
+                            height: 22,
 
-                                child:
-                                    CircularProgressIndicator(
-                                  color:
-                                      Colors.white,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
 
-                                  strokeWidth:
-                                      2.5,
-                                ),
-                              )
-                            : const Text(
-                                'Join Class',
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : const Text(
+                            'Join Class',
 
-                                style:
-                                    TextStyle(
-                                  color:
-                                      Colors.white,
+                            style: TextStyle(
+                              color: Colors.white,
 
-                                  fontWeight:
-                                      FontWeight.w800,
+                              fontWeight: FontWeight.w800,
 
-                                  fontSize:
-                                      15,
-                                ),
-                              ),
+                              fontSize: 15,
+                            ),
+                          ),
                   ),
                 ),
               ],

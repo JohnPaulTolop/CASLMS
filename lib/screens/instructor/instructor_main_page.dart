@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import 'instructor_ui.dart';
+
 import 'instructor_dashboard_page.dart';
 import 'instructor_grading_page.dart';
 import 'instructor_analytics_page.dart';
@@ -25,65 +28,69 @@ class _InstructorMainScreenState extends State<InstructorMainScreen> {
   Widget build(BuildContext context) {
     final List<Widget> pages = [
       InstructorDashboardScreen(onNavigateToTab: _onItemTapped),
-      const InstructorClassesScreen(), 
-      const InstructorGradingScreen(), 
-      const InstructorAnalyticsScreen(), 
-      const InstructorProfileScreen(), 
+      const InstructorClassesScreen(),
+      const InstructorGradingScreen(),
+      const InstructorAnalyticsScreen(),
+      const InstructorProfileScreen(),
     ];
 
-    return Scaffold(
+    return instructorScaffold(
+      context: context,
       backgroundColor: const Color(0xFFF7F9FC),
-      body: Center( // Center horizontally handles the max-width alignment safely
+      body: Center(
+        // Center horizontally handles the max-width alignment safely
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1200),
-          child: IndexedStack(
-            index: _selectedIndex,
-            children: pages,
-          ),
+          child: IndexedStack(index: _selectedIndex, children: pages),
         ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
+          border: const Border(top: BorderSide(color: InstructorUi.border)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10, 
-              offset: const Offset(0, -4),
+              color: Colors.black.withValues(alpha: 0.045),
+              blurRadius: 18,
+              offset: const Offset(0, -6),
             ),
           ],
         ),
         child: SafeArea(
           child: Center(
-            heightFactor: 1.0, // Ensures the nav bar doesn't stretch vertically
+            heightFactor: 1,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1200),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  splashColor: Colors.transparent, 
-                  highlightColor: Colors.transparent,
-                ),
-                child: BottomNavigationBar(
-                  backgroundColor: Colors.white,
-                  elevation: 0,
-                  currentIndex: _selectedIndex,
-                  onTap: _onItemTapped,
-                  selectedItemColor: Colors.teal.shade600,
-                  unselectedItemColor: Colors.grey[400],
-                  showSelectedLabels: true,
-                  showUnselectedLabels: true,
-                  selectedFontSize: 10,
-                  unselectedFontSize: 10,
-                  type: BottomNavigationBarType.fixed, 
-                  iconSize: 24,
-                  items: const [
-                    BottomNavigationBarItem(icon: Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Icon(Icons.dashboard_rounded)), label: 'Dashboard'),
-                    BottomNavigationBarItem(icon: Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Icon(Icons.class_rounded)), label: 'Classes'),
-                    BottomNavigationBarItem(icon: Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Icon(Icons.checklist_rounded)), label: 'Grading'),
-                    BottomNavigationBarItem(icon: Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Icon(Icons.insights_rounded)), label: 'Analytics'),
-                    BottomNavigationBarItem(icon: Padding(padding: EdgeInsets.symmetric(horizontal: 12.0), child: Icon(Icons.person_outline_rounded)), label: 'Profile'),
-                  ],
-                ),
+              child: NavigationBar(
+                selectedIndex: _selectedIndex,
+                onDestinationSelected: _onItemTapped,
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.dashboard_outlined),
+                    selectedIcon: Icon(Icons.dashboard_rounded),
+                    label: 'Home',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.class_outlined),
+                    selectedIcon: Icon(Icons.class_rounded),
+                    label: 'Classes',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.fact_check_outlined),
+                    selectedIcon: Icon(Icons.fact_check_rounded),
+                    label: 'Grading',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.insights_outlined),
+                    selectedIcon: Icon(Icons.insights_rounded),
+                    label: 'Analytics',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.person_outline_rounded),
+                    selectedIcon: Icon(Icons.person_rounded),
+                    label: 'Profile',
+                  ),
+                ],
               ),
             ),
           ),

@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import 'instructor_ui.dart';
+
 import 'package:flutter/services.dart';
 
 class InstructorAnalyticsScreen extends StatefulWidget {
@@ -1051,7 +1054,8 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return instructorScaffold(
+      context: context,
       backgroundColor: background,
 
       appBar: AppBar(

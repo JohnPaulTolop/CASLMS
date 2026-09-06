@@ -337,6 +337,31 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
     return (_course?['instructorName'] ?? '').toString().trim();
   }
 
+  int get _completedAssessmentCount {
+    int completed = 0;
+    for (final assessment in _assessments) {
+      final String assessmentId =
+          (assessment['assessmentId'] ?? assessment['id'] ?? '').toString();
+      final String status = (_submissionFor(assessmentId)?['status'] ?? '')
+          .toString()
+          .toLowerCase();
+      if (status == 'submitted' || status == 'graded') {
+        completed++;
+      }
+    }
+    return completed;
+  }
+
+  int get _gradedAssessmentCount => _submissions.where((submission) {
+    return (submission['status'] ?? '').toString().toLowerCase() == 'graded';
+  }).length;
+
+  double get _assessmentProgress => _assessments.isEmpty
+      ? 0.0
+      : (_completedAssessmentCount / _assessments.length)
+            .clamp(0.0, 1.0)
+            .toDouble();
+
   // ============================================================
   // SUBMISSION LOOKUP
   // ============================================================
@@ -807,34 +832,39 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
       return _buildErrorState();
     }
 
-    return Column(
-      children: [
-        _buildHeader(),
-
-        Expanded(
-          child: Container(
-            width: double.infinity,
-            decoration: const BoxDecoration(
-              color: background,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(30),
-                topRight: Radius.circular(30),
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF1769FF), Color(0xFF4E86FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Column(
+        children: [
+          _buildHeader(),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: background,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(30),
+                  topRight: Radius.circular(30),
+                ),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 12),
+                  _buildTabs(),
+                  const SizedBox(height: 4),
+                  Expanded(child: _buildSelectedTab()),
+                ],
               ),
             ),
-            child: Column(
-              children: [
-                const SizedBox(height: 12),
-
-                _buildTabs(),
-
-                const SizedBox(height: 4),
-
-                Expanded(child: _buildSelectedTab()),
-              ],
-            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -844,96 +874,159 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 26),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: IconButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              icon: const Icon(
-                Icons.arrow_back_ios_new_rounded,
-                color: Colors.white,
-                size: 20,
-              ),
-            ),
-          ),
-
-          Container(
-            width: 62,
-            height: 62,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: const Icon(
-              Icons.menu_book_rounded,
-              color: Colors.white,
-              size: 31,
-            ),
-          ),
-
-          const SizedBox(height: 13),
-
-          Text(
-            widget.courseCode,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-
-          const SizedBox(height: 5),
-
-          Text(
-            _moduleTitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 23,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-
-          const SizedBox(height: 5),
-
-          Text(
-            widget.courseTitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-
-          if (_instructorName.isNotEmpty) ...[
-            const SizedBox(height: 4),
-
-            Text(
-              'Instructor: $_instructorName',
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
-            ),
-          ],
-
-          if (_moduleOrder > 0) ...[
-            const SizedBox(height: 7),
-
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'MODULE $_moduleOrder',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w800,
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  tooltip: 'Back',
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                 ),
               ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  widget.courseCode.isEmpty
+                      ? widget.courseTitle
+                      : '${widget.courseCode} • ${widget.courseTitle}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.88),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: IconButton(
+                  onPressed: _loadPage,
+                  tooltip: 'Refresh module',
+                  icon: const Icon(
+                    Icons.refresh_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 19),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 55,
+                height: 55,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.14),
+                  ),
+                ),
+                child: const Icon(
+                  Icons.menu_book_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_moduleOrder > 0)
+                      Text(
+                        'MODULE $_moduleOrder',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.72),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _moduleTitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        height: 1.15,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    if (_instructorName.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'Instructor: $_instructorName',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.78),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              Text(
+                '$_completedAssessmentCount of ${_assessments.length} tasks completed',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.86),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${(_assessmentProgress * 100).round()}%',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: _assessmentProgress,
+              minHeight: 7,
+              backgroundColor: Colors.white.withValues(alpha: 0.20),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -953,16 +1046,16 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
       ),
       child: Row(
         children: [
-          Expanded(child: _buildTab('Lessons', 0)),
-          Expanded(child: _buildTab('Tasks', 1)),
-          Expanded(child: _buildTab('Resources', 2)),
-          Expanded(child: _buildTab('Grades', 3)),
+          Expanded(child: _buildTab('Lessons', Icons.notes_rounded, 0)),
+          Expanded(child: _buildTab('Tasks', Icons.task_alt_rounded, 1)),
+          Expanded(child: _buildTab('Files', Icons.folder_rounded, 2)),
+          Expanded(child: _buildTab('Grades', Icons.grade_rounded, 3)),
         ],
       ),
     );
   }
 
-  Widget _buildTab(String title, int index) {
+  Widget _buildTab(String title, IconData icon, int index) {
     final bool selected = _selectedTab == index;
 
     return GestureDetector(
@@ -973,19 +1066,26 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(vertical: 9),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
           color: selected ? Colors.white : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
         ),
         alignment: Alignment.center,
-        child: Text(
-          title,
-          style: TextStyle(
-            color: selected ? primaryBlue : textGrey,
-            fontSize: 11,
-            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: selected ? primaryBlue : textGrey),
+            const SizedBox(height: 3),
+            Text(
+              title,
+              style: TextStyle(
+                color: selected ? primaryBlue : textGrey,
+                fontSize: 9.5,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1018,6 +1118,10 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
     return ListView(
       padding: const EdgeInsets.fromLTRB(22, 18, 22, 40),
       children: [
+        _buildLearningSnapshot(),
+
+        const SizedBox(height: 22),
+
         const Text(
           'Module Overview',
           style: TextStyle(
@@ -1051,6 +1155,66 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
     );
   }
 
+  Widget _buildLearningSnapshot() {
+    return Container(
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: primaryBlue.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: primaryBlue.withValues(alpha: 0.11)),
+      ),
+      child: Row(
+        children: [
+          _buildSnapshotItem(
+            Icons.task_alt_rounded,
+            'Tasks',
+            '$_completedAssessmentCount/${_assessments.length}',
+          ),
+          Container(width: 1, height: 38, color: borderColor),
+          _buildSnapshotItem(
+            Icons.folder_rounded,
+            'Resources',
+            '${_resources.length}',
+          ),
+          Container(width: 1, height: 38, color: borderColor),
+          _buildSnapshotItem(
+            Icons.grade_rounded,
+            'Graded',
+            '$_gradedAssessmentCount',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSnapshotItem(IconData icon, String label, String value) {
+    return Expanded(
+      child: Column(
+        children: [
+          Icon(icon, color: primaryBlue, size: 19),
+          const SizedBox(height: 5),
+          Text(
+            value,
+            style: const TextStyle(
+              color: textDark,
+              fontSize: 14,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: const TextStyle(
+              color: textGrey,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ============================================================
   // TASKS
   // ============================================================
@@ -1063,13 +1227,23 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(22, 18, 22, 45),
         children: [
-          const Text(
-            'Assessments',
-            style: TextStyle(
-              color: textDark,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-            ),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Assessments',
+                  style: TextStyle(
+                    color: textDark,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              _buildCountBadge(
+                '$_completedAssessmentCount/${_assessments.length} done',
+                primaryBlue,
+              ),
+            ],
           ),
 
           const SizedBox(height: 4),
@@ -1143,13 +1317,26 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
 
     final Color color = _assessmentColor(type);
 
+    final Color stateColor = graded || submitted
+        ? green
+        : notComplied || pastDue
+        ? red
+        : color;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: stateColor.withValues(alpha: 0.14)),
+        boxShadow: [
+          BoxShadow(
+            color: stateColor.withValues(alpha: 0.055),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1431,6 +1618,7 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.12)),
       ),
       child: Text(
         text,
@@ -1455,13 +1643,23 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(22, 18, 22, 40),
         children: [
-          const Text(
-            'Learning Resources',
-            style: TextStyle(
-              color: textDark,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-            ),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Learning Resources',
+                  style: TextStyle(
+                    color: textDark,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              _buildCountBadge(
+                '${_resources.length} ${_resources.length == 1 ? 'file' : 'files'}',
+                primaryBlue,
+              ),
+            ],
           ),
 
           const SizedBox(height: 16),
@@ -1491,12 +1689,36 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
     final String type = (resource['resourceType'] ?? resource['type'] ?? 'file')
         .toString();
 
+    final String normalizedType = type.toLowerCase();
+    final IconData resourceIcon = normalizedType.contains('pdf')
+        ? Icons.picture_as_pdf_rounded
+        : normalizedType.contains('video')
+        ? Icons.play_circle_outline_rounded
+        : normalizedType.contains('link')
+        ? Icons.link_rounded
+        : normalizedType.contains('doc') || normalizedType.contains('word')
+        ? Icons.article_outlined
+        : Icons.insert_drive_file_outlined;
+
+    final Color resourceColor = normalizedType.contains('pdf')
+        ? red
+        : normalizedType.contains('video')
+        ? purple
+        : primaryBlue;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 11),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: resourceColor.withValues(alpha: 0.12)),
+        boxShadow: [
+          BoxShadow(
+            color: resourceColor.withValues(alpha: 0.045),
+            blurRadius: 13,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -1512,13 +1734,10 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
                   width: 43,
                   height: 43,
                   decoration: BoxDecoration(
-                    color: primaryBlue.withValues(alpha: 0.09),
+                    color: resourceColor.withValues(alpha: 0.09),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
-                    Icons.description_outlined,
-                    color: primaryBlue,
-                  ),
+                  child: Icon(resourceIcon, color: resourceColor),
                 ),
 
                 const SizedBox(width: 12),
@@ -1578,13 +1797,20 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(22, 18, 22, 40),
         children: [
-          const Text(
-            'Assessment Grades',
-            style: TextStyle(
-              color: textDark,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-            ),
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Assessment Grades',
+                  style: TextStyle(
+                    color: textDark,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              _buildCountBadge('${gradedSubmissions.length} graded', green),
+            ],
           ),
 
           const SizedBox(height: 4),
@@ -1638,7 +1864,14 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: green.withValues(alpha: 0.14)),
+        boxShadow: [
+          BoxShadow(
+            color: green.withValues(alpha: 0.05),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1781,6 +2014,24 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
             style: const TextStyle(color: textGrey, fontSize: 11, height: 1.45),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCountBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 9.5,
+          fontWeight: FontWeight.w800,
+        ),
       ),
     );
   }

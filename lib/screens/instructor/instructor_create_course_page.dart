@@ -1,68 +1,48 @@
 import 'package:flutter/material.dart';
 
+import 'instructor_ui.dart';
+
 import '../../services/instructor_course_service.dart';
 
 import 'instructor_class_details_page.dart';
 
-class InstructorCreateCourseScreen
-    extends StatefulWidget {
-  const InstructorCreateCourseScreen({
-    super.key,
-  });
+class InstructorCreateCourseScreen extends StatefulWidget {
+  const InstructorCreateCourseScreen({super.key});
 
   @override
-  State<InstructorCreateCourseScreen>
-      createState() =>
-          _InstructorCreateCourseScreenState();
+  State<InstructorCreateCourseScreen> createState() =>
+      _InstructorCreateCourseScreenState();
 }
 
 class _InstructorCreateCourseScreenState
     extends State<InstructorCreateCourseScreen> {
-  static const Color primaryTeal =
-      Color(0xFF00897B);
+  static const Color primaryTeal = Color(0xFF00897B);
 
-  static const Color background =
-      Color(0xFFF7F9FC);
+  static const Color background = Color(0xFFF7F9FC);
 
-  static const Color textDark =
-      Color(0xFF10182F);
+  static const Color textDark = Color(0xFF10182F);
 
-  static const Color textGrey =
-      Color(0xFF68738A);
+  static const Color textGrey = Color(0xFF68738A);
 
-  static const Color borderColor =
-      Color(0xFFE6EAF0);
+  static const Color borderColor = Color(0xFFE6EAF0);
 
-  final InstructorCourseService
-      _courseService =
-      InstructorCourseService();
+  final InstructorCourseService _courseService = InstructorCourseService();
 
-  final GlobalKey<FormState> _formKey =
-      GlobalKey<FormState>();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
-  final TextEditingController
-      _courseCodeController =
-      TextEditingController();
+  final TextEditingController _courseCodeController = TextEditingController();
 
-  final TextEditingController
-      _titleController =
-      TextEditingController();
+  final TextEditingController _titleController = TextEditingController();
 
-  final TextEditingController
-      _descriptionController =
-      TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
 
-  final TextEditingController
-      _academicYearController =
-      TextEditingController();
+  final TextEditingController _academicYearController = TextEditingController();
 
-  bool _isSaving =
-      false;
+  bool _isSaving = false;
 
   String? _errorMessage;
 
-  String _semester =
-      '1st Semester';
+  String _semester = '1st Semester';
 
   final List<String> _semesters = const [
     '1st Semester',
@@ -74,11 +54,9 @@ class _InstructorCreateCourseScreenState
   void initState() {
     super.initState();
 
-    final int year =
-        DateTime.now().year;
+    final int year = DateTime.now().year;
 
-    _academicYearController.text =
-        '$year-${year + 1}';
+    _academicYearController.text = '$year-${year + 1}';
   }
 
   @override
@@ -106,86 +84,61 @@ class _InstructorCreateCourseScreenState
     }
 
     setState(() {
-      _isSaving =
-          true;
+      _isSaving = true;
 
-      _errorMessage =
-          null;
+      _errorMessage = null;
     });
 
     try {
-      final Map<String, dynamic> course =
-          await _courseService.createCourse(
-        code:
-            _courseCodeController.text,
+      final Map<String, dynamic> course = await _courseService.createCourse(
+        code: _courseCodeController.text,
 
-        title:
-            _titleController.text,
+        title: _titleController.text,
 
-        description:
-            _descriptionController.text,
+        description: _descriptionController.text,
 
-        semester:
-            _semester,
+        semester: _semester,
 
-        academicYear:
-            _academicYearController.text,
+        academicYear: _academicYearController.text,
       );
 
       if (!mounted) {
         return;
       }
 
-      final String courseId =
-          (course['id'] ?? '')
-              .toString();
+      final String courseId = (course['id'] ?? '').toString();
 
-      final String code =
-          (course['code'] ?? '')
-              .toString();
+      final String code = (course['code'] ?? '').toString();
 
-      final String title =
-          (course['title'] ?? '')
-              .toString();
+      final String title = (course['title'] ?? '').toString();
 
-      final String instructorName =
-          (course['instructorName'] ??
-                  'Instructor')
-              .toString();
+      final String instructorName = (course['instructorName'] ?? 'Instructor')
+          .toString();
 
       Navigator.pushReplacement(
         context,
 
         MaterialPageRoute(
-          builder:
-              (context) =>
-                  InstructorClassDetailsScreen(
-            courseId:
-                courseId,
+          builder: (context) => InstructorClassDetailsScreen(
+            courseId: courseId,
 
-            title:
-                title,
+            title: title,
 
-            courseCode:
-                code,
+            courseCode: code,
 
-            instructorName:
-                instructorName,
+            instructorName: instructorName,
           ),
         ),
       );
-    } on InstructorCourseServiceException
-        catch (e) {
+    } on InstructorCourseServiceException catch (e) {
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _isSaving =
-            false;
+        _isSaving = false;
 
-        _errorMessage =
-            e.message;
+        _errorMessage = e.message;
       });
     } catch (_) {
       if (!mounted) {
@@ -193,142 +146,91 @@ class _InstructorCreateCourseScreenState
       }
 
       setState(() {
-        _isSaving =
-            false;
+        _isSaving = false;
 
-        _errorMessage =
-            'Unable to create course.';
+        _errorMessage = 'Unable to create course.';
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor:
-          background,
+    return instructorScaffold(
+      context: context,
+      backgroundColor: background,
 
-      appBar:
-          AppBar(
-        backgroundColor:
-            background,
+      appBar: AppBar(
+        backgroundColor: background,
 
-        elevation:
-            0,
+        elevation: 0,
 
-        centerTitle:
-            true,
+        centerTitle: true,
 
-        leading:
-            IconButton(
-          onPressed:
-              _isSaving
-                  ? null
-                  : () {
-                      Navigator.pop(
-                        context,
-                      );
-                    },
+        leading: IconButton(
+          onPressed: _isSaving
+              ? null
+              : () {
+                  Navigator.pop(context);
+                },
 
-          icon:
-              const Icon(
-            Icons
-                .arrow_back_ios_new_rounded,
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
 
-            color:
-                textDark,
+            color: textDark,
 
-            size:
-                20,
+            size: 20,
           ),
         ),
 
-        title:
-            const Text(
+        title: const Text(
           'Create New Subject',
 
-          style:
-              TextStyle(
-            color:
-                textDark,
+          style: TextStyle(
+            color: textDark,
 
-            fontSize:
-                18,
+            fontSize: 18,
 
-            fontWeight:
-                FontWeight.w800,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ),
 
-      body:
-          SafeArea(
-        child:
-            Align(
-          alignment:
-              Alignment.topCenter,
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
 
-          child:
-              ConstrainedBox(
-            constraints:
-                const BoxConstraints(
-              maxWidth:
-                  700,
-            ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
 
-            child:
-                Form(
-              key:
-                  _formKey,
+            child: Form(
+              key: _formKey,
 
-              child:
-                  SingleChildScrollView(
-                physics:
-                    const BouncingScrollPhysics(),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
 
-                padding:
-                    const EdgeInsets.fromLTRB(
-                  24,
-                  16,
-                  24,
-                  120,
-                ),
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
 
-                child:
-                    Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
 
                   children: [
                     _buildHeader(),
 
-                    const SizedBox(
-                      height:
-                          26,
-                    ),
+                    const SizedBox(height: 26),
 
                     _buildTextField(
-                      controller:
-                          _courseCodeController,
+                      controller: _courseCodeController,
 
-                      label:
-                          'Course Code',
+                      label: 'Course Code',
 
-                      hint:
-                          'e.g. IT302',
+                      hint: 'e.g. IT302',
 
-                      icon:
-                          Icons.tag_rounded,
+                      icon: Icons.tag_rounded,
 
-                      capitalization:
-                          TextCapitalization.characters,
+                      capitalization: TextCapitalization.characters,
 
-                      validator:
-                          (value) {
-                        if (value == null ||
-                            value
-                                .trim()
-                                .isEmpty) {
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
                           return 'Course code is required.';
                         }
 
@@ -336,31 +238,19 @@ class _InstructorCreateCourseScreenState
                       },
                     ),
 
-                    const SizedBox(
-                      height:
-                          15,
-                    ),
+                    const SizedBox(height: 15),
 
                     _buildTextField(
-                      controller:
-                          _titleController,
+                      controller: _titleController,
 
-                      label:
-                          'Course Title',
+                      label: 'Course Title',
 
-                      hint:
-                          'e.g. Advanced Mobile Development',
+                      hint: 'e.g. Advanced Mobile Development',
 
-                      icon:
-                          Icons
-                              .menu_book_rounded,
+                      icon: Icons.menu_book_rounded,
 
-                      validator:
-                          (value) {
-                        if (value == null ||
-                            value
-                                .trim()
-                                .isEmpty) {
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
                           return 'Course title is required.';
                         }
 
@@ -368,34 +258,21 @@ class _InstructorCreateCourseScreenState
                       },
                     ),
 
-                    const SizedBox(
-                      height:
-                          15,
-                    ),
+                    const SizedBox(height: 15),
 
                     _buildTextField(
-                      controller:
-                          _descriptionController,
+                      controller: _descriptionController,
 
-                      label:
-                          'Description',
+                      label: 'Description',
 
-                      hint:
-                          'Describe what students will learn.',
+                      hint: 'Describe what students will learn.',
 
-                      icon:
-                          Icons
-                              .description_outlined,
+                      icon: Icons.description_outlined,
 
-                      maxLines:
-                          4,
+                      maxLines: 4,
 
-                      validator:
-                          (value) {
-                        if (value == null ||
-                            value
-                                .trim()
-                                .isEmpty) {
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
                           return 'Course description is required.';
                         }
 
@@ -403,82 +280,51 @@ class _InstructorCreateCourseScreenState
                       },
                     ),
 
-                    const SizedBox(
-                      height:
-                          15,
-                    ),
+                    const SizedBox(height: 15),
 
-                    DropdownButtonFormField<
-                        String>(
-                      initialValue:
-                          _semester,
+                    DropdownButtonFormField<String>(
+                      initialValue: _semester,
 
-                      decoration:
-                          _inputDecoration(
-                        label:
-                            'Semester',
+                      decoration: _inputDecoration(
+                        label: 'Semester',
 
-                        icon:
-                            Icons
-                                .calendar_month_rounded,
+                        icon: Icons.calendar_month_rounded,
                       ),
 
-                      items:
-                          _semesters.map(
-                        (semester) {
-                          return DropdownMenuItem<
-                              String>(
-                            value:
-                                semester,
+                      items: _semesters.map((semester) {
+                        return DropdownMenuItem<String>(
+                          value: semester,
 
-                            child:
-                                Text(
-                              semester,
-                            ),
-                          );
-                        },
-                      ).toList(),
+                          child: Text(semester),
+                        );
+                      }).toList(),
 
-                      onChanged:
-                          _isSaving
-                              ? null
-                              : (value) {
-                                  if (value ==
-                                      null) {
-                                    return;
-                                  }
+                      onChanged: _isSaving
+                          ? null
+                          : (value) {
+                              if (value == null) {
+                                return;
+                              }
 
-                                  setState(() {
-                                    _semester =
-                                        value;
-                                  });
-                                },
+                              setState(() {
+                                _semester = value;
+                              });
+                            },
                     ),
 
-                    const SizedBox(
-                      height:
-                          15,
-                    ),
+                    const SizedBox(height: 15),
 
                     _buildTextField(
-                      controller:
-                          _academicYearController,
+                      controller: _academicYearController,
 
-                      label:
-                          'Academic Year',
+                      label: 'Academic Year',
 
-                      hint:
-                          'e.g. 2026-2027',
+                      hint: 'e.g. 2026-2027',
 
-                      icon:
-                          Icons.school_outlined,
+                      icon: Icons.school_outlined,
 
-                      validator:
-                          (value) {
-                        if (value == null ||
-                            value
-                                .trim()
-                                .isEmpty) {
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
                           return 'Academic year is required.';
                         }
 
@@ -486,60 +332,35 @@ class _InstructorCreateCourseScreenState
                       },
                     ),
 
-                    if (_errorMessage !=
-                        null) ...[
-                      const SizedBox(
-                        height:
-                            18,
-                      ),
+                    if (_errorMessage != null) ...[
+                      const SizedBox(height: 18),
 
                       Container(
-                        width:
-                            double.infinity,
+                        width: double.infinity,
 
-                        padding:
-                            const EdgeInsets.all(
-                          14,
+                        padding: const EdgeInsets.all(14),
+
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withValues(alpha: 0.08),
+
+                          borderRadius: BorderRadius.circular(12),
                         ),
 
-                        decoration:
-                            BoxDecoration(
-                          color:
-                              Colors.redAccent
-                                  .withValues(
-                            alpha:
-                                0.08,
-                          ),
-
-                          borderRadius:
-                              BorderRadius.circular(
-                            12,
-                          ),
-                        ),
-
-                        child:
-                            Text(
+                        child: Text(
                           _errorMessage!,
 
-                          style:
-                              const TextStyle(
-                            color:
-                                Colors.redAccent,
+                          style: const TextStyle(
+                            color: Colors.redAccent,
 
-                            fontSize:
-                                11.5,
+                            fontSize: 11.5,
 
-                            fontWeight:
-                                FontWeight.w600,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
                     ],
 
-                    const SizedBox(
-                      height:
-                          22,
-                    ),
+                    const SizedBox(height: 22),
 
                     _buildClassCodeInfo(),
                   ],
@@ -550,90 +371,52 @@ class _InstructorCreateCourseScreenState
         ),
       ),
 
-      bottomNavigationBar:
-          SafeArea(
-        child:
-            Container(
-          padding:
-              const EdgeInsets.fromLTRB(
-            24,
-            10,
-            24,
-            18,
-          ),
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(24, 10, 24, 18),
 
-          color:
-              background,
+          color: background,
 
-          child:
-              ElevatedButton(
-            onPressed:
-                _isSaving
-                    ? null
-                    : _createCourse,
+          child: ElevatedButton(
+            onPressed: _isSaving ? null : _createCourse,
 
-            style:
-                ElevatedButton.styleFrom(
-              backgroundColor:
-                  primaryTeal,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryTeal,
 
-              disabledBackgroundColor:
-                  primaryTeal.withValues(
-                alpha:
-                    0.5,
-              ),
+              disabledBackgroundColor: primaryTeal.withValues(alpha: 0.5),
 
-              elevation:
-                  0,
+              elevation: 0,
 
-              padding:
-                  const EdgeInsets.symmetric(
-                vertical:
-                    16,
-              ),
+              padding: const EdgeInsets.symmetric(vertical: 16),
 
-              shape:
-                  RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(
-                  15,
-                ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
               ),
             ),
 
-            child:
-                _isSaving
-                    ? const SizedBox(
-                        width:
-                            22,
+            child: _isSaving
+                ? const SizedBox(
+                    width: 22,
 
-                        height:
-                            22,
+                    height: 22,
 
-                        child:
-                            CircularProgressIndicator(
-                          strokeWidth:
-                              2,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
 
-                          color:
-                              Colors.white,
-                        ),
-                      )
-                    : const Text(
-                        'Create Subject',
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text(
+                    'Create Subject',
 
-                        style:
-                            TextStyle(
-                          color:
-                              Colors.white,
+                    style: TextStyle(
+                      color: Colors.white,
 
-                          fontSize:
-                              14,
+                      fontSize: 14,
 
-                          fontWeight:
-                              FontWeight.w800,
-                        ),
-                      ),
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
           ),
         ),
       ),
@@ -642,84 +425,50 @@ class _InstructorCreateCourseScreenState
 
   Widget _buildHeader() {
     return Container(
-      width:
-          double.infinity,
+      width: double.infinity,
 
-      padding:
-          const EdgeInsets.all(
-        19,
+      padding: const EdgeInsets.all(19),
+
+      decoration: BoxDecoration(
+        color: primaryTeal,
+
+        borderRadius: BorderRadius.circular(18),
       ),
 
-      decoration:
-          BoxDecoration(
-        color:
-            primaryTeal,
-
-        borderRadius:
-            BorderRadius.circular(
-          18,
-        ),
-      ),
-
-      child:
-          const Row(
+      child: const Row(
         children: [
-          Icon(
-            Icons.add_box_rounded,
+          Icon(Icons.add_box_rounded, color: Colors.white, size: 32),
 
-            color:
-                Colors.white,
-
-            size:
-                32,
-          ),
-
-          SizedBox(
-            width:
-                14,
-          ),
+          SizedBox(width: 14),
 
           Expanded(
-            child:
-                Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
 
               children: [
                 Text(
                   'New Subject / Course',
 
-                  style:
-                      TextStyle(
-                    color:
-                        Colors.white,
+                  style: TextStyle(
+                    color: Colors.white,
 
-                    fontSize:
-                        16,
+                    fontSize: 16,
 
-                    fontWeight:
-                        FontWeight.w800,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
 
-                SizedBox(
-                  height:
-                      4,
-                ),
+                SizedBox(height: 4),
 
                 Text(
                   'Create the course first. You will add modules and assessments afterward.',
 
-                  style:
-                      TextStyle(
-                    color:
-                        Colors.white70,
+                  style: TextStyle(
+                    color: Colors.white70,
 
-                    fontSize:
-                        11,
+                    fontSize: 11,
 
-                    height:
-                        1.4,
+                    height: 1.4,
                   ),
                 ),
               ],
@@ -732,61 +481,29 @@ class _InstructorCreateCourseScreenState
 
   Widget _buildClassCodeInfo() {
     return Container(
-      width:
-          double.infinity,
+      width: double.infinity,
 
-      padding:
-          const EdgeInsets.all(
-        16,
+      padding: const EdgeInsets.all(16),
+
+      decoration: BoxDecoration(
+        color: const Color(0xFFEAF7F5),
+
+        borderRadius: BorderRadius.circular(15),
       ),
 
-      decoration:
-          BoxDecoration(
-        color:
-            const Color(
-          0xFFEAF7F5,
-        ),
-
-        borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
-      ),
-
-      child:
-          const Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
 
         children: [
-          Icon(
-            Icons.vpn_key_rounded,
+          Icon(Icons.vpn_key_rounded, color: primaryTeal),
 
-            color:
-                primaryTeal,
-          ),
-
-          SizedBox(
-            width:
-                11,
-          ),
+          SizedBox(width: 11),
 
           Expanded(
-            child:
-                Text(
+            child: Text(
               'A unique class code will be generated automatically after the course is created. Share that code with students so they can join the class.',
 
-              style:
-                  TextStyle(
-                color:
-                    textGrey,
-
-                fontSize:
-                    11,
-
-                height:
-                    1.5,
-              ),
+              style: TextStyle(color: textGrey, fontSize: 11, height: 1.5),
             ),
           ),
         ],
@@ -801,36 +518,20 @@ class _InstructorCreateCourseScreenState
     required IconData icon,
     String? Function(String?)? validator,
     int maxLines = 1,
-    TextCapitalization capitalization =
-        TextCapitalization.sentences,
+    TextCapitalization capitalization = TextCapitalization.sentences,
   }) {
     return TextFormField(
-      controller:
-          controller,
+      controller: controller,
 
-      enabled:
-          !_isSaving,
+      enabled: !_isSaving,
 
-      maxLines:
-          maxLines,
+      maxLines: maxLines,
 
-      textCapitalization:
-          capitalization,
+      textCapitalization: capitalization,
 
-      validator:
-          validator,
+      validator: validator,
 
-      decoration:
-          _inputDecoration(
-        label:
-            label,
-
-        hint:
-            hint,
-
-        icon:
-            icon,
-      ),
+      decoration: _inputDecoration(label: label, hint: hint, icon: icon),
     );
   }
 
@@ -840,78 +541,34 @@ class _InstructorCreateCourseScreenState
     String? hint,
   }) {
     return InputDecoration(
-      labelText:
-          label,
+      labelText: label,
 
-      hintText:
-          hint,
+      hintText: hint,
 
-      prefixIcon:
-          Icon(
-        icon,
+      prefixIcon: Icon(icon, color: primaryTeal),
 
-        color:
-            primaryTeal,
+      filled: true,
+
+      fillColor: Colors.white,
+
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15),
+
+        borderSide: const BorderSide(color: borderColor),
       ),
 
-      filled:
-          true,
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15),
 
-      fillColor:
-          Colors.white,
-
-      contentPadding:
-          const EdgeInsets.symmetric(
-        horizontal:
-            16,
-
-        vertical:
-            16,
+        borderSide: const BorderSide(color: borderColor),
       ),
 
-      border:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15),
 
-        borderSide:
-            const BorderSide(
-          color:
-              borderColor,
-        ),
-      ),
-
-      enabledBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
-
-        borderSide:
-            const BorderSide(
-          color:
-              borderColor,
-        ),
-      ),
-
-      focusedBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
-
-        borderSide:
-            const BorderSide(
-          color:
-              primaryTeal,
-
-          width:
-              1.8,
-        ),
+        borderSide: const BorderSide(color: primaryTeal, width: 1.8),
       ),
     );
   }

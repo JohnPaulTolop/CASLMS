@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import 'instructor_ui.dart';
+
 import '../../services/learning_material_service.dart';
 
 class InstructorAddLearningMaterialScreen extends StatefulWidget {
@@ -42,24 +44,19 @@ class _InstructorAddLearningMaterialScreenState
   // SERVICE
   // ============================================================
 
-  final LearningMaterialService _materialService =
-      LearningMaterialService();
+  final LearningMaterialService _materialService = LearningMaterialService();
 
   // ============================================================
   // FORM
   // ============================================================
 
-  final GlobalKey<FormState> _formKey =
-      GlobalKey<FormState>();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
-  final TextEditingController _titleController =
-      TextEditingController();
+  final TextEditingController _titleController = TextEditingController();
 
-  final TextEditingController _descriptionController =
-      TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
 
-  final TextEditingController _urlController =
-      TextEditingController();
+  final TextEditingController _urlController = TextEditingController();
 
   // ============================================================
   // STATE
@@ -94,9 +91,7 @@ class _InstructorAddLearningMaterialScreenState
   // CHANGE MATERIAL SOURCE
   // ============================================================
 
-  void _changeMode(
-    bool uploadFile,
-  ) {
+  void _changeMode(bool uploadFile) {
     if (_isSaving) {
       return;
     }
@@ -115,168 +110,145 @@ class _InstructorAddLearningMaterialScreenState
   // ============================================================
 
   // ============================================================
-// FILE PICKER
-//
-// FileType.any is used intentionally.
-//
-// Some Android document providers do not correctly expose
-// .doc / .docx files when FileType.custom is used.
-//
-// CASLMS therefore lets Android show normal files first,
-// then validates the extension itself.
-// ============================================================
+  // FILE PICKER
+  //
+  // FileType.any is used intentionally.
+  //
+  // Some Android document providers do not correctly expose
+  // .doc / .docx files when FileType.custom is used.
+  //
+  // CASLMS therefore lets Android show normal files first,
+  // then validates the extension itself.
+  // ============================================================
 
-Future<void> _pickFile() async {
-  if (_isSaving) {
-    return;
-  }
-
-  try {
-        final PlatformFile? file =
-            await FilePicker.pickFile(
-          type: FileType.any,
-        );
-
-        // User cancelled.
-        if (file == null) {
-          return;
-        }
-
-        // ========================================================
-        // VALIDATE EXTENSION
-        // ========================================================
-
-        final String extension =
-            (file.extension ?? '')
-                .trim()
-                .toLowerCase();
-
-        const Set<String> supportedExtensions = {
-          // PDF
-          'pdf',
-
-          // Microsoft Word
-          'doc',
-          'docx',
-
-          // PowerPoint
-          'ppt',
-          'pptx',
-
-          // Excel
-          'xls',
-          'xlsx',
-
-          // Text
-          'txt',
-
-          // Images
-          'jpg',
-          'jpeg',
-          'png',
-          'gif',
-          'webp',
-
-          // Videos
-          'mp4',
-          'webm',
-        };
-
-        if (extension.isEmpty) {
-          if (!mounted) {
-            return;
-          }
-
-          _showError(
-            'The selected file has no supported extension.',
-          );
-
-          return;
-        }
-
-        if (!supportedExtensions.contains(
-          extension,
-        )) {
-          if (!mounted) {
-            return;
-          }
-
-          _showError(
-            'Unsupported file type: .$extension',
-          );
-
-          return;
-        }
-
-        // ========================================================
-        // READ FILE
-        // ========================================================
-
-        final Uint8List bytes =
-            await file.readAsBytes();
-
-        if (bytes.isEmpty) {
-          if (!mounted) {
-            return;
-          }
-
-          _showError(
-            'The selected file is empty.',
-          );
-
-          return;
-        }
-
-        // ========================================================
-        // 50 MB LIMIT
-        // ========================================================
-
-        const int maxFileSize =
-            50 * 1024 * 1024;
-
-        if (bytes.length > maxFileSize) {
-          if (!mounted) {
-            return;
-          }
-
-          _showError(
-            'The selected file exceeds the 50 MB limit.',
-          );
-
-          return;
-        }
-
-        if (!mounted) {
-          return;
-        }
-
-        // ========================================================
-        // SAVE SELECTED FILE
-        // ========================================================
-
-        setState(() {
-          _selectedFile = file;
-          _selectedFileBytes = bytes;
-        });
-
-        // Automatically use filename as title
-        // when the title field is empty.
-        if (_titleController.text.trim().isEmpty) {
-          _titleController.text =
-              _fileNameWithoutExtension(
-            file.name,
-          );
-        }
-      } catch (e) {
-        if (!mounted) {
-          return;
-        }
-
-        _showError(
-          'Unable to select file: $e',
-        );
-      }
+  Future<void> _pickFile() async {
+    if (_isSaving) {
+      return;
     }
+
+    try {
+      final PlatformFile? file = await FilePicker.pickFile(type: FileType.any);
+
+      // User cancelled.
+      if (file == null) {
+        return;
+      }
+
+      // ========================================================
+      // VALIDATE EXTENSION
+      // ========================================================
+
+      final String extension = (file.extension ?? '').trim().toLowerCase();
+
+      const Set<String> supportedExtensions = {
+        // PDF
+        'pdf',
+
+        // Microsoft Word
+        'doc',
+        'docx',
+
+        // PowerPoint
+        'ppt',
+        'pptx',
+
+        // Excel
+        'xls',
+        'xlsx',
+
+        // Text
+        'txt',
+
+        // Images
+        'jpg',
+        'jpeg',
+        'png',
+        'gif',
+        'webp',
+
+        // Videos
+        'mp4',
+        'webm',
+      };
+
+      if (extension.isEmpty) {
+        if (!mounted) {
+          return;
+        }
+
+        _showError('The selected file has no supported extension.');
+
+        return;
+      }
+
+      if (!supportedExtensions.contains(extension)) {
+        if (!mounted) {
+          return;
+        }
+
+        _showError('Unsupported file type: .$extension');
+
+        return;
+      }
+
+      // ========================================================
+      // READ FILE
+      // ========================================================
+
+      final Uint8List bytes = await file.readAsBytes();
+
+      if (bytes.isEmpty) {
+        if (!mounted) {
+          return;
+        }
+
+        _showError('The selected file is empty.');
+
+        return;
+      }
+
+      // ========================================================
+      // 50 MB LIMIT
+      // ========================================================
+
+      const int maxFileSize = 50 * 1024 * 1024;
+
+      if (bytes.length > maxFileSize) {
+        if (!mounted) {
+          return;
+        }
+
+        _showError('The selected file exceeds the 50 MB limit.');
+
+        return;
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      // ========================================================
+      // SAVE SELECTED FILE
+      // ========================================================
+
+      setState(() {
+        _selectedFile = file;
+        _selectedFileBytes = bytes;
+      });
+
+      // Automatically use filename as title
+      // when the title field is empty.
+      if (_titleController.text.trim().isEmpty) {
+        _titleController.text = _fileNameWithoutExtension(file.name);
+      }
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      _showError('Unable to select file: $e');
+    }
+  }
 
   // ============================================================
   // REMOVE SELECTED FILE
@@ -302,8 +274,7 @@ Future<void> _pickFile() async {
       return;
     }
 
-    if (!(_formKey.currentState?.validate() ??
-        false)) {
+    if (!(_formKey.currentState?.validate() ?? false)) {
       return;
     }
 
@@ -312,11 +283,8 @@ Future<void> _pickFile() async {
     // ==========================================================
 
     if (_isUploadingFile) {
-      if (_selectedFile == null ||
-          _selectedFileBytes == null) {
-        _showError(
-          'Please select a file first.',
-        );
+      if (_selectedFile == null || _selectedFileBytes == null) {
+        _showError('Please select a file first.');
 
         return;
       }
@@ -334,31 +302,25 @@ Future<void> _pickFile() async {
       // ========================================================
 
       if (_isUploadingFile) {
-        await _materialService
-            .uploadLearningMaterial(
+        await _materialService.uploadLearningMaterial(
           courseId: widget.courseId,
           moduleId: widget.moduleId,
           title: _titleController.text,
-          description:
-              _descriptionController.text,
+          description: _descriptionController.text,
           fileName: _selectedFile!.name,
           fileBytes: _selectedFileBytes!,
           status: _status,
         );
       }
-
       // ========================================================
       // EXTERNAL LINK
       // ========================================================
-
       else {
-        await _materialService
-            .createLinkMaterial(
+        await _materialService.createLinkMaterial(
           courseId: widget.courseId,
           moduleId: widget.moduleId,
           title: _titleController.text,
-          description:
-              _descriptionController.text,
+          description: _descriptionController.text,
           url: _urlController.text,
           resourceType: _linkType,
           status: _status,
@@ -369,11 +331,9 @@ Future<void> _pickFile() async {
         return;
       }
 
-      ScaffoldMessenger.of(context)
-          .hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             _status == 'published'
@@ -386,25 +346,19 @@ Future<void> _pickFile() async {
       );
 
       // Return true so the module page refreshes.
-      Navigator.of(context).pop(
-        true,
-      );
+      Navigator.of(context).pop(true);
     } on LearningMaterialException catch (e) {
       if (!mounted) {
         return;
       }
 
-      _showError(
-        e.message,
-      );
+      _showError(e.message);
     } catch (e) {
       if (!mounted) {
         return;
       }
 
-      _showError(
-        'Unable to save learning material: $e',
-      );
+      _showError('Unable to save learning material: $e');
     } finally {
       if (mounted) {
         setState(() {
@@ -418,18 +372,12 @@ Future<void> _pickFile() async {
   // ERROR
   // ============================================================
 
-  void _showError(
-    String message,
-  ) {
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          message,
-        ),
+        content: Text(message),
         backgroundColor: red,
         behavior: SnackBarBehavior.floating,
       ),
@@ -440,59 +388,37 @@ Future<void> _pickFile() async {
   // HELPERS
   // ============================================================
 
-  String _fileNameWithoutExtension(
-    String fileName,
-  ) {
-    final int lastDot =
-        fileName.lastIndexOf('.');
+  String _fileNameWithoutExtension(String fileName) {
+    final int lastDot = fileName.lastIndexOf('.');
 
     if (lastDot <= 0) {
       return fileName;
     }
 
     return fileName
-        .substring(
-          0,
-          lastDot,
-        )
-        .replaceAll(
-          '_',
-          ' ',
-        )
-        .replaceAll(
-          '-',
-          ' ',
-        );
+        .substring(0, lastDot)
+        .replaceAll('_', ' ')
+        .replaceAll('-', ' ');
   }
 
-  String _formatFileSize(
-    int bytes,
-  ) {
+  String _formatFileSize(int bytes) {
     if (bytes < 1024) {
       return '$bytes B';
     }
 
-    final double kb =
-        bytes / 1024;
+    final double kb = bytes / 1024;
 
     if (kb < 1024) {
       return '${kb.toStringAsFixed(1)} KB';
     }
 
-    final double mb =
-        kb / 1024;
+    final double mb = kb / 1024;
 
     return '${mb.toStringAsFixed(1)} MB';
   }
 
-  IconData _fileIcon(
-    String fileName,
-  ) {
-    final String extension =
-        fileName
-            .split('.')
-            .last
-            .toLowerCase();
+  IconData _fileIcon(String fileName) {
+    final String extension = fileName.split('.').last.toLowerCase();
 
     switch (extension) {
       case 'pdf':
@@ -527,14 +453,8 @@ Future<void> _pickFile() async {
     }
   }
 
-  Color _fileColor(
-    String fileName,
-  ) {
-    final String extension =
-        fileName
-            .split('.')
-            .last
-            .toLowerCase();
+  Color _fileColor(String fileName) {
+    final String extension = fileName.split('.').last.toLowerCase();
 
     switch (extension) {
       case 'pdf':
@@ -542,9 +462,7 @@ Future<void> _pickFile() async {
 
       case 'ppt':
       case 'pptx':
-        return const Color(
-          0xFFFF9418,
-        );
+        return const Color(0xFFFF9418);
 
       case 'xls':
       case 'xlsx':
@@ -555,9 +473,7 @@ Future<void> _pickFile() async {
       case 'png':
       case 'gif':
       case 'webp':
-        return const Color(
-          0xFF7B4DFF,
-        );
+        return const Color(0xFF7B4DFF);
 
       case 'mp4':
       case 'webm':
@@ -573,19 +489,17 @@ Future<void> _pickFile() async {
   // ============================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return PopScope(
       canPop: !_isSaving,
 
-      child: Scaffold(
+      child: instructorScaffold(
+        context: context,
         backgroundColor: background,
 
         // ======================================================
         // APP BAR
         // ======================================================
-
         appBar: AppBar(
           backgroundColor: background,
           elevation: 0,
@@ -609,7 +523,6 @@ Future<void> _pickFile() async {
         // Align(topCenter) prevents the form from being
         // vertically centered / pushed away.
         // ======================================================
-
         body: SafeArea(
           top: false,
 
@@ -617,28 +530,18 @@ Future<void> _pickFile() async {
             alignment: Alignment.topCenter,
 
             child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 750,
-              ),
+              constraints: const BoxConstraints(maxWidth: 750),
 
               child: SingleChildScrollView(
-                physics:
-                    const BouncingScrollPhysics(),
+                physics: const BouncingScrollPhysics(),
 
-                padding:
-                    const EdgeInsets.fromLTRB(
-                  22,
-                  16,
-                  22,
-                  40,
-                ),
+                padding: const EdgeInsets.fromLTRB(22, 16, 22, 40),
 
                 child: Form(
                   key: _formKey,
 
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
 
                     children: [
                       // ========================================
@@ -647,74 +550,49 @@ Future<void> _pickFile() async {
 
                       _buildModuleCard(),
 
-                      const SizedBox(
-                        height: 24,
-                      ),
+                      const SizedBox(height: 24),
 
                       // ========================================
                       // SOURCE
                       // ========================================
-
                       const Text(
                         'Material Source',
                         style: TextStyle(
                           color: textDark,
                           fontSize: 16,
-                          fontWeight:
-                              FontWeight.w800,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
 
-                      const SizedBox(
-                        height: 10,
-                      ),
+                      const SizedBox(height: 10),
 
                       _buildModeSelector(),
 
-                      const SizedBox(
-                        height: 24,
-                      ),
+                      const SizedBox(height: 24),
 
                       // ========================================
                       // TITLE
                       // ========================================
+                      _buildLabel('Title'),
 
-                      _buildLabel(
-                        'Title',
-                      ),
-
-                      const SizedBox(
-                        height: 8,
-                      ),
+                      const SizedBox(height: 8),
 
                       TextFormField(
-                        controller:
-                            _titleController,
+                        controller: _titleController,
 
-                        enabled:
-                            !_isSaving,
+                        enabled: !_isSaving,
 
-                        textCapitalization:
-                            TextCapitalization
-                                .sentences,
+                        textCapitalization: TextCapitalization.sentences,
 
-                        textInputAction:
-                            TextInputAction.next,
+                        textInputAction: TextInputAction.next,
 
-                        decoration:
-                            _inputDecoration(
-                          hint:
-                              'e.g. Chapter 1 Lecture Notes',
-                          icon:
-                              Icons.title_rounded,
+                        decoration: _inputDecoration(
+                          hint: 'e.g. Chapter 1 Lecture Notes',
+                          icon: Icons.title_rounded,
                         ),
 
-                        validator:
-                            (value) {
-                          if (value == null ||
-                              value
-                                  .trim()
-                                  .isEmpty) {
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
                             return 'Please enter a material title';
                           }
 
@@ -722,72 +600,49 @@ Future<void> _pickFile() async {
                         },
                       ),
 
-                      const SizedBox(
-                        height: 18,
-                      ),
+                      const SizedBox(height: 18),
 
                       // ========================================
                       // DESCRIPTION
                       // ========================================
+                      _buildLabel('Description', optional: true),
 
-                      _buildLabel(
-                        'Description',
-                        optional: true,
-                      ),
-
-                      const SizedBox(
-                        height: 8,
-                      ),
+                      const SizedBox(height: 8),
 
                       TextFormField(
-                        controller:
-                            _descriptionController,
+                        controller: _descriptionController,
 
-                        enabled:
-                            !_isSaving,
+                        enabled: !_isSaving,
 
                         minLines: 3,
                         maxLines: 5,
 
-                        textCapitalization:
-                            TextCapitalization
-                                .sentences,
+                        textCapitalization: TextCapitalization.sentences,
 
-                        decoration:
-                            _inputDecoration(
-                          hint:
-                              'Add a short description or instructions...',
-                          icon:
-                              Icons.notes_rounded,
+                        decoration: _inputDecoration(
+                          hint: 'Add a short description or instructions...',
+                          icon: Icons.notes_rounded,
                         ),
                       ),
 
-                      const SizedBox(
-                        height: 22,
-                      ),
+                      const SizedBox(height: 22),
 
                       // ========================================
                       // FILE / LINK SECTION
                       // ========================================
-
                       if (_isUploadingFile)
                         _buildFileSection()
                       else
                         _buildLinkSection(),
 
-                      const SizedBox(
-                        height: 24,
-                      ),
+                      const SizedBox(height: 24),
 
                       // ========================================
                       // VISIBILITY
                       // ========================================
-
                       _buildStatusSection(),
 
-                      const SizedBox(
-                        height: 20,
-                      ),
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
@@ -803,62 +658,40 @@ Future<void> _pickFile() async {
         // heightFactor: 1 prevents Center from taking the
         // entire remaining screen height.
         // ======================================================
-
         bottomNavigationBar: SafeArea(
           top: false,
 
           child: Container(
             color: background,
 
-            padding:
-                const EdgeInsets.fromLTRB(
-              22,
-              10,
-              22,
-              16,
-            ),
+            padding: const EdgeInsets.fromLTRB(22, 10, 22, 16),
 
             child: Center(
               heightFactor: 1,
 
               child: ConstrainedBox(
-                constraints:
-                    const BoxConstraints(
-                  maxWidth: 750,
-                ),
+                constraints: const BoxConstraints(maxWidth: 750),
 
                 child: SizedBox(
                   width: double.infinity,
                   height: 55,
 
-                  child:
-                      ElevatedButton.icon(
-                    onPressed:
-                        _isSaving
-                            ? null
-                            : _saveMaterial,
+                  child: ElevatedButton.icon(
+                    onPressed: _isSaving ? null : _saveMaterial,
 
-                    style:
-                        ElevatedButton.styleFrom(
-                      backgroundColor:
-                          primaryTeal,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryTeal,
 
-                      disabledBackgroundColor:
-                          primaryTeal.withValues(
+                      disabledBackgroundColor: primaryTeal.withValues(
                         alpha: 0.55,
                       ),
 
-                      foregroundColor:
-                          Colors.white,
+                      foregroundColor: Colors.white,
 
                       elevation: 0,
 
-                      shape:
-                          RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(
-                          15,
-                        ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
                       ),
                     ),
 
@@ -867,38 +700,29 @@ Future<void> _pickFile() async {
                             width: 20,
                             height: 20,
 
-                            child:
-                                CircularProgressIndicator(
-                              strokeWidth:
-                                  2.5,
-                              color:
-                                  Colors.white,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
                             ),
                           )
                         : Icon(
-                            _status ==
-                                    'published'
-                                ? Icons
-                                    .publish_rounded
-                                : Icons
-                                    .save_outlined,
+                            _status == 'published'
+                                ? Icons.publish_rounded
+                                : Icons.save_outlined,
                           ),
 
                     label: Text(
                       _isSaving
                           ? _isUploadingFile
-                              ? 'Uploading...'
-                              : 'Saving...'
-                          : _status ==
-                                  'published'
-                              ? 'Publish Material'
-                              : 'Save as Draft',
+                                ? 'Uploading...'
+                                : 'Saving...'
+                          : _status == 'published'
+                          ? 'Publish Material'
+                          : 'Save as Draft',
 
-                      style:
-                          const TextStyle(
+                      style: const TextStyle(
                         fontSize: 14,
-                        fontWeight:
-                            FontWeight.w800,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
@@ -919,24 +743,14 @@ Future<void> _pickFile() async {
     return Container(
       width: double.infinity,
 
-      padding: const EdgeInsets.all(
-        16,
-      ),
+      padding: const EdgeInsets.all(16),
 
       decoration: BoxDecoration(
-        color: primaryTeal.withValues(
-          alpha: 0.07,
-        ),
+        color: primaryTeal.withValues(alpha: 0.07),
 
-        borderRadius: BorderRadius.circular(
-          16,
-        ),
+        borderRadius: BorderRadius.circular(16),
 
-        border: Border.all(
-          color: primaryTeal.withValues(
-            alpha: 0.18,
-          ),
-        ),
+        border: Border.all(color: primaryTeal.withValues(alpha: 0.18)),
       ),
 
       child: Row(
@@ -946,58 +760,39 @@ Future<void> _pickFile() async {
             height: 46,
 
             decoration: BoxDecoration(
-              color:
-                  primaryTeal.withValues(
-                alpha: 0.12,
-              ),
+              color: primaryTeal.withValues(alpha: 0.12),
 
-              borderRadius:
-                  BorderRadius.circular(
-                13,
-              ),
+              borderRadius: BorderRadius.circular(13),
             ),
 
-            child: const Icon(
-              Icons.menu_book_rounded,
-              color: primaryTeal,
-            ),
+            child: const Icon(Icons.menu_book_rounded, color: primaryTeal),
           ),
 
-          const SizedBox(
-            width: 13,
-          ),
+          const SizedBox(width: 13),
 
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
 
               children: [
                 const Text(
                   'Adding material to',
-                  style: TextStyle(
-                    color: textGrey,
-                    fontSize: 11,
-                  ),
+                  style: TextStyle(color: textGrey, fontSize: 11),
                 ),
 
-                const SizedBox(
-                  height: 3,
-                ),
+                const SizedBox(height: 3),
 
                 Text(
                   widget.moduleTitle,
 
                   maxLines: 2,
 
-                  overflow:
-                      TextOverflow.ellipsis,
+                  overflow: TextOverflow.ellipsis,
 
                   style: const TextStyle(
                     color: textDark,
                     fontSize: 14,
-                    fontWeight:
-                        FontWeight.w800,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ],
@@ -1014,57 +809,40 @@ Future<void> _pickFile() async {
 
   Widget _buildModeSelector() {
     return Container(
-      padding: const EdgeInsets.all(
-        4,
-      ),
+      padding: const EdgeInsets.all(4),
 
       decoration: BoxDecoration(
-        color: const Color(
-          0xFFEDEFF3,
-        ),
+        color: const Color(0xFFEDEFF3),
 
-        borderRadius:
-            BorderRadius.circular(
-          14,
-        ),
+        borderRadius: BorderRadius.circular(14),
       ),
 
       child: Row(
         children: [
           Expanded(
             child: _sourceButton(
-              selected:
-                  _isUploadingFile,
+              selected: _isUploadingFile,
 
-              icon:
-                  Icons.upload_file_rounded,
+              icon: Icons.upload_file_rounded,
 
-              text:
-                  'Upload File',
+              text: 'Upload File',
 
               onTap: () {
-                _changeMode(
-                  true,
-                );
+                _changeMode(true);
               },
             ),
           ),
 
           Expanded(
             child: _sourceButton(
-              selected:
-                  !_isUploadingFile,
+              selected: !_isUploadingFile,
 
-              icon:
-                  Icons.link_rounded,
+              icon: Icons.link_rounded,
 
-              text:
-                  'External Link',
+              text: 'External Link',
 
               onTap: () {
-                _changeMode(
-                  false,
-                );
+                _changeMode(false);
               },
             ),
           ),
@@ -1082,82 +860,48 @@ Future<void> _pickFile() async {
     return InkWell(
       onTap: onTap,
 
-      borderRadius:
-          BorderRadius.circular(
-        11,
-      ),
+      borderRadius: BorderRadius.circular(11),
 
       child: AnimatedContainer(
-        duration: const Duration(
-          milliseconds: 180,
-        ),
+        duration: const Duration(milliseconds: 180),
 
-        padding:
-            const EdgeInsets.symmetric(
-          vertical: 12,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 12),
 
         decoration: BoxDecoration(
-          color: selected
-              ? Colors.white
-              : Colors.transparent,
+          color: selected ? Colors.white : Colors.transparent,
 
-          borderRadius:
-              BorderRadius.circular(
-            11,
-          ),
+          borderRadius: BorderRadius.circular(11),
 
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: Colors.black
-                        .withValues(
-                      alpha: 0.04,
-                    ),
+                    color: Colors.black.withValues(alpha: 0.04),
 
                     blurRadius: 8,
 
-                    offset:
-                        const Offset(
-                      0,
-                      2,
-                    ),
+                    offset: const Offset(0, 2),
                   ),
                 ]
               : [],
         ),
 
         child: Row(
-          mainAxisAlignment:
-              MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center,
 
           children: [
-            Icon(
-              icon,
-              size: 18,
+            Icon(icon, size: 18, color: selected ? primaryTeal : textGrey),
 
-              color: selected
-                  ? primaryTeal
-                  : textGrey,
-            ),
-
-            const SizedBox(
-              width: 7,
-            ),
+            const SizedBox(width: 7),
 
             Text(
               text,
 
               style: TextStyle(
-                color: selected
-                    ? primaryTeal
-                    : textGrey,
+                color: selected ? primaryTeal : textGrey,
 
                 fontSize: 12,
 
-                fontWeight: selected
-                    ? FontWeight.w800
-                    : FontWeight.w600,
+                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
               ),
             ),
           ],
@@ -1172,51 +916,30 @@ Future<void> _pickFile() async {
 
   Widget _buildFileSection() {
     return Column(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
 
       children: [
-        _buildLabel(
-          'File',
-        ),
+        _buildLabel('File'),
 
-        const SizedBox(
-          height: 8,
-        ),
+        const SizedBox(height: 8),
 
         if (_selectedFile == null)
           InkWell(
-            onTap: _isSaving
-                ? null
-                : _pickFile,
+            onTap: _isSaving ? null : _pickFile,
 
-            borderRadius:
-                BorderRadius.circular(
-              18,
-            ),
+            borderRadius: BorderRadius.circular(18),
 
             child: Container(
               width: double.infinity,
 
-              padding:
-                  const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 30,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
 
-              decoration:
-                  BoxDecoration(
+              decoration: BoxDecoration(
                 color: Colors.white,
 
-                borderRadius:
-                    BorderRadius.circular(
-                  18,
-                ),
+                borderRadius: BorderRadius.circular(18),
 
-                border: Border.all(
-                  color: borderColor,
-                  width: 1.5,
-                ),
+                border: Border.all(color: borderColor, width: 1.5),
               ),
 
               child: const Column(
@@ -1224,25 +947,18 @@ Future<void> _pickFile() async {
                   CircleAvatar(
                     radius: 28,
 
-                    backgroundColor:
-                        Color(
-                      0xFFE7F5F2,
-                    ),
+                    backgroundColor: Color(0xFFE7F5F2),
 
                     child: Icon(
-                      Icons
-                          .cloud_upload_outlined,
+                      Icons.cloud_upload_outlined,
 
-                      color:
-                          primaryTeal,
+                      color: primaryTeal,
 
                       size: 31,
                     ),
                   ),
 
-                  SizedBox(
-                    height: 13,
-                  ),
+                  SizedBox(height: 13),
 
                   Text(
                     'Choose Learning Material',
@@ -1250,38 +966,26 @@ Future<void> _pickFile() async {
                     style: TextStyle(
                       color: textDark,
                       fontSize: 14,
-                      fontWeight:
-                          FontWeight.w800,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
 
-                  SizedBox(
-                    height: 6,
-                  ),
+                  SizedBox(height: 6),
 
                   Text(
                     'PDF, Word, PowerPoint, Excel, images, text or video',
 
-                    textAlign:
-                        TextAlign.center,
+                    textAlign: TextAlign.center,
 
-                    style: TextStyle(
-                      color: textGrey,
-                      fontSize: 11.5,
-                    ),
+                    style: TextStyle(color: textGrey, fontSize: 11.5),
                   ),
 
-                  SizedBox(
-                    height: 3,
-                  ),
+                  SizedBox(height: 3),
 
                   Text(
                     'Maximum file size: 50 MB',
 
-                    style: TextStyle(
-                      color: textGrey,
-                      fontSize: 10.5,
-                    ),
+                    style: TextStyle(color: textGrey, fontSize: 10.5),
                   ),
                 ],
               ),
@@ -1298,38 +1002,23 @@ Future<void> _pickFile() async {
   // ============================================================
 
   Widget _buildSelectedFileCard() {
-    final PlatformFile file =
-        _selectedFile!;
+    final PlatformFile file = _selectedFile!;
 
-    final Color color =
-        _fileColor(
-      file.name,
-    );
+    final Color color = _fileColor(file.name);
 
-    final int byteSize =
-        _selectedFileBytes?.length ??
-            0;
+    final int byteSize = _selectedFileBytes?.length ?? 0;
 
     return Container(
       width: double.infinity,
 
-      padding: const EdgeInsets.all(
-        15,
-      ),
+      padding: const EdgeInsets.all(15),
 
       decoration: BoxDecoration(
         color: Colors.white,
 
-        borderRadius:
-            BorderRadius.circular(
-          16,
-        ),
+        borderRadius: BorderRadius.circular(16),
 
-        border: Border.all(
-          color: color.withValues(
-            alpha: 0.3,
-          ),
-        ),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
 
       child: Row(
@@ -1339,33 +1028,19 @@ Future<void> _pickFile() async {
             height: 48,
 
             decoration: BoxDecoration(
-              color: color.withValues(
-                alpha: 0.10,
-              ),
+              color: color.withValues(alpha: 0.10),
 
-              borderRadius:
-                  BorderRadius.circular(
-                13,
-              ),
+              borderRadius: BorderRadius.circular(13),
             ),
 
-            child: Icon(
-              _fileIcon(
-                file.name,
-              ),
-
-              color: color,
-            ),
+            child: Icon(_fileIcon(file.name), color: color),
           ),
 
-          const SizedBox(
-            width: 13,
-          ),
+          const SizedBox(width: 13),
 
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
 
               children: [
                 Text(
@@ -1373,44 +1048,30 @@ Future<void> _pickFile() async {
 
                   maxLines: 1,
 
-                  overflow:
-                      TextOverflow.ellipsis,
+                  overflow: TextOverflow.ellipsis,
 
                   style: const TextStyle(
                     color: textDark,
                     fontSize: 13,
-                    fontWeight:
-                        FontWeight.w800,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
 
-                const SizedBox(
-                  height: 4,
-                ),
+                const SizedBox(height: 4),
 
                 Text(
-                  _formatFileSize(
-                    byteSize,
-                  ),
+                  _formatFileSize(byteSize),
 
-                  style: const TextStyle(
-                    color: textGrey,
-                    fontSize: 11,
-                  ),
+                  style: const TextStyle(color: textGrey, fontSize: 11),
                 ),
               ],
             ),
           ),
 
           IconButton(
-            onPressed: _isSaving
-                ? null
-                : _removeSelectedFile,
+            onPressed: _isSaving ? null : _removeSelectedFile,
 
-            icon: const Icon(
-              Icons.close_rounded,
-              color: textGrey,
-            ),
+            icon: const Icon(Icons.close_rounded, color: textGrey),
           ),
         ],
       ),
@@ -1423,17 +1084,12 @@ Future<void> _pickFile() async {
 
   Widget _buildLinkSection() {
     return Column(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
 
       children: [
-        _buildLabel(
-          'Link Type',
-        ),
+        _buildLabel('Link Type'),
 
-        const SizedBox(
-          height: 8,
-        ),
+        const SizedBox(height: 8),
 
         DropdownButtonFormField<String>(
           initialValue: _linkType,
@@ -1441,17 +1097,10 @@ Future<void> _pickFile() async {
           items: const [
             DropdownMenuItem(
               value: 'link',
-              child: Text(
-                'Website / Resource Link',
-              ),
+              child: Text('Website / Resource Link'),
             ),
 
-            DropdownMenuItem(
-              value: 'video',
-              child: Text(
-                'Video Link',
-              ),
-            ),
+            DropdownMenuItem(value: 'video', child: Text('Video Link')),
           ],
 
           onChanged: _isSaving
@@ -1466,43 +1115,30 @@ Future<void> _pickFile() async {
                   });
                 },
 
-          decoration:
-              _inputDecoration(
+          decoration: _inputDecoration(
             hint: 'Select type',
-            icon:
-                Icons.category_outlined,
+            icon: Icons.category_outlined,
           ),
         ),
 
-        const SizedBox(
-          height: 18,
-        ),
+        const SizedBox(height: 18),
 
-        _buildLabel(
-          'External URL',
-        ),
+        _buildLabel('External URL'),
 
-        const SizedBox(
-          height: 8,
-        ),
+        const SizedBox(height: 8),
 
         TextFormField(
-          controller:
-              _urlController,
+          controller: _urlController,
 
           enabled: !_isSaving,
 
-          keyboardType:
-              TextInputType.url,
+          keyboardType: TextInputType.url,
 
           autocorrect: false,
 
-          decoration:
-              _inputDecoration(
-            hint:
-                'https://example.com/resource',
-            icon:
-                Icons.link_rounded,
+          decoration: _inputDecoration(
+            hint: 'https://example.com/resource',
+            icon: Icons.link_rounded,
           ),
 
           validator: (value) {
@@ -1510,24 +1146,16 @@ Future<void> _pickFile() async {
               return null;
             }
 
-            if (value == null ||
-                value
-                    .trim()
-                    .isEmpty) {
+            if (value == null || value.trim().isEmpty) {
               return 'Please enter the external URL';
             }
 
-            final Uri? uri =
-                Uri.tryParse(
-              value.trim(),
-            );
+            final Uri? uri = Uri.tryParse(value.trim());
 
             if (uri == null ||
                 !uri.hasScheme ||
                 !uri.hasAuthority ||
-                (uri.scheme != 'http' &&
-                    uri.scheme !=
-                        'https')) {
+                (uri.scheme != 'http' && uri.scheme != 'https')) {
               return 'Enter a valid HTTP or HTTPS URL';
             }
 
@@ -1544,8 +1172,7 @@ Future<void> _pickFile() async {
 
   Widget _buildStatusSection() {
     return Column(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
 
       children: [
         const Text(
@@ -1554,47 +1181,36 @@ Future<void> _pickFile() async {
           style: TextStyle(
             color: textDark,
             fontSize: 16,
-            fontWeight:
-                FontWeight.w800,
+            fontWeight: FontWeight.w800,
           ),
         ),
 
-        const SizedBox(
-          height: 10,
-        ),
+        const SizedBox(height: 10),
 
         _statusCard(
           value: 'published',
 
           title: 'Publish Now',
 
-          subtitle:
-              'Students enrolled in the course can access this material.',
+          subtitle: 'Students enrolled in the course can access this material.',
 
-          icon:
-              Icons.visibility_rounded,
+          icon: Icons.visibility_rounded,
 
           color: green,
         ),
 
-        const SizedBox(
-          height: 9,
-        ),
+        const SizedBox(height: 9),
 
         _statusCard(
           value: 'draft',
 
           title: 'Save as Draft',
 
-          subtitle:
-              'Only you can access the material until it is published.',
+          subtitle: 'Only you can access the material until it is published.',
 
-          icon:
-              Icons.edit_note_rounded,
+          icon: Icons.edit_note_rounded,
 
-          color: const Color(
-            0xFFFF9418,
-          ),
+          color: const Color(0xFFFF9418),
         ),
       ],
     );
@@ -1607,8 +1223,7 @@ Future<void> _pickFile() async {
     required IconData icon,
     required Color color,
   }) {
-    final bool selected =
-        _status == value;
+    final bool selected = _status == value;
 
     return InkWell(
       onTap: _isSaving
@@ -1619,38 +1234,24 @@ Future<void> _pickFile() async {
               });
             },
 
-      borderRadius:
-          BorderRadius.circular(
-        15,
-      ),
+      borderRadius: BorderRadius.circular(15),
 
       child: AnimatedContainer(
-        duration: const Duration(
-          milliseconds: 160,
-        ),
+        duration: const Duration(milliseconds: 160),
 
         width: double.infinity,
 
-        padding: const EdgeInsets.all(
-          14,
-        ),
+        padding: const EdgeInsets.all(14),
 
         decoration: BoxDecoration(
           color: Colors.white,
 
-          borderRadius:
-              BorderRadius.circular(
-            15,
-          ),
+          borderRadius: BorderRadius.circular(15),
 
           border: Border.all(
-            color: selected
-                ? color
-                : borderColor,
+            color: selected ? color : borderColor,
 
-            width: selected
-                ? 1.7
-                : 1,
+            width: selected ? 1.7 : 1,
           ),
         ),
 
@@ -1661,54 +1262,37 @@ Future<void> _pickFile() async {
               height: 42,
 
               decoration: BoxDecoration(
-                color: color.withValues(
-                  alpha: 0.10,
-                ),
+                color: color.withValues(alpha: 0.10),
 
-                borderRadius:
-                    BorderRadius.circular(
-                  12,
-                ),
+                borderRadius: BorderRadius.circular(12),
               ),
 
-              child: Icon(
-                icon,
-                color: color,
-                size: 21,
-              ),
+              child: Icon(icon, color: color, size: 21),
             ),
 
-            const SizedBox(
-              width: 12,
-            ),
+            const SizedBox(width: 12),
 
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
 
                 children: [
                   Text(
                     title,
 
-                    style:
-                        const TextStyle(
+                    style: const TextStyle(
                       color: textDark,
                       fontSize: 12.5,
-                      fontWeight:
-                          FontWeight.w800,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
 
-                  const SizedBox(
-                    height: 3,
-                  ),
+                  const SizedBox(height: 3),
 
                   Text(
                     subtitle,
 
-                    style:
-                        const TextStyle(
+                    style: const TextStyle(
                       color: textGrey,
                       fontSize: 10.5,
                       height: 1.4,
@@ -1726,14 +1310,12 @@ Future<void> _pickFile() async {
               onChanged: _isSaving
                   ? null
                   : (newValue) {
-                      if (newValue ==
-                          null) {
+                      if (newValue == null) {
                         return;
                       }
 
                       setState(() {
-                        _status =
-                            newValue;
+                        _status = newValue;
                       });
                     },
             ),
@@ -1747,10 +1329,7 @@ Future<void> _pickFile() async {
   // LABEL
   // ============================================================
 
-  Widget _buildLabel(
-    String title, {
-    bool optional = false,
-  }) {
+  Widget _buildLabel(String title, {bool optional = false}) {
     return Row(
       children: [
         Text(
@@ -1759,23 +1338,17 @@ Future<void> _pickFile() async {
           style: const TextStyle(
             color: textDark,
             fontSize: 12.5,
-            fontWeight:
-                FontWeight.w700,
+            fontWeight: FontWeight.w700,
           ),
         ),
 
         if (optional) ...[
-          const SizedBox(
-            width: 5,
-          ),
+          const SizedBox(width: 5),
 
           const Text(
             '(optional)',
 
-            style: TextStyle(
-              color: textGrey,
-              fontSize: 10.5,
-            ),
+            style: TextStyle(color: textGrey, fontSize: 10.5),
           ),
         ],
       ],
@@ -1793,94 +1366,44 @@ Future<void> _pickFile() async {
     return InputDecoration(
       hintText: hint,
 
-      hintStyle: const TextStyle(
-        color: Color(
-          0xFFA0A8B7,
-        ),
+      hintStyle: const TextStyle(color: Color(0xFFA0A8B7), fontSize: 12.5),
 
-        fontSize: 12.5,
-      ),
-
-      prefixIcon: Icon(
-        icon,
-        color: textGrey,
-        size: 20,
-      ),
+      prefixIcon: Icon(icon, color: textGrey, size: 20),
 
       filled: true,
 
       fillColor: Colors.white,
 
-      contentPadding:
-          const EdgeInsets.symmetric(
-        horizontal: 15,
-        vertical: 16,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 16),
 
       border: OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
+        borderRadius: BorderRadius.circular(15),
 
-        borderSide:
-            const BorderSide(
-          color: borderColor,
-        ),
+        borderSide: const BorderSide(color: borderColor),
       ),
 
-      enabledBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15),
 
-        borderSide:
-            const BorderSide(
-          color: borderColor,
-        ),
+        borderSide: const BorderSide(color: borderColor),
       ),
 
-      focusedBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15),
 
-        borderSide:
-            const BorderSide(
-          color: primaryTeal,
-          width: 1.6,
-        ),
+        borderSide: const BorderSide(color: primaryTeal, width: 1.6),
       ),
 
-      errorBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15),
 
-        borderSide:
-            const BorderSide(
-          color: red,
-        ),
+        borderSide: const BorderSide(color: red),
       ),
 
-      focusedErrorBorder:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(15),
 
-        borderSide:
-            const BorderSide(
-          color: red,
-          width: 1.5,
-        ),
+        borderSide: const BorderSide(color: red, width: 1.5),
       ),
     );
   }

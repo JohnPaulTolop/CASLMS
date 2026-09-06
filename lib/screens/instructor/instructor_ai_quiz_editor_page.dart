@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'instructor_ui.dart';
+
 class InstructorAiQuizEditorScreen extends StatefulWidget {
   const InstructorAiQuizEditorScreen({
     super.key,
@@ -601,7 +603,8 @@ class _InstructorAiQuizEditorScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return instructorScaffold(
+      context: context,
       backgroundColor: background,
       appBar: AppBar(
         backgroundColor: background,

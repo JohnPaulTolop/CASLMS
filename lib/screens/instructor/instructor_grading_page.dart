@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'instructor_ui.dart';
+
 import 'instructor_assessment_grading_page.dart';
 
 class InstructorGradingScreen extends StatefulWidget {
@@ -491,7 +493,8 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return instructorScaffold(
+      context: context,
       backgroundColor: background,
 
       appBar: AppBar(

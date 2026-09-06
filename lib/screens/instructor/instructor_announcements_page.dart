@@ -1,12 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import 'instructor_ui.dart';
+
 import '../../services/announcement_service.dart';
 
 class InstructorAnnouncementsScreen extends StatefulWidget {
-  const InstructorAnnouncementsScreen({
-    super.key,
-  });
+  const InstructorAnnouncementsScreen({super.key});
 
   @override
   State<InstructorAnnouncementsScreen> createState() =>
@@ -29,8 +29,7 @@ class _InstructorAnnouncementsScreenState
   // SERVICE
   // ============================================================
 
-  final AnnouncementService _announcementService =
-      AnnouncementService();
+  final AnnouncementService _announcementService = AnnouncementService();
 
   // ============================================================
   // STATE
@@ -69,8 +68,8 @@ class _InstructorAnnouncementsScreenState
     }
 
     try {
-      final List<Map<String, dynamic>> courses =
-          await _announcementService.getInstructorCourses();
+      final List<Map<String, dynamic>> courses = await _announcementService
+          .getInstructorCourses();
 
       final List<Map<String, dynamic>> announcements =
           await _announcementService.getInstructorAnnouncements();
@@ -118,26 +117,28 @@ class _InstructorAnnouncementsScreenState
       return _announcements;
     }
 
-    return _announcements.where(
-      (announcement) {
-        final String title =
-            (announcement['title'] ?? '').toString().toLowerCase();
+    return _announcements.where((announcement) {
+      final String title = (announcement['title'] ?? '')
+          .toString()
+          .toLowerCase();
 
-        final String message =
-            (announcement['message'] ?? '').toString().toLowerCase();
+      final String message = (announcement['message'] ?? '')
+          .toString()
+          .toLowerCase();
 
-        final String courseCode =
-            (announcement['courseCode'] ?? '').toString().toLowerCase();
+      final String courseCode = (announcement['courseCode'] ?? '')
+          .toString()
+          .toLowerCase();
 
-        final String courseTitle =
-            (announcement['courseTitle'] ?? '').toString().toLowerCase();
+      final String courseTitle = (announcement['courseTitle'] ?? '')
+          .toString()
+          .toLowerCase();
 
-        return title.contains(query) ||
-            message.contains(query) ||
-            courseCode.contains(query) ||
-            courseTitle.contains(query);
-      },
-    ).toList();
+      return title.contains(query) ||
+          message.contains(query) ||
+          courseCode.contains(query) ||
+          courseTitle.contains(query);
+    }).toList();
   }
 
   // ============================================================
@@ -146,30 +147,25 @@ class _InstructorAnnouncementsScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return instructorScaffold(
+      context: context,
       backgroundColor: background,
 
       // ==========================================================
       // APP BAR
       // ==========================================================
-
       appBar: AppBar(
         backgroundColor: primaryTeal,
         foregroundColor: Colors.white,
         elevation: 0,
         title: const Text(
           'Announcements',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 18,
-          ),
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
         ),
         actions: [
           IconButton(
             tooltip: 'Refresh',
-            icon: const Icon(
-              Icons.refresh_rounded,
-            ),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: _loadData,
           ),
           const SizedBox(width: 8),
@@ -179,36 +175,26 @@ class _InstructorAnnouncementsScreenState
       // ==========================================================
       // NEW ANNOUNCEMENT BUTTON
       // ==========================================================
-
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           _showCreateAnnouncementModal();
         },
         backgroundColor: primaryTeal,
-        icon: const Icon(
-          Icons.campaign_rounded,
-          color: Colors.white,
-        ),
+        icon: const Icon(Icons.campaign_rounded, color: Colors.white),
         label: const Text(
           'New Announcement',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
         ),
       ),
 
       // ==========================================================
       // BODY
       // ==========================================================
-
       body: SafeArea(
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(
-              maxWidth: 1200,
-            ),
+            constraints: const BoxConstraints(maxWidth: 1200),
             child: Column(
               children: [
                 // ==================================================
@@ -216,12 +202,7 @@ class _InstructorAnnouncementsScreenState
                 // ==================================================
 
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    24,
-                    18,
-                    24,
-                    10,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 10),
                   child: TextField(
                     onChanged: (value) {
                       setState(() {
@@ -242,15 +223,11 @@ class _InstructorAnnouncementsScreenState
                       fillColor: Colors.white,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFE3E7EE),
-                        ),
+                        borderSide: const BorderSide(color: Color(0xFFE3E7EE)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(
-                          color: Color(0xFFE3E7EE),
-                        ),
+                        borderSide: const BorderSide(color: Color(0xFFE3E7EE)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -263,9 +240,7 @@ class _InstructorAnnouncementsScreenState
                   ),
                 ),
 
-                Expanded(
-                  child: _buildContent(),
-                ),
+                Expanded(child: _buildContent()),
               ],
             ),
           ),
@@ -284,11 +259,7 @@ class _InstructorAnnouncementsScreenState
     // ------------------------------------------------------------
 
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: primaryTeal,
-        ),
-      );
+      return const Center(child: CircularProgressIndicator(color: primaryTeal));
     }
 
     // ------------------------------------------------------------
@@ -319,12 +290,8 @@ class _InstructorAnnouncementsScreenState
               const SizedBox(height: 12),
               TextButton.icon(
                 onPressed: _loadData,
-                icon: const Icon(
-                  Icons.refresh_rounded,
-                ),
-                label: const Text(
-                  'Try Again',
-                ),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try Again'),
               ),
             ],
           ),
@@ -341,11 +308,7 @@ class _InstructorAnnouncementsScreenState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.campaign_outlined,
-              color: primaryTeal,
-              size: 52,
-            ),
+            Icon(Icons.campaign_outlined, color: primaryTeal, size: 52),
             SizedBox(height: 12),
             Text(
               'No announcements yet',
@@ -359,10 +322,7 @@ class _InstructorAnnouncementsScreenState
             Text(
               'Use New Announcement to post to your students.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: textGrey,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: textGrey, fontSize: 12),
             ),
           ],
         ),
@@ -377,10 +337,7 @@ class _InstructorAnnouncementsScreenState
       return const Center(
         child: Text(
           'No matching announcements.',
-          style: TextStyle(
-            color: textGrey,
-            fontWeight: FontWeight.w600,
-          ),
+          style: TextStyle(color: textGrey, fontWeight: FontWeight.w600),
         ),
       );
     }
@@ -396,20 +353,10 @@ class _InstructorAnnouncementsScreenState
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(
-          24,
-          12,
-          24,
-          100,
-        ),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 100),
         itemCount: _filteredAnnouncements.length,
-        itemBuilder: (
-          context,
-          index,
-        ) {
-          return _buildAnnouncementCard(
-            _filteredAnnouncements[index],
-          );
+        itemBuilder: (context, index) {
+          return _buildAnnouncementCard(_filteredAnnouncements[index]);
         },
       ),
     );
@@ -419,38 +366,25 @@ class _InstructorAnnouncementsScreenState
   // ANNOUNCEMENT CARD
   // ============================================================
 
-  Widget _buildAnnouncementCard(
-    Map<String, dynamic> announcement,
-  ) {
-    final String id =
-        (announcement['id'] ?? '').toString();
+  Widget _buildAnnouncementCard(Map<String, dynamic> announcement) {
+    final String id = (announcement['id'] ?? '').toString();
 
-    final String title =
-        (announcement['title'] ?? 'Announcement').toString();
+    final String title = (announcement['title'] ?? 'Announcement').toString();
 
-    final String message =
-        (announcement['message'] ?? '').toString();
+    final String message = (announcement['message'] ?? '').toString();
 
-    final String courseCode =
-        (announcement['courseCode'] ?? '').toString();
+    final String courseCode = (announcement['courseCode'] ?? '').toString();
 
-    final String courseTitle =
-        (announcement['courseTitle'] ?? '').toString();
+    final String courseTitle = (announcement['courseTitle'] ?? '').toString();
 
-    final String targetType =
-        (announcement['targetType'] ?? '').toString();
+    final String targetType = (announcement['targetType'] ?? '').toString();
 
     final bool isUrgent =
         announcement['isUrgent'] == true ||
-        (announcement['priority'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase() ==
+        (announcement['priority'] ?? '').toString().trim().toLowerCase() ==
             'urgent';
 
-    final DateTime? createdAt = _toDate(
-      announcement['createdAt'],
-    );
+    final DateTime? createdAt = _toDate(announcement['createdAt']);
 
     final String targetText =
         targetType == 'all_classes' ||
@@ -461,37 +395,22 @@ class _InstructorAnnouncementsScreenState
         : courseTitle;
 
     return Container(
-      margin: const EdgeInsets.only(
-        bottom: 16,
-      ),
-      padding: const EdgeInsets.all(
-        20,
-      ),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(
-          18,
-        ),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isUrgent
-              ? orange.withValues(
-                  alpha: 0.40,
-                )
-              : const Color(
-                  0xFFE6EAF0,
-                ),
+              ? orange.withValues(alpha: 0.40)
+              : const Color(0xFFE6EAF0),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(
-              alpha: 0.02,
-            ),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
-            offset: const Offset(
-              0,
-              4,
-            ),
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -516,12 +435,8 @@ class _InstructorAnnouncementsScreenState
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: orange.withValues(
-                            alpha: 0.10,
-                          ),
-                          borderRadius: BorderRadius.circular(
-                            8,
-                          ),
+                          color: orange.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
@@ -560,14 +475,10 @@ class _InstructorAnnouncementsScreenState
               // ==================================================
               // OPTIONS
               // ==================================================
-
               PopupMenuButton<String>(
                 onSelected: (value) {
                   if (value == 'delete') {
-                    _confirmDelete(
-                      id,
-                      title,
-                    );
+                    _confirmDelete(id, title);
                   }
                 },
                 itemBuilder: (context) {
@@ -581,9 +492,7 @@ class _InstructorAnnouncementsScreenState
                             color: Colors.redAccent,
                           ),
                           SizedBox(width: 8),
-                          Text(
-                            'Delete',
-                          ),
+                          Text('Delete'),
                         ],
                       ),
                     ),
@@ -605,18 +514,13 @@ class _InstructorAnnouncementsScreenState
           ),
 
           const Padding(
-            padding: EdgeInsets.symmetric(
-              vertical: 12,
-            ),
-            child: Divider(
-              height: 1,
-            ),
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Divider(height: 1),
           ),
 
           // ======================================================
           // MESSAGE
           // ======================================================
-
           Text(
             message,
             style: const TextStyle(
@@ -631,39 +535,20 @@ class _InstructorAnnouncementsScreenState
           // ======================================================
           // FOOTER
           // ======================================================
-
           Row(
             children: [
-              const Icon(
-                Icons.access_time_rounded,
-                size: 14,
-                color: textGrey,
-              ),
+              const Icon(Icons.access_time_rounded, size: 14, color: textGrey),
               const SizedBox(width: 5),
               Text(
-                createdAt == null
-                    ? 'Recently posted'
-                    : _formatDate(
-                        createdAt,
-                      ),
-                style: const TextStyle(
-                  color: textGrey,
-                  fontSize: 11,
-                ),
+                createdAt == null ? 'Recently posted' : _formatDate(createdAt),
+                style: const TextStyle(color: textGrey, fontSize: 11),
               ),
               const Spacer(),
-              const Icon(
-                Icons.public_rounded,
-                color: textGrey,
-                size: 14,
-              ),
+              const Icon(Icons.public_rounded, color: textGrey, size: 14),
               const SizedBox(width: 4),
               const Text(
                 'Published',
-                style: TextStyle(
-                  color: textGrey,
-                  fontSize: 11,
-                ),
+                style: TextStyle(color: textGrey, fontSize: 11),
               ),
             ],
           ),
@@ -696,48 +581,32 @@ class _InstructorAnnouncementsScreenState
 
     bool isPosting = false;
 
-    final bool? posted =
-        await showModalBottomSheet<bool>(
+    final bool? posted = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
 
-      builder: (
-        BuildContext bottomSheetContext,
-      ) {
+      builder: (BuildContext bottomSheetContext) {
         return StatefulBuilder(
-          builder: (
-            BuildContext modalContext,
-            StateSetter setModalState,
-          ) {
+          builder: (BuildContext modalContext, StateSetter setModalState) {
             return PopScope(
               canPop: !isPosting,
 
               child: Container(
                 constraints: BoxConstraints(
-                  maxHeight:
-                      MediaQuery.of(modalContext).size.height *
-                      0.90,
+                  maxHeight: MediaQuery.of(modalContext).size.height * 0.90,
                 ),
 
                 padding: EdgeInsets.only(
                   left: 24,
                   right: 24,
                   top: 22,
-                  bottom:
-                      MediaQuery.of(modalContext)
-                          .viewInsets
-                          .bottom +
-                      24,
+                  bottom: MediaQuery.of(modalContext).viewInsets.bottom + 24,
                 ),
 
                 decoration: const BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(
-                      28,
-                    ),
-                  ),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
                 ),
 
                 child: SingleChildScrollView(
@@ -770,15 +639,9 @@ class _InstructorAnnouncementsScreenState
                             onPressed: isPosting
                                 ? null
                                 : () {
-                                    Navigator.of(
-                                      bottomSheetContext,
-                                    ).pop(
-                                      false,
-                                    );
+                                    Navigator.of(bottomSheetContext).pop(false);
                                   },
-                            icon: const Icon(
-                              Icons.close_rounded,
-                            ),
+                            icon: const Icon(Icons.close_rounded),
                           ),
                         ],
                       ),
@@ -788,7 +651,6 @@ class _InstructorAnnouncementsScreenState
                       // ==========================================
                       // SEND TO
                       // ==========================================
-
                       const Text(
                         'Send To',
                         style: TextStyle(
@@ -809,48 +671,37 @@ class _InstructorAnnouncementsScreenState
                         items: [
                           const DropdownMenuItem<String>(
                             value: '',
-                            child: Text(
-                              'All Classes',
-                            ),
+                            child: Text('All Classes'),
                           ),
 
-                          ..._courses.map(
-                            (
-                              Map<String, dynamic> course,
-                            ) {
-                              final String id =
-                                  (course['id'] ?? '').toString();
+                          ..._courses.map((Map<String, dynamic> course) {
+                            final String id = (course['id'] ?? '').toString();
 
-                              final String code =
-                                  (course['code'] ?? '').toString();
+                            final String code = (course['code'] ?? '')
+                                .toString();
 
-                              final String courseTitle =
-                                  (course['title'] ?? 'Course')
-                                      .toString();
+                            final String courseTitle =
+                                (course['title'] ?? 'Course').toString();
 
-                              return DropdownMenuItem<String>(
-                                value: id,
-                                child: Text(
-                                  code.isEmpty
-                                      ? courseTitle
-                                      : '$code • $courseTitle',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              );
-                            },
-                          ),
+                            return DropdownMenuItem<String>(
+                              value: id,
+                              child: Text(
+                                code.isEmpty
+                                    ? courseTitle
+                                    : '$code • $courseTitle',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          }),
                         ],
 
                         onChanged: isPosting
                             ? null
                             : (value) {
-                                setModalState(
-                                  () {
-                                    selectedCourseId =
-                                        value ?? '';
-                                  },
-                                );
+                                setModalState(() {
+                                  selectedCourseId = value ?? '';
+                                });
                               },
                       ),
 
@@ -859,7 +710,6 @@ class _InstructorAnnouncementsScreenState
                       // ==========================================
                       // TITLE
                       // ==========================================
-
                       TextFormField(
                         enabled: !isPosting,
                         textInputAction: TextInputAction.next,
@@ -878,7 +728,6 @@ class _InstructorAnnouncementsScreenState
                       // ==========================================
                       // MESSAGE
                       // ==========================================
-
                       TextFormField(
                         enabled: !isPosting,
                         minLines: 4,
@@ -889,9 +738,7 @@ class _InstructorAnnouncementsScreenState
                           message = value;
                         },
 
-                        decoration: _inputDecoration(
-                          label: 'Message',
-                        ),
+                        decoration: _inputDecoration(label: 'Message'),
                       ),
 
                       const SizedBox(height: 18),
@@ -899,7 +746,6 @@ class _InstructorAnnouncementsScreenState
                       // ==========================================
                       // URGENT
                       // ==========================================
-
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
@@ -907,23 +753,13 @@ class _InstructorAnnouncementsScreenState
                         ),
                         decoration: BoxDecoration(
                           color: isUrgent
-                              ? orange.withValues(
-                                  alpha: 0.06,
-                                )
-                              : const Color(
-                                  0xFFF8FAFD,
-                                ),
-                          borderRadius: BorderRadius.circular(
-                            14,
-                          ),
+                              ? orange.withValues(alpha: 0.06)
+                              : const Color(0xFFF8FAFD),
+                          borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: isUrgent
-                                ? orange.withValues(
-                                    alpha: 0.35,
-                                  )
-                                : const Color(
-                                    0xFFE1E5EC,
-                                  ),
+                                ? orange.withValues(alpha: 0.35)
+                                : const Color(0xFFE1E5EC),
                           ),
                         ),
                         child: SwitchListTile(
@@ -944,20 +780,15 @@ class _InstructorAnnouncementsScreenState
 
                           subtitle: const Text(
                             'Highlight this announcement for students.',
-                            style: TextStyle(
-                              color: textGrey,
-                              fontSize: 11,
-                            ),
+                            style: TextStyle(color: textGrey, fontSize: 11),
                           ),
 
                           onChanged: isPosting
                               ? null
                               : (value) {
-                                  setModalState(
-                                    () {
-                                      isUrgent = value;
-                                    },
-                                  );
+                                  setModalState(() {
+                                    isUrgent = value;
+                                  });
                                 },
                         ),
                       ),
@@ -967,7 +798,6 @@ class _InstructorAnnouncementsScreenState
                       // ==========================================
                       // POST
                       // ==========================================
-
                       SizedBox(
                         width: double.infinity,
                         height: 52,
@@ -988,8 +818,7 @@ class _InstructorAnnouncementsScreenState
                                         content: Text(
                                           'Please enter an announcement title.',
                                         ),
-                                        behavior:
-                                            SnackBarBehavior.floating,
+                                        behavior: SnackBarBehavior.floating,
                                       ),
                                     );
 
@@ -997,17 +826,15 @@ class _InstructorAnnouncementsScreenState
                                   }
 
                                   if (message.trim().isEmpty) {
-                                    ScaffoldMessenger.of(
-                                      bottomSheetContext,
-                                    ).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Please enter an announcement message.',
-                                        ),
-                                        behavior:
-                                            SnackBarBehavior.floating,
-                                      ),
-                                    );
+                                    ScaffoldMessenger.of(bottomSheetContext)
+                                        .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Please enter an announcement message.',
+                                            ),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
 
                                     return;
                                   }
@@ -1016,11 +843,9 @@ class _InstructorAnnouncementsScreenState
                                   // START LOADING
                                   // ==============================
 
-                                  setModalState(
-                                    () {
-                                      isPosting = true;
-                                    },
-                                  );
+                                  setModalState(() {
+                                    isPosting = true;
+                                  });
 
                                   String courseCode = '';
 
@@ -1031,23 +856,17 @@ class _InstructorAnnouncementsScreenState
                                   // ==============================
 
                                   if (selectedCourseId.isNotEmpty) {
-                                    final Map<String, dynamic>
-                                        selectedCourse =
-                                        _courses.firstWhere(
-                                      (
-                                        Map<String, dynamic> item,
-                                      ) {
-                                        return (item['id'] ?? '')
-                                                .toString() ==
-                                            selectedCourseId;
-                                      },
-                                      orElse: () =>
-                                          <String, dynamic>{},
-                                    );
+                                    final Map<String, dynamic> selectedCourse =
+                                        _courses.firstWhere((
+                                          Map<String, dynamic> item,
+                                        ) {
+                                          return (item['id'] ?? '')
+                                                  .toString() ==
+                                              selectedCourseId;
+                                        }, orElse: () => <String, dynamic>{});
 
-                                    courseCode =
-                                        (selectedCourse['code'] ?? '')
-                                            .toString();
+                                    courseCode = (selectedCourse['code'] ?? '')
+                                        .toString();
 
                                     courseTitle =
                                         (selectedCourse['title'] ?? '')
@@ -1061,13 +880,13 @@ class _InstructorAnnouncementsScreenState
 
                                     await _announcementService
                                         .createAnnouncement(
-                                      title: title,
-                                      message: message,
-                                      courseId: selectedCourseId,
-                                      courseCode: courseCode,
-                                      courseTitle: courseTitle,
-                                      isUrgent: isUrgent,
-                                    );
+                                          title: title,
+                                          message: message,
+                                          courseId: selectedCourseId,
+                                          courseCode: courseCode,
+                                          courseTitle: courseTitle,
+                                          isUrgent: isUrgent,
+                                        );
 
                                     // The sheet may have been
                                     // removed while Firebase was
@@ -1080,59 +899,43 @@ class _InstructorAnnouncementsScreenState
                                     // CLOSE WITH SUCCESS RESULT
                                     // ============================
 
-                                    Navigator.of(
-                                      bottomSheetContext,
-                                    ).pop(
-                                      true,
-                                    );
+                                    Navigator.of(bottomSheetContext).pop(true);
                                   } on AnnouncementServiceException catch (e) {
                                     if (!bottomSheetContext.mounted) {
                                       return;
                                     }
 
-                                    setModalState(
-                                      () {
-                                        isPosting = false;
-                                      },
-                                    );
+                                    setModalState(() {
+                                      isPosting = false;
+                                    });
 
-                                    ScaffoldMessenger.of(
-                                      bottomSheetContext,
-                                    ).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          e.message,
-                                        ),
-                                        backgroundColor:
-                                            Colors.redAccent,
-                                        behavior:
-                                            SnackBarBehavior.floating,
-                                      ),
-                                    );
+                                    ScaffoldMessenger.of(bottomSheetContext)
+                                        .showSnackBar(
+                                          SnackBar(
+                                            content: Text(e.message),
+                                            backgroundColor: Colors.redAccent,
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
                                   } catch (_) {
                                     if (!bottomSheetContext.mounted) {
                                       return;
                                     }
 
-                                    setModalState(
-                                      () {
-                                        isPosting = false;
-                                      },
-                                    );
+                                    setModalState(() {
+                                      isPosting = false;
+                                    });
 
-                                    ScaffoldMessenger.of(
-                                      bottomSheetContext,
-                                    ).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Unable to post announcement.',
-                                        ),
-                                        backgroundColor:
-                                            Colors.redAccent,
-                                        behavior:
-                                            SnackBarBehavior.floating,
-                                      ),
-                                    );
+                                    ScaffoldMessenger.of(bottomSheetContext)
+                                        .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Unable to post announcement.',
+                                            ),
+                                            backgroundColor: Colors.redAccent,
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
                                   }
                                 },
 
@@ -1140,8 +943,7 @@ class _InstructorAnnouncementsScreenState
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child:
-                                      CircularProgressIndicator(
+                                  child: CircularProgressIndicator(
                                     color: Colors.white,
                                     strokeWidth: 2.2,
                                   ),
@@ -1152,9 +954,7 @@ class _InstructorAnnouncementsScreenState
                                 ),
 
                           label: Text(
-                            isPosting
-                                ? 'Posting...'
-                                : 'Post Announcement',
+                            isPosting ? 'Posting...' : 'Post Announcement',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
@@ -1163,15 +963,12 @@ class _InstructorAnnouncementsScreenState
 
                           style: ElevatedButton.styleFrom(
                             backgroundColor: primaryTeal,
-                            disabledBackgroundColor:
-                                primaryTeal.withValues(
+                            disabledBackgroundColor: primaryTeal.withValues(
                               alpha: 0.55,
                             ),
                             elevation: 0,
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                14,
-                              ),
+                              borderRadius: BorderRadius.circular(14),
                             ),
                           ),
                         ),
@@ -1199,9 +996,7 @@ class _InstructorAnnouncementsScreenState
     if (posted == true) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Announcement posted successfully.',
-          ),
+          content: Text('Announcement posted successfully.'),
           backgroundColor: primaryTeal,
           behavior: SnackBarBehavior.floating,
         ),
@@ -1215,51 +1010,31 @@ class _InstructorAnnouncementsScreenState
   // DELETE ANNOUNCEMENT
   // ============================================================
 
-  Future<void> _confirmDelete(
-    String announcementId,
-    String title,
-  ) async {
+  Future<void> _confirmDelete(String announcementId, String title) async {
     if (announcementId.trim().isEmpty) {
       return;
     }
 
-    final bool? confirmed =
-        await showDialog<bool>(
+    final bool? confirmed = await showDialog<bool>(
       context: context,
-      builder: (
-        BuildContext dialogContext,
-      ) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text(
-            'Delete Announcement?',
-          ),
-          content: Text(
-            'Remove "$title"?',
-          ),
+          title: const Text('Delete Announcement?'),
+          content: Text('Remove "$title"?'),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  false,
-                );
+                Navigator.pop(dialogContext, false);
               },
-              child: const Text(
-                'Cancel',
-              ),
+              child: const Text('Cancel'),
             ),
             TextButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  true,
-                );
+                Navigator.pop(dialogContext, true);
               },
               child: const Text(
                 'Delete',
-                style: TextStyle(
-                  color: Colors.redAccent,
-                ),
+                style: TextStyle(color: Colors.redAccent),
               ),
             ),
           ],
@@ -1272,9 +1047,7 @@ class _InstructorAnnouncementsScreenState
     }
 
     try {
-      await _announcementService.deleteAnnouncement(
-        announcementId,
-      );
+      await _announcementService.deleteAnnouncement(announcementId);
 
       if (!mounted) {
         return;
@@ -1282,9 +1055,7 @@ class _InstructorAnnouncementsScreenState
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Announcement deleted.',
-          ),
+          content: Text('Announcement deleted.'),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -1297,9 +1068,7 @@ class _InstructorAnnouncementsScreenState
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            e.message,
-          ),
+          content: Text(e.message),
           backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
         ),
@@ -1311,43 +1080,22 @@ class _InstructorAnnouncementsScreenState
   // INPUT DECORATION
   // ============================================================
 
-  InputDecoration _inputDecoration({
-    String? label,
-  }) {
+  InputDecoration _inputDecoration({String? label}) {
     return InputDecoration(
       labelText: label,
       filled: true,
-      fillColor: const Color(
-        0xFFF8FAFD,
-      ),
+      fillColor: const Color(0xFFF8FAFD),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(
-          13,
-        ),
-        borderSide: const BorderSide(
-          color: Color(
-            0xFFE1E5EC,
-          ),
-        ),
+        borderRadius: BorderRadius.circular(13),
+        borderSide: const BorderSide(color: Color(0xFFE1E5EC)),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(
-          13,
-        ),
-        borderSide: const BorderSide(
-          color: Color(
-            0xFFE1E5EC,
-          ),
-        ),
+        borderRadius: BorderRadius.circular(13),
+        borderSide: const BorderSide(color: Color(0xFFE1E5EC)),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(
-          13,
-        ),
-        borderSide: const BorderSide(
-          color: primaryTeal,
-          width: 1.5,
-        ),
+        borderRadius: BorderRadius.circular(13),
+        borderSide: const BorderSide(color: primaryTeal, width: 1.5),
       ),
     );
   }
@@ -1356,9 +1104,7 @@ class _InstructorAnnouncementsScreenState
   // DATE HELPERS
   // ============================================================
 
-  DateTime? _toDate(
-    dynamic value,
-  ) {
+  DateTime? _toDate(dynamic value) {
     if (value is Timestamp) {
       return value.toDate();
     }
@@ -1370,9 +1116,7 @@ class _InstructorAnnouncementsScreenState
     return null;
   }
 
-  String _formatDate(
-    DateTime date,
-  ) {
+  String _formatDate(DateTime date) {
     const List<String> months = [
       'Jan',
       'Feb',
@@ -1394,15 +1138,9 @@ class _InstructorAnnouncementsScreenState
         ? date.hour - 12
         : date.hour;
 
-    final String minute = date.minute
-        .toString()
-        .padLeft(
-          2,
-          '0',
-        );
+    final String minute = date.minute.toString().padLeft(2, '0');
 
-    final String period =
-        date.hour >= 12 ? 'PM' : 'AM';
+    final String period = date.hour >= 12 ? 'PM' : 'AM';
 
     return '${months[date.month - 1]} '
         '${date.day}, ${date.year} • '

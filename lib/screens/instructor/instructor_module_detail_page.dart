@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'instructor_ui.dart';
+
 import '../../services/assessment_service.dart';
 import '../../services/firebase_ai_service.dart';
 import '../../services/learning_material_service.dart';
@@ -2274,7 +2276,8 @@ class _InstructorModuleDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return instructorScaffold(
+      context: context,
       backgroundColor: background,
 
       appBar: AppBar(
@@ -3232,8 +3235,7 @@ class _InstructorModuleDetailScreenState
                 url.contains('forms.gle')));
 
     final bool isArtifact =
-        submissionMethod == 'artifact' ||
-        deliveryType == 'artifact_submission';
+        submissionMethod == 'artifact' || deliveryType == 'artifact_submission';
 
     final num points = (assessment['totalPoints'] as num?) ?? 0;
 

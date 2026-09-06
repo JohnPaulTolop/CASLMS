@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
+import 'instructor_ui.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/assessment_artifact_submission_service.dart';
@@ -660,7 +663,8 @@ class _InstructorAssessmentGradingScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return instructorScaffold(
+      context: context,
       backgroundColor: background,
       appBar: AppBar(
         backgroundColor: background,
@@ -802,10 +806,7 @@ class _InstructorAssessmentGradingScreenState
                   'pending_verification',
                   'Pending ($_pendingVerificationCount)',
                 ),
-                _filter(
-                  'not_complied',
-                  'Not Complied ($_notCompliedCount)',
-                ),
+                _filter('not_complied', 'Not Complied ($_notCompliedCount)'),
               ] else ...[
                 _filter('submitted', 'Submitted ($_submittedCount)'),
                 _filter('graded', 'Graded ($_gradedCount)'),
@@ -1018,10 +1019,7 @@ class _InstructorAssessmentGradingScreenState
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 5,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(8),
@@ -1084,9 +1082,7 @@ class _InstructorAssessmentGradingScreenState
                   style: OutlinedButton.styleFrom(
                     foregroundColor: red,
                     side: BorderSide(
-                      color: notComplied
-                          ? red.withValues(alpha: 0.45)
-                          : red,
+                      color: notComplied ? red.withValues(alpha: 0.45) : red,
                     ),
                     minimumSize: const Size(0, 45),
                   ),

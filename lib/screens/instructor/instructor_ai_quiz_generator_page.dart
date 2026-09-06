@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
+import 'instructor_ui.dart';
+
 class InstructorAIQuizGeneratorScreen extends StatefulWidget {
   const InstructorAIQuizGeneratorScreen({super.key});
 
   @override
-  State<InstructorAIQuizGeneratorScreen> createState() => _InstructorAIQuizGeneratorScreenState();
+  State<InstructorAIQuizGeneratorScreen> createState() =>
+      _InstructorAIQuizGeneratorScreenState();
 }
 
-class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGeneratorScreen> {
+class _InstructorAIQuizGeneratorScreenState
+    extends State<InstructorAIQuizGeneratorScreen> {
   // ============================================================
   // CASLMS DESIGN SYSTEM (Instructor Teal Palette)
   // ============================================================
@@ -20,15 +24,16 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
   String _selectedMaterial = 'Module 1: Intro to Flutter (PDF)';
   int _questionCount = 10;
   String _difficulty = 'Medium';
-  
+
   bool _isGenerating = false;
   bool _isDraftReady = false;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return instructorScaffold(
+      context: context,
       backgroundColor: background,
-      
+
       // ==================================================
       // STANDARDIZED HEADER
       // ==================================================
@@ -40,7 +45,11 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
           elevation: 0,
           centerTitle: true,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: textDark),
+            icon: const Icon(
+              Icons.arrow_back_ios_new_rounded,
+              size: 20,
+              color: textDark,
+            ),
             onPressed: () => Navigator.pop(context),
           ),
           title: const Text(
@@ -52,11 +61,13 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
             ),
           ),
           actions: const [
-            SizedBox(width: 48), // Balances the leading button for center title alignment
+            SizedBox(
+              width: 48,
+            ), // Balances the leading button for center title alignment
           ],
         ),
       ),
-      
+
       body: SafeArea(
         child: Align(
           alignment: Alignment.topCenter,
@@ -77,25 +88,41 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
                     decoration: BoxDecoration(
                       color: primaryTeal.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: primaryTeal.withValues(alpha: 0.2), width: 1),
+                      border: Border.all(
+                        color: primaryTeal.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.auto_awesome_rounded, color: primaryTeal, size: 22),
+                        const Icon(
+                          Icons.auto_awesome_rounded,
+                          color: primaryTeal,
+                          size: 22,
+                        ),
                         const SizedBox(width: 14),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'AI Assistant', 
-                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: primaryTeal),
+                                'AI Assistant',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                  color: primaryTeal,
+                                ),
                               ),
                               const SizedBox(height: 6),
                               Text(
                                 'Generate a draft quiz based on your course materials. You can review and edit all questions before publishing to students.',
-                                style: TextStyle(fontSize: 12.5, color: textDark.withValues(alpha: 0.8), height: 1.5, fontWeight: FontWeight.w500),
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: textDark.withValues(alpha: 0.8),
+                                  height: 1.5,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ],
                           ),
@@ -110,18 +137,27 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
                   // ==================================================
                   if (!_isDraftReady && !_isGenerating) ...[
                     const Text(
-                      '1. Select Source Material', 
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textDark),
+                      '1. Select Source Material',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: textDark,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     _buildDropdown(
                       value: _selectedMaterial,
-                      items: ['Module 1: Intro to Flutter (PDF)', 'Module 2: Widgets Video Transcript', 'Course Syllabus (PDF)'],
-                      onChanged: (val) => setState(() => _selectedMaterial = val!),
+                      items: [
+                        'Module 1: Intro to Flutter (PDF)',
+                        'Module 2: Widgets Video Transcript',
+                        'Course Syllabus (PDF)',
+                      ],
+                      onChanged: (val) =>
+                          setState(() => _selectedMaterial = val!),
                       icon: Icons.source_rounded,
                     ),
                     const SizedBox(height: 20),
-                    
+
                     Row(
                       children: [
                         Expanded(
@@ -129,14 +165,20 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Questions', 
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textDark),
+                                'Questions',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: textDark,
+                                ),
                               ),
                               const SizedBox(height: 10),
                               _buildDropdown(
                                 value: _questionCount.toString(),
                                 items: ['5', '10', '15', '20'],
-                                onChanged: (val) => setState(() => _questionCount = int.parse(val!)),
+                                onChanged: (val) => setState(
+                                  () => _questionCount = int.parse(val!),
+                                ),
                                 icon: Icons.format_list_numbered_rounded,
                               ),
                             ],
@@ -148,14 +190,19 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Difficulty', 
-                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: textDark),
+                                'Difficulty',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  color: textDark,
+                                ),
                               ),
                               const SizedBox(height: 10),
                               _buildDropdown(
                                 value: _difficulty,
                                 items: ['Easy', 'Medium', 'Hard'],
-                                onChanged: (val) => setState(() => _difficulty = val!),
+                                onChanged: (val) =>
+                                    setState(() => _difficulty = val!),
                                 icon: Icons.speed_rounded,
                               ),
                             ],
@@ -174,16 +221,26 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryTeal,
                           elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                         ),
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 20),
+                            Icon(
+                              Icons.auto_awesome_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                             SizedBox(width: 8),
                             Text(
-                              'Generate Draft Quiz', 
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
+                              'Generate Draft Quiz',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
                             ),
                           ],
                         ),
@@ -203,13 +260,21 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
                             const CircularProgressIndicator(color: primaryTeal),
                             const SizedBox(height: 24),
                             Text(
-                              'Analyzing $_selectedMaterial...', 
-                              style: const TextStyle(color: textDark, fontSize: 14, fontWeight: FontWeight.w700),
+                              'Analyzing $_selectedMaterial...',
+                              style: const TextStyle(
+                                color: textDark,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Generating $_questionCount $_difficulty questions', 
-                              style: const TextStyle(color: textGrey, fontSize: 12, fontWeight: FontWeight.w500),
+                              'Generating $_questionCount $_difficulty questions',
+                              style: const TextStyle(
+                                color: textGrey,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ],
                         ),
@@ -224,21 +289,33 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          '2. Review Draft', 
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textDark),
+                          '2. Review Draft',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: textDark,
+                          ),
                         ),
                         TextButton.icon(
-                          onPressed: () => setState(() => _isDraftReady = false),
-                          icon: const Icon(Icons.refresh_rounded, size: 16, color: textGrey),
+                          onPressed: () =>
+                              setState(() => _isDraftReady = false),
+                          icon: const Icon(
+                            Icons.refresh_rounded,
+                            size: 16,
+                            color: textGrey,
+                          ),
                           label: const Text(
-                            'Discard', 
-                            style: TextStyle(color: textGrey, fontWeight: FontWeight.w700),
+                            'Discard',
+                            style: TextStyle(
+                              color: textGrey,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 14),
-                    
+
                     // Generated Questions List
                     _buildDraftQuestionCard(
                       number: 1,
@@ -253,13 +330,13 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
                         'StatelessWidgets cannot have children.',
                         'StatefulWidgets can mutate their state during runtime.',
                         'StatelessWidgets are only used for text.',
-                        'There is no difference.'
+                        'There is no difference.',
                       ],
                       correctIndex: 1,
                     ),
-                    
+
                     const SizedBox(height: 28),
-                    
+
                     // Push to Moodle Button
                     SizedBox(
                       width: double.infinity,
@@ -268,10 +345,14 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
                         onPressed: () {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: const Text('Quiz successfully pushed to Moodle!'), 
+                              content: const Text(
+                                'Quiz successfully pushed to Moodle!',
+                              ),
                               backgroundColor: primaryTeal,
                               behavior: SnackBarBehavior.floating,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                           );
                           Navigator.pop(context);
@@ -282,12 +363,18 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
-                            side: const BorderSide(color: primaryTeal, width: 2),
+                            side: const BorderSide(
+                              color: primaryTeal,
+                              width: 2,
+                            ),
                           ),
                         ),
                         child: const Text(
-                          'Publish to Moodle', 
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                          'Publish to Moodle',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
                     ),
@@ -330,7 +417,11 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
           value: value,
           isExpanded: true,
           icon: const Icon(Icons.keyboard_arrow_down_rounded, color: textGrey),
-          style: const TextStyle(fontWeight: FontWeight.w700, color: textDark, fontSize: 13.5),
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            color: textDark,
+            fontSize: 13.5,
+          ),
           items: items.map((String item) {
             return DropdownMenuItem<String>(
               value: item,
@@ -377,21 +468,33 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: primaryTeal.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  'Q$number', 
-                  style: const TextStyle(color: primaryTeal, fontWeight: FontWeight.w800, fontSize: 12),
+                  'Q$number',
+                  style: const TextStyle(
+                    color: primaryTeal,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  question, 
-                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5, color: textDark, height: 1.4),
+                  question,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14.5,
+                    color: textDark,
+                    height: 1.4,
+                  ),
                 ),
               ),
               IconButton(
@@ -409,17 +512,23 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: isCorrect ? green.withValues(alpha: 0.08) : const Color(0xFFF7F9FC),
+                color: isCorrect
+                    ? green.withValues(alpha: 0.08)
+                    : const Color(0xFFF7F9FC),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: isCorrect ? green.withValues(alpha: 0.4) : const Color(0xFFE6EAF0), 
+                  color: isCorrect
+                      ? green.withValues(alpha: 0.4)
+                      : const Color(0xFFE6EAF0),
                   width: 1.5,
                 ),
               ),
               child: Row(
                 children: [
                   Icon(
-                    isCorrect ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                    isCorrect
+                        ? Icons.check_circle_rounded
+                        : Icons.radio_button_unchecked_rounded,
                     color: isCorrect ? green : textGrey,
                     size: 18,
                   ),
@@ -429,7 +538,9 @@ class _InstructorAIQuizGeneratorScreenState extends State<InstructorAIQuizGenera
                       options[index],
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: isCorrect ? FontWeight.w800 : FontWeight.w500,
+                        fontWeight: isCorrect
+                            ? FontWeight.w800
+                            : FontWeight.w500,
                         color: isCorrect ? green : textDark,
                       ),
                     ),

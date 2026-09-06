@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'instructor_ui.dart';
+
 import '../../services/profile_picture_service.dart';
 
 class InstructorProfileScreen extends StatefulWidget {
@@ -32,8 +34,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final ProfilePictureService _profilePictureService =
-      ProfilePictureService();
+  final ProfilePictureService _profilePictureService = ProfilePictureService();
 
   // ============================================================
   // STATE
@@ -86,8 +87,10 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
 
       final Map<String, dynamic> profileData = profileDocument.data()!;
 
-      final String role =
-          (profileData['role'] ?? '').toString().trim().toLowerCase();
+      final String role = (profileData['role'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
 
       if (role != 'instructor') {
         throw Exception('This account is not an instructor account.');
@@ -105,8 +108,10 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
           in courseSnapshot.docs) {
         final Map<String, dynamic> data = document.data();
 
-        final String status =
-            (data['status'] ?? 'active').toString().trim().toLowerCase();
+        final String status = (data['status'] ?? 'active')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (status == 'active') {
           activeCourseIds.add(document.id);
@@ -126,11 +131,14 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
             in enrollmentSnapshot.docs) {
           final Map<String, dynamic> enrollment = document.data();
 
-          final String status =
-              (enrollment['status'] ?? '').toString().trim().toLowerCase();
+          final String status = (enrollment['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
 
-          final String studentId =
-              (enrollment['studentId'] ?? '').toString().trim();
+          final String studentId = (enrollment['studentId'] ?? '')
+              .toString()
+              .trim();
 
           if (status == 'active' && studentId.isNotEmpty) {
             activeStudentIds.add(studentId);
@@ -145,10 +153,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
       }
 
       setState(() {
-        _profile = {
-          ...profileData,
-          'uid': user.uid,
-        };
+        _profile = {...profileData, 'uid': user.uid};
 
         _activeClasses = activeCourseIds.length;
         _totalStudents = totalStudents;
@@ -162,8 +167,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e.message ?? 'Unable to load your instructor profile.';
+        _errorMessage = e.message ?? 'Unable to load your instructor profile.';
       });
     } catch (e) {
       if (!mounted) {
@@ -172,8 +176,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -210,8 +213,10 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
   }
 
   String get _status {
-    final String value =
-        (_profile?['status'] ?? 'active').toString().trim().toLowerCase();
+    final String value = (_profile?['status'] ?? 'active')
+        .toString()
+        .trim()
+        .toLowerCase();
 
     return value.isEmpty ? 'active' : value;
   }
@@ -230,8 +235,8 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
     });
 
     try {
-      final ProfilePictureResult? result =
-          await _profilePictureService.pickAndUploadProfilePicture();
+      final ProfilePictureResult? result = await _profilePictureService
+          .pickAndUploadProfilePicture();
 
       if (!mounted) {
         return;
@@ -288,13 +293,9 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
         return AlertDialog(
           title: const Text(
             'Remove Profile Picture',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w800),
           ),
-          content: const Text(
-            'Your initials will be shown instead.',
-          ),
+          content: const Text('Your initials will be shown instead.'),
           actions: [
             TextButton(
               onPressed: () {
@@ -332,9 +333,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
         return;
       }
 
-      final Map<String, dynamic> updatedProfile = {
-        ...?_profile,
-      };
+      final Map<String, dynamic> updatedProfile = {...?_profile};
 
       updatedProfile.remove('photoUrl');
       updatedProfile.remove('photoPath');
@@ -369,8 +368,10 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
   }
 
   String get _initials {
-    final List<String> parts =
-        _name.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
+    final List<String> parts = _name
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
 
     if (parts.isEmpty) {
       return 'I';
@@ -397,14 +398,11 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
     }
 
     String newName = _name;
-    String newEmail =
-        (_profile?['email'] ?? '').toString();
+    String newEmail = (_profile?['email'] ?? '').toString();
 
-    String newDepartment =
-        (_profile?['department'] ?? '').toString();
+    String newDepartment = (_profile?['department'] ?? '').toString();
 
-    final Map<String, String>? result =
-        await showDialog<Map<String, String>>(
+    final Map<String, String>? result = await showDialog<Map<String, String>>(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
@@ -413,10 +411,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
           ),
           title: const Text(
             'Personal Information',
-            style: TextStyle(
-              color: textDark,
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(color: textDark, fontWeight: FontWeight.w800),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -424,12 +419,10 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
               children: [
                 TextFormField(
                   initialValue: newName,
-                  textCapitalization:
-                      TextCapitalization.words,
+                  textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Full Name',
-                    prefixIcon:
-                        Icon(Icons.person_outline_rounded),
+                    prefixIcon: Icon(Icons.person_outline_rounded),
                   ),
                   onChanged: (String value) {
                     newName = value;
@@ -438,12 +431,10 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
                 const SizedBox(height: 14),
                 TextFormField(
                   initialValue: newEmail,
-                  keyboardType:
-                      TextInputType.emailAddress,
+                  keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
                     labelText: 'Contact Email',
-                    prefixIcon:
-                        Icon(Icons.email_outlined),
+                    prefixIcon: Icon(Icons.email_outlined),
                   ),
                   onChanged: (String value) {
                     newEmail = value;
@@ -452,12 +443,10 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
                 const SizedBox(height: 14),
                 TextFormField(
                   initialValue: newDepartment,
-                  textCapitalization:
-                      TextCapitalization.words,
+                  textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Department',
-                    prefixIcon:
-                        Icon(Icons.apartment_rounded),
+                    prefixIcon: Icon(Icons.apartment_rounded),
                   ),
                   onChanged: (String value) {
                     newDepartment = value;
@@ -467,10 +456,8 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
                 InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'Faculty ID',
-                    prefixIcon:
-                        Icon(Icons.badge_outlined),
-                    helperText:
-                        'Faculty ID is managed by the administrator.',
+                    prefixIcon: Icon(Icons.badge_outlined),
+                    helperText: 'Faculty ID is managed by the administrator.',
                   ),
                   child: Text(
                     _facultyId,
@@ -516,14 +503,11 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
       return;
     }
 
-    final String cleanName =
-        (result['name'] ?? '').trim();
+    final String cleanName = (result['name'] ?? '').trim();
 
-    final String cleanEmail =
-        (result['email'] ?? '').trim();
+    final String cleanEmail = (result['email'] ?? '').trim();
 
-    final String cleanDepartment =
-        (result['department'] ?? '').trim();
+    final String cleanDepartment = (result['department'] ?? '').trim();
 
     if (cleanName.isEmpty) {
       _showError('Full name cannot be empty.');
@@ -531,8 +515,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
     }
 
     if (cleanEmail.isNotEmpty &&
-        (!cleanEmail.contains('@') ||
-            !cleanEmail.contains('.'))) {
+        (!cleanEmail.contains('@') || !cleanEmail.contains('.'))) {
       _showError('Enter a valid contact email address.');
       return;
     }
@@ -549,10 +532,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
     });
 
     try {
-      await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .update({
+      await _firestore.collection('users').doc(user.uid).update({
         'name': cleanName,
         'email': cleanEmail,
         'department': cleanDepartment,
@@ -591,9 +571,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
         _isSaving = false;
       });
 
-      _showError(
-        e.message ?? 'Unable to update your profile.',
-      );
+      _showError(e.message ?? 'Unable to update your profile.');
     } catch (_) {
       if (!mounted) {
         return;
@@ -637,16 +615,8 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 18),
-                _buildDetailRow(
-                  Icons.badge_outlined,
-                  'Faculty ID',
-                  _facultyId,
-                ),
-                _buildDetailRow(
-                  Icons.email_outlined,
-                  'Contact Email',
-                  _email,
-                ),
+                _buildDetailRow(Icons.badge_outlined, 'Faculty ID', _facultyId),
+                _buildDetailRow(Icons.email_outlined, 'Contact Email', _email),
                 _buildDetailRow(
                   Icons.apartment_rounded,
                   'Department',
@@ -685,17 +655,11 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
           ),
           title: const Text(
             'Log Out',
-            style: TextStyle(
-              color: textDark,
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(color: textDark, fontWeight: FontWeight.w800),
           ),
           content: const Text(
             'Are you sure you want to log out of your CASLMS account?',
-            style: TextStyle(
-              color: textGrey,
-              height: 1.45,
-            ),
+            style: TextStyle(color: textGrey, height: 1.45),
           ),
           actions: [
             TextButton(
@@ -730,10 +694,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
         return;
       }
 
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/',
-        (route) => false,
-      );
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     } on FirebaseAuthException catch (e) {
       if (!mounted) {
         return;
@@ -749,7 +710,8 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return instructorScaffold(
+      context: context,
       backgroundColor: background,
       appBar: AppBar(
         automaticallyImplyLeading: false,
@@ -768,18 +730,12 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
           IconButton(
             onPressed: _isLoading ? null : _loadProfile,
             tooltip: 'Refresh Profile',
-            icon: const Icon(
-              Icons.refresh_rounded,
-              color: textDark,
-            ),
+            icon: const Icon(Icons.refresh_rounded, color: textDark),
           ),
           IconButton(
             onPressed: _isLoading ? null : _showAccountDetails,
             tooltip: 'Account Details',
-            icon: const Icon(
-              Icons.settings_outlined,
-              color: textDark,
-            ),
+            icon: const Icon(Icons.settings_outlined, color: textDark),
           ),
           const SizedBox(width: 5),
         ],
@@ -799,11 +755,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: primaryTeal,
-        ),
-      );
+      return const Center(child: CircularProgressIndicator(color: primaryTeal));
     }
 
     if (_errorMessage != null) {
@@ -811,9 +763,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
     }
 
     if (_profile == null) {
-      return _buildErrorState(
-        message: 'Instructor profile is unavailable.',
-      );
+      return _buildErrorState(message: 'Instructor profile is unavailable.');
     }
 
     return RefreshIndicator(
@@ -853,10 +803,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: primaryTeal,
-                  width: 2,
-                ),
+                border: Border.all(color: primaryTeal, width: 2),
               ),
               child: _buildProfileAvatar(),
             ),
@@ -864,9 +811,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
               color: primaryTeal,
               shape: const CircleBorder(),
               child: InkWell(
-                onTap: _isUploadingPhoto
-                    ? null
-                    : _changeProfilePicture,
+                onTap: _isUploadingPhoto ? null : _changeProfilePicture,
                 customBorder: const CircleBorder(),
                 child: SizedBox(
                   width: 34,
@@ -891,13 +836,8 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
         ),
         const SizedBox(height: 8),
         TextButton.icon(
-          onPressed: _isUploadingPhoto
-              ? null
-              : _changeProfilePicture,
-          icon: const Icon(
-            Icons.photo_camera_outlined,
-            size: 17,
-          ),
+          onPressed: _isUploadingPhoto ? null : _changeProfilePicture,
+          icon: const Icon(Icons.photo_camera_outlined, size: 17),
           label: Text(
             _photoUrl.isEmpty
                 ? 'Upload Profile Picture'
@@ -927,10 +867,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
         ),
         const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 6,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: primaryTeal.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(20),
@@ -956,13 +893,10 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
           width: 96,
           height: 96,
           fit: BoxFit.cover,
-          errorBuilder: (
-            BuildContext context,
-            Object error,
-            StackTrace? stackTrace,
-          ) {
-            return _buildInitialAvatar();
-          },
+          errorBuilder:
+              (BuildContext context, Object error, StackTrace? stackTrace) {
+                return _buildInitialAvatar();
+              },
         ),
       );
     }
@@ -973,8 +907,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
   Widget _buildInitialAvatar() {
     return CircleAvatar(
       radius: 48,
-      backgroundColor:
-          primaryTeal.withValues(alpha: 0.10),
+      backgroundColor: primaryTeal.withValues(alpha: 0.10),
       child: Text(
         _initials,
         style: const TextStyle(
@@ -992,10 +925,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
 
   Widget _buildStats() {
     return LayoutBuilder(
-      builder: (
-        BuildContext context,
-        BoxConstraints constraints,
-      ) {
+      builder: (BuildContext context, BoxConstraints constraints) {
         final bool compact = constraints.maxWidth < 520;
 
         final Widget classesCard = _buildInfoCard(
@@ -1030,10 +960,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: idCard,
-              ),
+              SizedBox(width: double.infinity, child: idCard),
             ],
           );
         }
@@ -1107,21 +1034,14 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
     return Container(
       decoration: _cardDecoration(),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 7,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: red.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(
-            Icons.logout_rounded,
-            color: red,
-            size: 20,
-          ),
+          child: const Icon(Icons.logout_rounded, color: red, size: 20),
         ),
         title: const Text(
           'Log Out',
@@ -1133,10 +1053,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
         ),
         subtitle: const Text(
           'Sign out of this instructor account',
-          style: TextStyle(
-            color: textGrey,
-            fontSize: 12,
-          ),
+          style: TextStyle(color: textGrey, fontSize: 12),
         ),
         trailing: const Icon(
           Icons.chevron_right_rounded,
@@ -1158,10 +1075,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        vertical: 17,
-        horizontal: 12,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 17, horizontal: 12),
       decoration: _cardDecoration(),
       child: Column(
         children: [
@@ -1171,11 +1085,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
               color: color.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 23,
-            ),
+            child: Icon(icon, color: color, size: 23),
           ),
           const SizedBox(height: 11),
           Text(
@@ -1211,21 +1121,14 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
     required VoidCallback onTap,
   }) {
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: 6,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       leading: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: primaryTeal.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(
-          icon,
-          color: primaryTeal,
-          size: 20,
-        ),
+        child: Icon(icon, color: primaryTeal, size: 20),
       ),
       title: Text(
         title,
@@ -1263,11 +1166,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icon,
-            size: 20,
-            color: primaryTeal,
-          ),
+          Icon(icon, size: 20, color: primaryTeal),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1308,9 +1207,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
     );
   }
 
-  Widget _buildErrorState({
-    String? message,
-  }) {
+  Widget _buildErrorState({String? message}) {
     final String text =
         message ?? _errorMessage ?? 'Unable to load your profile.';
 
@@ -1320,11 +1217,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              color: red,
-              size: 50,
-            ),
+            const Icon(Icons.error_outline_rounded, color: red, size: 50),
             const SizedBox(height: 14),
             Text(
               text,
@@ -1355,10 +1248,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
     return BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(18),
-      border: Border.all(
-        color: borderColor,
-        width: 1.5,
-      ),
+      border: Border.all(color: borderColor, width: 1.5),
       boxShadow: [
         BoxShadow(
           color: Colors.black.withValues(alpha: 0.025),

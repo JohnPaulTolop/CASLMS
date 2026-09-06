@@ -8,14 +8,10 @@ import 'admin_system_reports_page.dart';
 class AdminDashboardScreen extends StatefulWidget {
   final ValueChanged<int>? onNavigateToTab;
 
-  const AdminDashboardScreen({
-    super.key,
-    this.onNavigateToTab,
-  });
+  const AdminDashboardScreen({super.key, this.onNavigateToTab});
 
   @override
-  State<AdminDashboardScreen> createState() =>
-      _AdminDashboardScreenState();
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
@@ -24,7 +20,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   static const Color textDark = Color(0xFF10182F);
   static const Color textGrey = Color(0xFF68738A);
   static const Color borderColor = Color(0xFFE6EAF0);
-  static const Color green = Color(0xFF26A65B);
   static const Color red = Color(0xFFFF4B4B);
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -59,8 +54,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         throw Exception('No administrator is currently logged in.');
       }
 
-      final adminDocument =
-          await _firestore.collection('users').doc(currentUser.uid).get();
+      final adminDocument = await _firestore
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
 
       if (!adminDocument.exists || adminDocument.data() == null) {
         throw Exception('Administrator profile could not be found.');
@@ -91,8 +88,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       for (final document in userSnapshot.docs) {
         final data = document.data();
         final userRole = (data['role'] ?? '').toString().trim().toLowerCase();
-        final userStatus =
-            (data['status'] ?? 'active').toString().trim().toLowerCase();
+        final userStatus = (data['status'] ?? 'active')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (userStatus != 'active') {
           restricted++;
@@ -108,8 +107,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       int activeCourses = 0;
 
       for (final document in courseSnapshot.docs) {
-        final status =
-            (document.data()['status'] ?? 'active').toString().trim().toLowerCase();
+        final status = (document.data()['status'] ?? 'active')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (status == 'active') {
           activeCourses++;
@@ -134,15 +135,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e.message ?? 'Unable to load administrator dashboard.';
+        _errorMessage = e.message ?? 'Unable to load administrator dashboard.';
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -156,37 +155,80 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         backgroundColor: background,
         elevation: 0,
         titleSpacing: 24,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            const Text(
-              'System Administration',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
-                color: textDark,
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderColor),
+                image: const DecorationImage(
+                  image: AssetImage('assets/images/CASlogo.jpg'),
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
-            Text(
-              'Signed in as $_adminName',
-              style: const TextStyle(
-                fontSize: 12,
-                color: textGrey,
-                fontWeight: FontWeight.w600,
-              ),
+            const SizedBox(width: 11),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'CASLMS',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 19,
+                    color: adminTheme,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                Text(
+                  'ADMIN PORTAL',
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: textGrey,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.9,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
         actions: [
-          IconButton(
-            onPressed: _isLoading ? null : _loadDashboard,
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded, color: textDark),
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 7),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
+            ),
+            child: IconButton(
+              onPressed: _isLoading ? null : _loadDashboard,
+              tooltip: 'Refresh dashboard',
+              icon: const Icon(
+                Icons.refresh_rounded,
+                color: textDark,
+                size: 21,
+              ),
+            ),
           ),
-          IconButton(
-            onPressed: () => widget.onNavigateToTab?.call(3),
-            tooltip: 'Settings',
-            icon: const Icon(Icons.settings_suggest_rounded, color: textDark),
+          const SizedBox(width: 8),
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 7),
+            decoration: BoxDecoration(
+              color: adminTheme.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: IconButton(
+              onPressed: () => widget.onNavigateToTab?.call(3),
+              tooltip: 'Settings',
+              icon: const Icon(
+                Icons.settings_suggest_rounded,
+                color: adminTheme,
+                size: 21,
+              ),
+            ),
           ),
           const SizedBox(width: 8),
         ],
@@ -206,9 +248,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: adminTheme),
-      );
+      return const Center(child: CircularProgressIndicator(color: adminTheme));
     }
 
     if (_errorMessage != null) {
@@ -248,106 +288,256 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHealthBanner(),
-            const SizedBox(height: 24),
-            _buildMetrics(),
-            const SizedBox(height: 32),
-            const Text(
-              'Management Modules',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: textDark,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final horizontalPadding = constraints.maxWidth >= 800 ? 32.0 : 20.0;
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                16,
+                horizontalPadding,
+                40,
               ),
-            ),
-            const SizedBox(height: 16),
-            _buildAction(
-              title: 'User Management',
-              subtitle:
-                  'Manage real Firebase accounts and Firestore user profiles.',
-              icon: Icons.manage_accounts_rounded,
-              color: adminTheme,
-              onTap: () => widget.onNavigateToTab?.call(1),
-            ),
-            _buildAction(
-              title: 'Course Administration',
-              subtitle:
-                  'Manage live courses, instructors, and enrollment records.',
-              icon: Icons.account_tree_rounded,
-              color: Colors.orange,
-              onTap: () => widget.onNavigateToTab?.call(2),
-            ),
-            _buildAction(
-              title: 'AI Service Gateway',
-              subtitle:
-                  'Monitor real learning-material AI processing activity.',
-              icon: Icons.memory_rounded,
-              color: Colors.deepPurple,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AdminAIGatewayScreen(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildWelcomeBanner(),
+                  const SizedBox(height: 26),
+                  _buildSectionTitle(
+                    'Platform overview',
+                    'Live totals across your learning environment',
                   ),
-                );
-              },
-            ),
-            _buildAction(
-              title: 'System Reports',
-              subtitle:
-                  'View real platform metrics and activity reports.',
-              icon: Icons.analytics_rounded,
-              color: Colors.redAccent,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AdminSystemReportsScreen(),
+                  const SizedBox(height: 14),
+                  _buildMetrics(),
+                  const SizedBox(height: 30),
+                  _buildSectionTitle(
+                    'Management center',
+                    'Open an area to manage the platform',
                   ),
-                );
-              },
-            ),
-          ],
+                  const SizedBox(height: 14),
+                  _buildManagementGrid(),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildHealthBanner() {
+  Widget _buildWelcomeBanner() {
     return Container(
-      padding: const EdgeInsets.all(14),
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: green.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.cloud_done_rounded, color: green, size: 20),
-          SizedBox(width: 11),
-          Expanded(
-            child: Text(
-              'Firebase Authentication and Cloud Firestore are responding.',
-              style: TextStyle(
-                color: textDark,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          Text(
-            'LIVE',
-            style: TextStyle(
-              color: green,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-            ),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF4338CA), Color(0xFF7C3AED)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: adminTheme.withValues(alpha: 0.24),
+            blurRadius: 26,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            right: -36,
+            top: -58,
+            child: Container(
+              width: 150,
+              height: 150,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Positioned(
+            right: 62,
+            bottom: -78,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Welcome, $_adminName',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 25,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.7,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    Text(
+                      'Monitor users, courses, reports, and system services from one place.',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.86),
+                        fontSize: 13,
+                        height: 1.45,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.16),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.cloud_done_rounded,
+                            color: Color(0xFF9FF0BC),
+                            size: 16,
+                          ),
+                          SizedBox(width: 7),
+                          Text(
+                            'Firebase services online',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Icon(
+                  Icons.admin_panel_settings_rounded,
+                  color: Colors.white,
+                  size: 30,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title, String subtitle) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            color: textDark,
+            letterSpacing: -0.35,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          subtitle,
+          style: const TextStyle(
+            fontSize: 11.5,
+            color: textGrey,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildManagementGrid() {
+    final actions = [
+      _buildAction(
+        title: 'User Management',
+        subtitle: 'Review accounts, roles, access, and instructor approvals.',
+        icon: Icons.manage_accounts_rounded,
+        color: adminTheme,
+        onTap: () => widget.onNavigateToTab?.call(1),
+      ),
+      _buildAction(
+        title: 'Course Administration',
+        subtitle: 'Manage courses, instructors, and enrollment records.',
+        icon: Icons.account_tree_rounded,
+        color: Colors.orange,
+        onTap: () => widget.onNavigateToTab?.call(2),
+      ),
+      _buildAction(
+        title: 'AI Service Gateway',
+        subtitle: 'Monitor learning-material AI processing activity.',
+        icon: Icons.memory_rounded,
+        color: Colors.deepPurple,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminAIGatewayScreen()),
+          );
+        },
+      ),
+      _buildAction(
+        title: 'System Reports',
+        subtitle: 'View platform metrics and operational reports.',
+        icon: Icons.analytics_rounded,
+        color: Colors.redAccent,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminSystemReportsScreen()),
+          );
+        },
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 720 ? 2 : 1;
+        const spacing = 14.0;
+        final itemWidth =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: actions
+              .map((action) => SizedBox(width: itemWidth, child: action))
+              .toList(),
+        );
+      },
     );
   }
 
@@ -374,8 +564,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         final columns = constraints.maxWidth >= 850
             ? 4
             : constraints.maxWidth >= 520
-                ? 2
-                : 1;
+            ? 2
+            : 1;
 
         const spacing = 14.0;
         final width =
@@ -394,31 +584,54 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   Widget _metric(String label, int value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(17),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 23),
-          const SizedBox(height: 9),
-          Text(
-            '$value',
-            style: const TextStyle(
-              color: textDark,
-              fontSize: 21,
-              fontWeight: FontWeight.w800,
-            ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.12)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: textGrey,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$value',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 23,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: textGrey,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -434,20 +647,26 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     required VoidCallback onTap,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.12)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.025),
+            blurRadius: 14,
+            offset: const Offset(0, 5),
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(18),
           child: Padding(
-            padding: const EdgeInsets.all(17),
+            padding: const EdgeInsets.all(18),
             child: Row(
               children: [
                 Container(
@@ -483,10 +702,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ],
                   ),
                 ),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: textGrey,
-                ),
+                const Icon(Icons.chevron_right_rounded, color: textGrey),
               ],
             ),
           ),

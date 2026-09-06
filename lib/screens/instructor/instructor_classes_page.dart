@@ -1,57 +1,48 @@
 import 'package:flutter/material.dart';
 
+import 'instructor_ui.dart';
+
 import '../../services/roster_service.dart';
 import 'instructor_class_details_page.dart';
 
 class InstructorClassesScreen extends StatefulWidget {
-  const InstructorClassesScreen({
-    super.key,
-  });
+  const InstructorClassesScreen({super.key});
 
   @override
   State<InstructorClassesScreen> createState() =>
       _InstructorClassesScreenState();
 }
 
-class _InstructorClassesScreenState
-    extends State<InstructorClassesScreen> {
+class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
   // ============================================================
   // DESIGN SYSTEM
   // ============================================================
 
-  static const Color primaryTeal =
-      Color(0xFF00897B);
+  static const Color primaryTeal = Color(0xFF00897B);
 
-  static const Color background =
-      Color(0xFFF7F9FC);
+  static const Color background = Color(0xFFF7F9FC);
 
-  static const Color textDark =
-      Color(0xFF10182F);
+  static const Color textDark = Color(0xFF10182F);
 
-  static const Color textGrey =
-      Color(0xFF68738A);
+  static const Color textGrey = Color(0xFF68738A);
 
   // ============================================================
   // SERVICE
   // ============================================================
 
-  final RosterService _rosterService =
-      RosterService();
+  final RosterService _rosterService = RosterService();
 
   // ============================================================
   // STATE
   // ============================================================
 
-  List<Map<String, dynamic>> _courses =
-      [];
+  List<Map<String, dynamic>> _courses = [];
 
-  bool _isLoading =
-      true;
+  bool _isLoading = true;
 
   String? _errorMessage;
 
-  String _searchQuery =
-      '';
+  String _searchQuery = '';
 
   // ============================================================
   // INITIALIZE
@@ -77,9 +68,8 @@ class _InstructorClassesScreenState
     }
 
     try {
-      final List<Map<String, dynamic>> courses =
-          await _rosterService
-              .getInstructorCourses();
+      final List<Map<String, dynamic>> courses = await _rosterService
+          .getInstructorCourses();
 
       if (!mounted) {
         return;
@@ -105,8 +95,7 @@ class _InstructorClassesScreenState
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            'Unable to load classes.';
+        _errorMessage = 'Unable to load classes.';
       });
     }
   }
@@ -115,45 +104,31 @@ class _InstructorClassesScreenState
   // FILTER
   // ============================================================
 
-  List<Map<String, dynamic>>
-      get _filteredCourses {
-    final String query =
-        _searchQuery
-            .trim()
-            .toLowerCase();
+  List<Map<String, dynamic>> get _filteredCourses {
+    final String query = _searchQuery.trim().toLowerCase();
 
     if (query.isEmpty) {
       return _courses;
     }
 
-    return _courses.where(
-      (course) {
-        final String code =
-            (course['code'] ?? '')
-                .toString()
-                .toLowerCase();
+    return _courses.where((course) {
+      final String code = (course['code'] ?? '').toString().toLowerCase();
 
-        final String title =
-            (course['title'] ?? '')
-                .toString()
-                .toLowerCase();
+      final String title = (course['title'] ?? '').toString().toLowerCase();
 
-        final String semester =
-            (course['semester'] ?? '')
-                .toString()
-                .toLowerCase();
+      final String semester = (course['semester'] ?? '')
+          .toString()
+          .toLowerCase();
 
-        final String academicYear =
-            (course['academicYear'] ?? '')
-                .toString()
-                .toLowerCase();
+      final String academicYear = (course['academicYear'] ?? '')
+          .toString()
+          .toLowerCase();
 
-        return code.contains(query) ||
-            title.contains(query) ||
-            semester.contains(query) ||
-            academicYear.contains(query);
-      },
-    ).toList();
+      return code.contains(query) ||
+          title.contains(query) ||
+          semester.contains(query) ||
+          academicYear.contains(query);
+    }).toList();
   }
 
   // ============================================================
@@ -162,171 +137,99 @@ class _InstructorClassesScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor:
-          background,
+    return instructorScaffold(
+      context: context,
+      backgroundColor: background,
 
-      appBar:
-          AppBar(
-        automaticallyImplyLeading:
-            false,
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
 
-        backgroundColor:
-            background,
+        backgroundColor: background,
 
-        elevation:
-            0,
+        elevation: 0,
 
-        centerTitle:
-            true,
+        centerTitle: true,
 
-        title:
-            const Text(
+        title: const Text(
           'Manage Classes',
 
-          style:
-              TextStyle(
-            fontSize:
-                18,
+          style: TextStyle(
+            fontSize: 18,
 
-            fontWeight:
-                FontWeight.w800,
+            fontWeight: FontWeight.w800,
 
-            color:
-                textDark,
+            color: textDark,
           ),
         ),
 
         actions: [
           IconButton(
-            tooltip:
-                'Refresh',
+            tooltip: 'Refresh',
 
-            icon:
-                const Icon(
-              Icons.refresh_rounded,
+            icon: const Icon(Icons.refresh_rounded, color: textDark),
 
-              color:
-                  textDark,
-            ),
-
-            onPressed:
-                _loadCourses,
+            onPressed: _loadCourses,
           ),
 
-          const SizedBox(
-            width:
-                8,
-          ),
+          const SizedBox(width: 8),
         ],
       ),
 
-      body:
-          SafeArea(
-        child:
-            Align(
-          alignment:
-              Alignment.topCenter,
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
 
-          child:
-              ConstrainedBox(
-            constraints:
-                const BoxConstraints(
-              maxWidth:
-                  1200,
-            ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1200),
 
-            child:
-                Column(
+            child: Column(
               children: [
                 // ================================================
                 // SEARCH
                 // ================================================
 
                 Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(
-                    24,
-                    16,
-                    24,
-                    12,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
 
-                  child:
-                      TextField(
-                    onChanged:
-                        (value) {
+                  child: TextField(
+                    onChanged: (value) {
                       setState(() {
-                        _searchQuery =
-                            value;
+                        _searchQuery = value;
                       });
                     },
 
-                    decoration:
-                        InputDecoration(
-                      hintText:
-                          'Search by course code, title, or semester...',
+                    decoration: InputDecoration(
+                      hintText: 'Search by course code, title, or semester...',
 
-                      prefixIcon:
-                          const Icon(
+                      prefixIcon: const Icon(
                         Icons.search_rounded,
 
-                        color:
-                            primaryTeal,
+                        color: primaryTeal,
                       ),
 
-                      filled:
-                          true,
+                      filled: true,
 
-                      fillColor:
-                          Colors.white,
+                      fillColor: Colors.white,
 
-                      border:
-                          OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(
-                          16,
-                        ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
 
-                        borderSide:
-                            const BorderSide(
-                          color:
-                              Color(
-                            0xFFE3E7EE,
-                          ),
-                        ),
+                        borderSide: const BorderSide(color: Color(0xFFE3E7EE)),
                       ),
 
-                      enabledBorder:
-                          OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(
-                          16,
-                        ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
 
-                        borderSide:
-                            const BorderSide(
-                          color:
-                              Color(
-                            0xFFE3E7EE,
-                          ),
-                        ),
+                        borderSide: const BorderSide(color: Color(0xFFE3E7EE)),
                       ),
 
-                      focusedBorder:
-                          OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius.circular(
-                          16,
-                        ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
 
-                        borderSide:
-                            const BorderSide(
-                          color:
-                              primaryTeal,
+                        borderSide: const BorderSide(
+                          color: primaryTeal,
 
-                          width:
-                              1.5,
+                          width: 1.5,
                         ),
                       ),
                     ),
@@ -336,11 +239,7 @@ class _InstructorClassesScreenState
                 // ================================================
                 // CONTENT
                 // ================================================
-
-                Expanded(
-                  child:
-                      _buildContent(),
-                ),
+                Expanded(child: _buildContent()),
               ],
             ),
           ),
@@ -355,79 +254,48 @@ class _InstructorClassesScreenState
 
   Widget _buildContent() {
     if (_isLoading) {
-      return const Center(
-        child:
-            CircularProgressIndicator(
-          color:
-              primaryTeal,
-        ),
-      );
+      return const Center(child: CircularProgressIndicator(color: primaryTeal));
     }
 
     if (_errorMessage != null) {
       return Center(
-        child:
-            Padding(
-          padding:
-              const EdgeInsets.all(
-            30,
-          ),
+        child: Padding(
+          padding: const EdgeInsets.all(30),
 
-          child:
-              Column(
-            mainAxisSize:
-                MainAxisSize.min,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
 
             children: [
               const Icon(
                 Icons.cloud_off_rounded,
 
-                size:
-                    48,
+                size: 48,
 
-                color:
-                    Colors.redAccent,
+                color: Colors.redAccent,
               ),
 
-              const SizedBox(
-                height:
-                    12,
-              ),
+              const SizedBox(height: 12),
 
               Text(
                 _errorMessage!,
 
-                textAlign:
-                    TextAlign.center,
+                textAlign: TextAlign.center,
 
-                style:
-                    const TextStyle(
-                  color:
-                      textGrey,
+                style: const TextStyle(
+                  color: textGrey,
 
-                  fontWeight:
-                      FontWeight.w600,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
 
-              const SizedBox(
-                height:
-                    12,
-              ),
+              const SizedBox(height: 12),
 
               TextButton.icon(
-                onPressed:
-                    _loadCourses,
+                onPressed: _loadCourses,
 
-                icon:
-                    const Icon(
-                  Icons.refresh_rounded,
-                ),
+                icon: const Icon(Icons.refresh_rounded),
 
-                label:
-                    const Text(
-                  'Try Again',
-                ),
+                label: const Text('Try Again'),
               ),
             ],
           ),
@@ -437,62 +305,34 @@ class _InstructorClassesScreenState
 
     if (_courses.isEmpty) {
       return const Center(
-        child:
-            Column(
-          mainAxisSize:
-              MainAxisSize.min,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
 
           children: [
-            Icon(
-              Icons.class_outlined,
+            Icon(Icons.class_outlined, size: 52, color: primaryTeal),
 
-              size:
-                  52,
-
-              color:
-                  primaryTeal,
-            ),
-
-            SizedBox(
-              height:
-                  12,
-            ),
+            SizedBox(height: 12),
 
             Text(
               'No active classes',
 
-              style:
-                  TextStyle(
-                color:
-                    textDark,
+              style: TextStyle(
+                color: textDark,
 
-                fontSize:
-                    17,
+                fontSize: 17,
 
-                fontWeight:
-                    FontWeight.w800,
+                fontWeight: FontWeight.w800,
               ),
             ),
 
-            SizedBox(
-              height:
-                  5,
-            ),
+            SizedBox(height: 5),
 
             Text(
               'Courses assigned to this instructor will appear here.',
 
-              textAlign:
-                  TextAlign.center,
+              textAlign: TextAlign.center,
 
-              style:
-                  TextStyle(
-                color:
-                    textGrey,
-
-                fontSize:
-                    12,
-              ),
+              style: TextStyle(color: textGrey, fontSize: 12),
             ),
           ],
         ),
@@ -501,120 +341,75 @@ class _InstructorClassesScreenState
 
     if (_filteredCourses.isEmpty) {
       return const Center(
-        child:
-            Text(
+        child: Text(
           'No matching classes.',
 
-          style:
-              TextStyle(
-            color:
-                textGrey,
-
-            fontWeight:
-                FontWeight.w600,
-          ),
+          style: TextStyle(color: textGrey, fontWeight: FontWeight.w600),
         ),
       );
     }
 
     return RefreshIndicator(
-      color:
-          primaryTeal,
+      color: primaryTeal,
 
-      onRefresh:
-          _loadCourses,
+      onRefresh: _loadCourses,
 
-      child:
-          ListView(
-        physics:
-            const AlwaysScrollableScrollPhysics(
-          parent:
-              BouncingScrollPhysics(),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
         ),
 
-        padding:
-            const EdgeInsets.fromLTRB(
-          24,
-          12,
-          24,
-          30,
-        ),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 30),
 
         children: [
           Row(
             children: [
               const Expanded(
-                child:
-                    Text(
+                child: Text(
                   'Active Classes',
 
-                  style:
-                      TextStyle(
-                    color:
-                        textDark,
+                  style: TextStyle(
+                    color: textDark,
 
-                    fontSize:
-                        18,
+                    fontSize: 18,
 
-                    fontWeight:
-                        FontWeight.w800,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
 
               Container(
-                padding:
-                    const EdgeInsets.symmetric(
-                  horizontal:
-                      10,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
 
-                  vertical:
-                      6,
+                  vertical: 6,
                 ),
 
-                decoration:
-                    BoxDecoration(
-                  color:
-                      primaryTeal.withValues(
-                    alpha:
-                        0.10,
-                  ),
+                decoration: BoxDecoration(
+                  color: primaryTeal.withValues(alpha: 0.10),
 
-                  borderRadius:
-                      BorderRadius.circular(
-                    20,
-                  ),
+                  borderRadius: BorderRadius.circular(20),
                 ),
 
-                child:
-                    Text(
+                child: Text(
                   '${_filteredCourses.length} '
                   '${_filteredCourses.length == 1 ? 'Class' : 'Classes'}',
 
-                  style:
-                      const TextStyle(
-                    color:
-                        primaryTeal,
+                  style: const TextStyle(
+                    color: primaryTeal,
 
-                    fontSize:
-                        10.5,
+                    fontSize: 10.5,
 
-                    fontWeight:
-                        FontWeight.w800,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
             ],
           ),
 
-          const SizedBox(
-            height:
-                16,
-          ),
+          const SizedBox(height: 16),
 
-          ..._filteredCourses.map(
-            _buildCourseCard,
-          ),
+          ..._filteredCourses.map(_buildCourseCard),
         ],
       ),
     );
@@ -624,54 +419,31 @@ class _InstructorClassesScreenState
   // COURSE CARD
   // ============================================================
 
-  Widget _buildCourseCard(
-    Map<String, dynamic> course,
-  ) {
-    final String courseId =
-        (course['id'] ?? '')
-            .toString();
+  Widget _buildCourseCard(Map<String, dynamic> course) {
+    final String courseId = (course['id'] ?? '').toString();
 
-    final String code =
-        (course['code'] ?? 'COURSE')
-            .toString();
+    final String code = (course['code'] ?? 'COURSE').toString();
 
-    final String title =
-        (course['title'] ?? 'Course')
-            .toString();
+    final String title = (course['title'] ?? 'Course').toString();
 
-    final String semester =
-        (course['semester'] ?? '')
-            .toString();
+    final String semester = (course['semester'] ?? '').toString();
 
-    final String academicYear =
-        (course['academicYear'] ?? '')
-            .toString();
+    final String academicYear = (course['academicYear'] ?? '').toString();
 
-    final String instructorName =
-        (course['instructorName'] ??
-                'Instructor')
-            .toString();
+    final String instructorName = (course['instructorName'] ?? 'Instructor')
+        .toString();
 
-    final int students =
-        course['studentCount'] is num
-            ? (course['studentCount'] as num)
-                .toInt()
-            : 0;
+    final int students = course['studentCount'] is num
+        ? (course['studentCount'] as num).toInt()
+        : 0;
 
-    final String period =
-        [
-          semester,
-          academicYear,
-        ]
-            .where(
-              (value) =>
-                  value.trim().isNotEmpty,
-            )
-            .join(' • ');
+    final String period = [
+      semester,
+      academicYear,
+    ].where((value) => value.trim().isNotEmpty).join(' • ');
 
     return GestureDetector(
-      onTap:
-          () {
+      onTap: () {
         if (courseId.isEmpty) {
           return;
         }
@@ -680,168 +452,97 @@ class _InstructorClassesScreenState
           context,
 
           MaterialPageRoute(
-            builder:
-                (
-              context,
-            ) =>
-                    InstructorClassDetailsScreen(
-              courseId:
-                  courseId,
+            builder: (context) => InstructorClassDetailsScreen(
+              courseId: courseId,
 
-              title:
-                  title,
+              title: title,
 
-              section:
-                  period,
+              section: period,
 
-              courseCode:
-                  code,
+              courseCode: code,
 
-              instructorName:
-                  instructorName,
+              instructorName: instructorName,
             ),
           ),
         );
       },
 
-      child:
-          Container(
-        margin:
-            const EdgeInsets.only(
-          bottom:
-              15,
-        ),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 15),
 
-        padding:
-            const EdgeInsets.all(
-          20,
-        ),
+        padding: const EdgeInsets.all(20),
 
-        decoration:
-            BoxDecoration(
-          color:
-              Colors.white,
+        decoration: BoxDecoration(
+          color: Colors.white,
 
-          borderRadius:
-              BorderRadius.circular(
-            20,
-          ),
+          borderRadius: BorderRadius.circular(20),
 
-          border:
-              Border.all(
-            color:
-                const Color(
-              0xFFE6EAF0,
-            ),
-          ),
+          border: Border.all(color: const Color(0xFFE6EAF0)),
 
           boxShadow: [
             BoxShadow(
-              color:
-                  Colors.black.withValues(
-                alpha:
-                    0.025,
-              ),
+              color: Colors.black.withValues(alpha: 0.025),
 
-              blurRadius:
-                  14,
+              blurRadius: 14,
 
-              offset:
-                  const Offset(
-                0,
-                5,
-              ),
+              offset: const Offset(0, 5),
             ),
           ],
         ),
 
-        child:
-            Row(
+        child: Row(
           children: [
             Container(
-              width:
-                  58,
+              width: 58,
 
-              height:
-                  58,
+              height: 58,
 
-              decoration:
-                  BoxDecoration(
-                color:
-                    primaryTeal.withValues(
-                  alpha:
-                      0.10,
-                ),
+              decoration: BoxDecoration(
+                color: primaryTeal.withValues(alpha: 0.10),
 
-                borderRadius:
-                    BorderRadius.circular(
-                  16,
-                ),
+                borderRadius: BorderRadius.circular(16),
               ),
 
-              child:
-                  const Icon(
+              child: const Icon(
                 Icons.school_rounded,
 
-                color:
-                    primaryTeal,
+                color: primaryTeal,
 
-                size:
-                    28,
+                size: 28,
               ),
             ),
 
-            const SizedBox(
-              width:
-                  15,
-            ),
+            const SizedBox(width: 15),
 
             Expanded(
-              child:
-                  Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
 
                 children: [
                   Row(
                     children: [
                       Container(
-                        padding:
-                            const EdgeInsets.symmetric(
-                          horizontal:
-                              8,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
 
-                          vertical:
-                              4,
+                          vertical: 4,
                         ),
 
-                        decoration:
-                            BoxDecoration(
-                          color:
-                              const Color(
-                            0xFFF0F3F8,
-                          ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF0F3F8),
 
-                          borderRadius:
-                              BorderRadius.circular(
-                            6,
-                          ),
+                          borderRadius: BorderRadius.circular(6),
                         ),
 
-                        child:
-                            Text(
+                        child: Text(
                           code,
 
-                          style:
-                              const TextStyle(
-                            color:
-                                textDark,
+                          style: const TextStyle(
+                            color: textDark,
 
-                            fontSize:
-                                10.5,
+                            fontSize: 10.5,
 
-                            fontWeight:
-                                FontWeight.w700,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),
@@ -851,83 +552,50 @@ class _InstructorClassesScreenState
                       Text(
                         '$students enrolled',
 
-                        style:
-                            const TextStyle(
-                          color:
-                              textGrey,
-
-                          fontSize:
-                              11,
-                        ),
+                        style: const TextStyle(color: textGrey, fontSize: 11),
                       ),
                     ],
                   ),
 
-                  const SizedBox(
-                    height:
-                        8,
-                  ),
+                  const SizedBox(height: 8),
 
                   Text(
                     title,
 
-                    maxLines:
-                        1,
+                    maxLines: 1,
 
-                    overflow:
-                        TextOverflow.ellipsis,
+                    overflow: TextOverflow.ellipsis,
 
-                    style:
-                        const TextStyle(
-                      color:
-                          textDark,
+                    style: const TextStyle(
+                      color: textDark,
 
-                      fontSize:
-                          16,
+                      fontSize: 16,
 
-                      fontWeight:
-                          FontWeight.w800,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
 
-                  const SizedBox(
-                    height:
-                        4,
-                  ),
+                  const SizedBox(height: 4),
 
                   if (period.isNotEmpty)
                     Text(
                       period,
 
-                      style:
-                          const TextStyle(
-                        color:
-                            primaryTeal,
+                      style: const TextStyle(
+                        color: primaryTeal,
 
-                        fontSize:
-                            12,
+                        fontSize: 12,
 
-                        fontWeight:
-                            FontWeight.w700,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                 ],
               ),
             ),
 
-            const SizedBox(
-              width:
-                  8,
-            ),
+            const SizedBox(width: 8),
 
-            const Icon(
-              Icons.chevron_right_rounded,
-
-              color:
-                  Color(
-                0xFF9BA4B4,
-              ),
-            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF9BA4B4)),
           ],
         ),
       ),

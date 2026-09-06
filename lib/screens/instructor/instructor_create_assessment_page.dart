@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'instructor_ui.dart';
+
 import '../../services/assessment_service.dart';
 
 class InstructorCreateAssessmentScreen extends StatefulWidget {
@@ -311,7 +313,8 @@ class _InstructorCreateAssessmentScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return instructorScaffold(
+      context: context,
       backgroundColor: background,
 
       appBar: AppBar(
