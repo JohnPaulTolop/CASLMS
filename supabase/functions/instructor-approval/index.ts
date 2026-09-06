@@ -40,7 +40,9 @@ function response(
   );
 }
 
-function requiredSecret(name: string): string {
+function requiredSecret(
+  name: string,
+): string {
   const value = Deno.env.get(name);
 
   if (!value) {
@@ -52,11 +54,19 @@ function requiredSecret(name: string): string {
   return value;
 }
 
-function bearerToken(request: Request): string {
+function bearerToken(
+  request: Request,
+): string {
   const authorization =
-    request.headers.get("Authorization") ?? "";
+    request.headers.get(
+      "Authorization",
+    ) ?? "";
 
-  if (!authorization.startsWith("Bearer ")) {
+  if (
+    !authorization.startsWith(
+      "Bearer ",
+    )
+  ) {
     throw new Error(
       "Firebase authorization token is missing.",
     );
@@ -67,16 +77,25 @@ function bearerToken(request: Request): string {
     .trim();
 }
 
-function cleanText(value: unknown): string {
+function cleanText(
+  value: unknown,
+): string {
   return String(value ?? "").trim();
 }
 
-function validEmail(email: string): boolean {
-  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+function validEmail(
+  email: string,
+): boolean {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+    .test(email);
 }
 
-function validCampusId(campusId: string): boolean {
-  return /^\d{5,12}$/.test(campusId);
+function validCampusId(
+  campusId: string,
+): boolean {
+  return /^\d{5,12}$/.test(
+    campusId,
+  );
 }
 
 function extensionForMimeType(
@@ -100,16 +119,21 @@ function extensionForMimeType(
   }
 }
 
-function decodeBase64(encoded: string): Uint8Array {
+function decodeBase64(
+  encoded: string,
+): Uint8Array {
   const binary = atob(encoded);
 
   return Uint8Array.from(
     binary,
-    (character) => character.charCodeAt(0),
+    (character) =>
+      character.charCodeAt(0),
   );
 }
 
-function escapeHtml(value: string): string {
+function escapeHtml(
+  value: string,
+): string {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -118,14 +142,16 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#039;");
 }
 
-const serviceAccount = JSON.parse(
-  requiredSecret(
-    "FIREBASE_SERVICE_ACCOUNT_JSON",
-  ),
-);
+const serviceAccount =
+  JSON.parse(
+    requiredSecret(
+      "FIREBASE_SERVICE_ACCOUNT_JSON",
+    ),
+  );
 
 if (
-  typeof serviceAccount.private_key === "string"
+  typeof serviceAccount.private_key ===
+    "string"
 ) {
   serviceAccount.private_key =
     serviceAccount.private_key.replace(
@@ -138,11 +164,22 @@ const firebaseApp =
   getApps().length > 0
     ? getApps()[0]
     : initializeApp({
-        credential: cert(serviceAccount),
+        credential:
+          cert(serviceAccount),
       });
 
-const firebaseAuth = getAuth(firebaseApp);
-const firestore = getFirestore(firebaseApp);
+const firebaseAuth =
+  getAuth(firebaseApp);
+
+const firestore =
+  getFirestore(firebaseApp);
+
+// Supabase Edge Functions use a Deno edge
+// environment. Force Firestore to use
+// HTTP/1.1 REST instead of gRPC.
+firestore.settings({
+  preferRest: true,
+});
 
 const supabase = createClient(
   requiredSecret("SUPABASE_URL"),
@@ -157,31 +194,38 @@ const supabase = createClient(
   },
 );
 
-const bucketName = "caslms-faculty-ids";
+const bucketName =
+  "caslms-faculty-ids";
 
 async function requireFirebaseUser(
   request: Request,
 ) {
-  const token = bearerToken(request);
+  const token =
+    bearerToken(request);
 
-  return await firebaseAuth.verifyIdToken(
-    token,
-    true,
-  );
+  return await firebaseAuth
+    .verifyIdToken(
+      token,
+      true,
+    );
 }
 
 async function requireAdmin(
   request: Request,
 ) {
   const decoded =
-    await requireFirebaseUser(request);
+    await requireFirebaseUser(
+      request,
+    );
 
-  const document = await firestore
-    .collection("users")
-    .doc(decoded.uid)
-    .get();
+  const document =
+    await firestore
+      .collection("users")
+      .doc(decoded.uid)
+      .get();
 
-  const profile = document.data();
+  const profile =
+    document.data();
 
   if (
     !document.exists ||
@@ -204,13 +248,16 @@ async function submitApplication(
   body: Record<string, unknown>,
 ): Promise<Response> {
   const decoded =
-    await requireFirebaseUser(request);
+    await requireFirebaseUser(
+      request,
+    );
 
   const fullName =
     cleanText(body.fullName);
 
   const contactEmail =
-    cleanText(body.email).toLowerCase();
+    cleanText(body.email)
+      .toLowerCase();
 
   const campusId =
     cleanText(body.campusId);
@@ -222,7 +269,9 @@ async function submitApplication(
     cleanText(body.course);
 
   const fileName =
-    cleanText(body.facultyIdFileName);
+    cleanText(
+      body.facultyIdFileName,
+    );
 
   const mimeType =
     cleanText(
@@ -230,7 +279,9 @@ async function submitApplication(
     ).toLowerCase();
 
   const encodedFile =
-    cleanText(body.facultyIdBase64);
+    cleanText(
+      body.facultyIdBase64,
+    );
 
   if (fullName.length < 2) {
     return response(
@@ -289,7 +340,9 @@ async function submitApplication(
   }
 
   const extension =
-    extensionForMimeType(mimeType);
+    extensionForMimeType(
+      mimeType,
+    );
 
   if (!extension) {
     return response(
@@ -302,10 +355,12 @@ async function submitApplication(
   }
 
   const expectedAuthEmail =
-    `${campusId}@caslms.app`.toLowerCase();
+    `${campusId}@caslms.app`
+      .toLowerCase();
 
   if (
-    cleanText(decoded.email).toLowerCase() !==
+    cleanText(decoded.email)
+      .toLowerCase() !==
     expectedAuthEmail
   ) {
     return response(
@@ -320,7 +375,8 @@ async function submitApplication(
   let bytes: Uint8Array;
 
   try {
-    bytes = decodeBase64(encodedFile);
+    bytes =
+      decodeBase64(encodedFile);
   } catch (_) {
     return response(
       {
@@ -347,16 +403,18 @@ async function submitApplication(
     );
   }
 
-  const userReference = firestore
-    .collection("users")
-    .doc(decoded.uid);
+  const userReference =
+    firestore
+      .collection("users")
+      .doc(decoded.uid);
 
   const existingUser =
     await userReference.get();
 
   if (
     existingUser.exists &&
-    existingUser.data()?.status === "active"
+    existingUser.data()?.status ===
+      "active"
   ) {
     return response(
       {
@@ -375,12 +433,13 @@ async function submitApplication(
       .doc(decoded.uid);
 
   const existingApplication =
-    await applicationReference.get();
+    await applicationReference
+      .get();
 
   if (
     existingApplication.exists &&
-    existingApplication.data()?.status ===
-      "pending"
+    existingApplication
+        .data()?.status === "pending"
   ) {
     return response(
       {
@@ -408,7 +467,9 @@ async function submitApplication(
       );
 
   if (uploadResult.error) {
-    console.error(uploadResult.error);
+    console.error(
+      uploadResult.error,
+    );
 
     return response(
       {
@@ -420,7 +481,8 @@ async function submitApplication(
   }
 
   try {
-    const batch = firestore.batch();
+    const batch =
+      firestore.batch();
 
     batch.set(
       userReference,
@@ -429,7 +491,8 @@ async function submitApplication(
         name: fullName,
         email: contactEmail,
         universityId: campusId,
-        authEmail: expectedAuthEmail,
+        authEmail:
+          expectedAuthEmail,
         department,
         course,
         role: "instructor",
@@ -454,9 +517,12 @@ async function submitApplication(
         universityId: campusId,
         department,
         course,
-        facultyIdPath: storagePath,
-        facultyIdFileName: fileName,
-        facultyIdMimeType: mimeType,
+        facultyIdPath:
+          storagePath,
+        facultyIdFileName:
+          fileName,
+        facultyIdMimeType:
+          mimeType,
         status: "pending",
         submittedAt:
           FieldValue.serverTimestamp(),
@@ -465,7 +531,8 @@ async function submitApplication(
         reviewedAt: null,
         reviewedBy: null,
         denialReason: null,
-        emailStatus: "not_sent",
+        emailStatus:
+          "not_sent",
       },
     );
 
@@ -473,7 +540,9 @@ async function submitApplication(
   } catch (error) {
     await supabase.storage
       .from(bucketName)
-      .remove([storagePath]);
+      .remove([
+        storagePath,
+      ]);
 
     console.error(error);
 
@@ -503,7 +572,9 @@ async function getFacultyId(
   const applicantId =
     cleanText(body.applicantId);
 
-  if (applicantId.length === 0) {
+  if (
+    applicantId.length === 0
+  ) {
     return response(
       {
         error:
@@ -521,7 +592,8 @@ async function getFacultyId(
       .doc(applicantId)
       .get();
 
-  const data = application.data();
+  const data =
+    application.data();
 
   if (
     !application.exists ||
@@ -537,9 +609,13 @@ async function getFacultyId(
   }
 
   const storagePath =
-    cleanText(data.facultyIdPath);
+    cleanText(
+      data.facultyIdPath,
+    );
 
-  if (storagePath.length === 0) {
+  if (
+    storagePath.length === 0
+  ) {
     return response(
       {
         error:
@@ -559,7 +635,8 @@ async function getFacultyId(
 
   if (
     signedUrlResult.error ||
-    !signedUrlResult.data?.signedUrl
+    !signedUrlResult
+      .data?.signedUrl
   ) {
     console.error(
       signedUrlResult.error,
@@ -577,7 +654,8 @@ async function getFacultyId(
   return response({
     success: true,
     url:
-      signedUrlResult.data.signedUrl,
+      signedUrlResult
+        .data.signedUrl,
     expiresInSeconds: 300,
   });
 }
@@ -589,7 +667,9 @@ async function sendDecisionEmail(
   reason: string,
 ) {
   const resendKey =
-    requiredSecret("RESEND_API_KEY");
+    requiredSecret(
+      "RESEND_API_KEY",
+    );
 
   const fromEmail =
     Deno.env.get(
@@ -683,7 +763,9 @@ async function reviewApplication(
   const denialReason =
     cleanText(body.reason);
 
-  if (applicantId.length === 0) {
+  if (
+    applicantId.length === 0
+  ) {
     return response(
       {
         error:
@@ -776,7 +858,8 @@ async function reviewApplication(
   const approved =
     decision === "approved";
 
-  const batch = firestore.batch();
+  const batch =
+    firestore.batch();
 
   batch.update(
     applicationReference,
@@ -803,7 +886,8 @@ async function reviewApplication(
         approved
           ? "active"
           : "denied",
-      approvalStatus: decision,
+      approvalStatus:
+        decision,
       reviewedBy:
         admin.decoded.uid,
       reviewedAt:
@@ -834,9 +918,10 @@ async function reviewApplication(
       },
     );
 
-    await firebaseAuth.revokeRefreshTokens(
-      applicantId,
-    );
+    await firebaseAuth
+      .revokeRefreshTokens(
+        applicantId,
+      );
   }
 
   let emailSent = false;
@@ -851,22 +936,25 @@ async function reviewApplication(
 
     emailSent = true;
 
-    await applicationReference.update({
-      emailStatus: "sent",
-      emailSentAt:
-        FieldValue.serverTimestamp(),
-      updatedAt:
-        FieldValue.serverTimestamp(),
-    });
+    await applicationReference
+      .update({
+        emailStatus: "sent",
+        emailSentAt:
+          FieldValue.serverTimestamp(),
+        updatedAt:
+          FieldValue.serverTimestamp(),
+      });
   } catch (error) {
     console.error(error);
 
-    await applicationReference.update({
-      emailStatus: "failed",
-      emailError: cleanText(error),
-      updatedAt:
-        FieldValue.serverTimestamp(),
-    });
+    await applicationReference
+      .update({
+        emailStatus: "failed",
+        emailError:
+          cleanText(error),
+        updatedAt:
+          FieldValue.serverTimestamp(),
+      });
   }
 
   return response({
@@ -880,8 +968,12 @@ async function reviewApplication(
 }
 
 Deno.serve(
-  async (request: Request) => {
-    if (request.method === "OPTIONS") {
+  async (
+    request: Request,
+  ) => {
+    if (
+      request.method === "OPTIONS"
+    ) {
       return new Response(
         "ok",
         {
@@ -890,7 +982,9 @@ Deno.serve(
       );
     }
 
-    if (request.method !== "POST") {
+    if (
+      request.method !== "POST"
+    ) {
       return response(
         {
           error:
@@ -949,7 +1043,9 @@ Deno.serve(
         message.toLowerCase();
 
       const unauthorized =
-        lowerMessage.includes("token") ||
+        lowerMessage.includes(
+          "token",
+        ) ||
         lowerMessage.includes(
           "administrator",
         );

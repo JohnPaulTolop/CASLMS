@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/assessment_submission_service.dart';
 
 import 'student_ai_quiz_page.dart';
+import 'student_assessment_submission_page.dart';
 
 class StudentModuleDetailScreen extends StatefulWidget {
   final String courseId;
@@ -59,7 +60,6 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
   int _selectedTab = 1;
 
   bool _isLoading = true;
-  bool _isSubmitting = false;
 
   String? _errorMessage;
 
@@ -254,19 +254,15 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
 
       final List<Map<String, dynamic>> resources = resourceSnapshot.docs
           .map((document) => {...document.data(), 'id': document.id})
-          .where(
-            (resource) {
-              final String status =
-                  (resource['status'] ?? 'published')
-                      .toString()
-                      .trim()
-                      .toLowerCase();
+          .where((resource) {
+            final String status = (resource['status'] ?? 'published')
+                .toString()
+                .trim()
+                .toLowerCase();
 
-              return (resource['courseId'] ?? '').toString() ==
-                      widget.courseId &&
-                  status == 'published';
-            },
-          )
+            return (resource['courseId'] ?? '').toString() == widget.courseId &&
+                status == 'published';
+          })
           .toList();
 
       if (!mounted) {
@@ -453,31 +449,26 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
   // OPEN LEARNING RESOURCE
   // ============================================================
 
-  Future<void> _openResource(
-    Map<String, dynamic> resource,
-  ) async {
-    final String deliveryType =
-        (resource['deliveryType'] ?? '')
-            .toString()
-            .trim()
-            .toLowerCase();
+  Future<void> _openResource(Map<String, dynamic> resource) async {
+    final String deliveryType = (resource['deliveryType'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
 
-    final String uploadedUrl =
-        (resource['fileUrl'] ?? '').toString().trim();
+    final String uploadedUrl = (resource['fileUrl'] ?? '').toString().trim();
 
-    final String externalUrl =
-        (resource['externalUrl'] ?? '').toString().trim();
+    final String externalUrl = (resource['externalUrl'] ?? '')
+        .toString()
+        .trim();
 
     final String url = deliveryType == 'uploaded_file'
         ? uploadedUrl
         : externalUrl.isNotEmpty
-            ? externalUrl
-            : uploadedUrl;
+        ? externalUrl
+        : uploadedUrl;
 
     if (url.isEmpty) {
-      _showError(
-        'This resource does not have a valid file or link.',
-      );
+      _showError('This resource does not have a valid file or link.');
 
       return;
     }
@@ -494,16 +485,10 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
     }
 
     try {
-      bool opened = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
+      bool opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
 
       if (!opened) {
-        opened = await launchUrl(
-          uri,
-          mode: LaunchMode.platformDefault,
-        );
+        opened = await launchUrl(uri, mode: LaunchMode.platformDefault);
       }
 
       if (!opened && mounted) {
@@ -519,14 +504,12 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
   }
 
   // ============================================================
-  // MARK SUBMITTED
+  // OPEN ASSESSMENT SUBMISSION
   // ============================================================
 
-  Future<void> _markSubmitted(Map<String, dynamic> assessment) async {
-    if (_isSubmitting) {
-      return;
-    }
-
+  Future<void> _openAssessmentSubmission(
+    Map<String, dynamic> assessment,
+  ) async {
     final String assessmentId =
         (assessment['assessmentId'] ?? assessment['id'] ?? '')
             .toString()
@@ -538,86 +521,53 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
       return;
     }
 
-    final String title = (assessment['title'] ?? 'Assessment').toString();
-
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          title: const Text('Mark as Submitted?'),
-          content: Text(
-            'Only continue after you have completed "$title" on the external assessment website.\n\n'
-            'CASLMS cannot automatically verify your Google Form answers.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, false);
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(dialogContext, true);
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: primaryBlue),
-              child: const Text(
-                'Mark Submitted',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        );
-      },
+    final Map<String, dynamic>? existingSubmission = _submissionFor(
+      assessmentId,
     );
 
-    if (confirmed != true) {
+    if (existingSubmission != null) {
+      final String status = (existingSubmission['status'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
+
+      if (status == 'submitted' || status == 'graded') {
+        _showError('This assessment has already been submitted.');
+        return;
+      }
+    }
+
+    if (_isPastDue(assessment)) {
+      _showError('The deadline for this assessment has passed.');
       return;
     }
 
-    setState(() {
-      _isSubmitting = true;
-    });
+    final bool? submitted = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute<bool>(
+        builder: (context) =>
+            StudentAssessmentSubmissionScreen(assessment: assessment),
+      ),
+    );
 
-    try {
-      await _submissionService.markAsSubmitted(assessmentId: assessmentId);
-
-      if (!mounted) {
-        return;
-      }
-
-      await _loadPage();
-
-      if (!mounted) {
-        return;
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Assessment marked as submitted.'),
-          backgroundColor: green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    } on AssessmentSubmissionException catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      _showError(e.message);
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      _showError('Unable to submit assessment: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isSubmitting = false;
-        });
-      }
+    if (!mounted || submitted != true) {
+      return;
     }
+
+    await _loadPage();
+
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Assessment submitted successfully.'),
+        backgroundColor: green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   // ============================================================
@@ -1068,7 +1018,7 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
           const SizedBox(height: 4),
 
           const Text(
-            'Complete the assessment using the external link, then return here to mark it as submitted.',
+            'Open the assessment instructions, complete the required work, then submit a GitHub repository, ZIP file, or technical document.',
             style: TextStyle(color: textGrey, fontSize: 11.5, height: 1.45),
           ),
 
@@ -1270,7 +1220,11 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
               ),
               label: Text(
                 submitted
-                    ? (graded ? 'Quiz Graded' : 'Quiz Submitted')
+                    ? graded
+                          ? 'Assessment Graded'
+                          : isAiQuiz
+                          ? 'Quiz Submitted'
+                          : 'Assessment Submitted'
                     : pastDue
                     ? 'Deadline Passed'
                     : isAiQuiz
@@ -1301,10 +1255,10 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
               width: double.infinity,
               height: 48,
               child: OutlinedButton.icon(
-                onPressed: submitted || pastDue || _isSubmitting
+                onPressed: submitted || pastDue
                     ? null
                     : () {
-                        _markSubmitted(assessment);
+                        _openAssessmentSubmission(assessment);
                       },
                 icon: Icon(
                   submitted
@@ -1319,7 +1273,7 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
                       ? 'Submitted'
                       : pastDue
                       ? 'Deadline Passed'
-                      : 'Mark as Submitted',
+                      : 'Submit Work',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 style: OutlinedButton.styleFrom(
@@ -1421,11 +1375,8 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
                 'Resource')
             .toString();
 
-    final String type =
-        (resource['resourceType'] ??
-                resource['type'] ??
-                'file')
-            .toString();
+    final String type = (resource['resourceType'] ?? resource['type'] ?? 'file')
+        .toString();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 11),
@@ -1475,10 +1426,7 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
 
                       Text(
                         type,
-                        style: const TextStyle(
-                          color: textGrey,
-                          fontSize: 10.5,
-                        ),
+                        style: const TextStyle(color: textGrey, fontSize: 10.5),
                       ),
                     ],
                   ),

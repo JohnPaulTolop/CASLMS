@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../services/assessment_artifact_submission_service.dart';
 import '../../services/assessment_submission_service.dart';
 
 class InstructorAssessmentGradingScreen extends StatefulWidget {
@@ -18,20 +20,27 @@ class InstructorAssessmentGradingScreen extends StatefulWidget {
 
 class _InstructorAssessmentGradingScreenState
     extends State<InstructorAssessmentGradingScreen> {
-  static const primaryTeal = Color(0xFF00897B);
-  static const background = Color(0xFFF7F9FC);
-  static const textDark = Color(0xFF10182F);
-  static const textGrey = Color(0xFF68738A);
-  static const borderColor = Color(0xFFE6EAF0);
-  static const green = Color(0xFF26A65B);
-  static const orange = Color(0xFFFF9418);
-  static const red = Color(0xFFFF4B4B);
+  static const Color primaryTeal = Color(0xFF00897B);
+  static const Color background = Color(0xFFF7F9FC);
+  static const Color textDark = Color(0xFF10182F);
+  static const Color textGrey = Color(0xFF68738A);
+  static const Color borderColor = Color(0xFFE6EAF0);
+  static const Color green = Color(0xFF26A65B);
+  static const Color orange = Color(0xFFFF9418);
+  static const Color red = Color(0xFFFF4B4B);
 
-  final _firestore = FirebaseFirestore.instance;
-  final _submissionService = AssessmentSubmissionService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  final AssessmentSubmissionService _submissionService =
+      AssessmentSubmissionService();
+
+  final AssessmentArtifactSubmissionService _artifactService =
+      AssessmentArtifactSubmissionService();
 
   bool _isLoading = true;
-  bool _gradeDialogOpen = false;
+  bool _feedbackDialogOpen = false;
+
+  String? _openingSubmissionId;
   String? _errorMessage;
 
   Map<String, dynamic>? _assessment;
@@ -39,6 +48,7 @@ class _InstructorAssessmentGradingScreenState
   Map<String, dynamic>? _module;
 
   List<Map<String, dynamic>> _submissions = [];
+
   String _selectedFilter = 'all';
 
   @override
@@ -53,27 +63,38 @@ class _InstructorAssessmentGradingScreenState
   String get _assessmentType =>
       (_assessment?['assessmentType'] ?? 'assessment').toString();
 
-  num get _totalPoints =>
-      (_assessment?['totalPoints'] as num?) ?? 0;
+  num get _totalPoints => (_assessment?['totalPoints'] as num?) ?? 0;
 
-  String _status(Map<String, dynamic> submission) =>
-      (submission['status'] ?? '').toString().trim().toLowerCase();
+  String _status(Map<String, dynamic> submission) {
+    return (submission['status'] ?? '').toString().trim().toLowerCase();
+  }
 
-  int get _gradedCount =>
-      _submissions.where((s) => _status(s) == 'graded').length;
+  int get _gradedCount {
+    return _submissions.where((submission) {
+      return _status(submission) == 'graded';
+    }).length;
+  }
 
-  int get _submittedCount =>
-      _submissions.where((s) => _status(s) == 'submitted').length;
+  int get _submittedCount {
+    return _submissions.where((submission) {
+      return _status(submission) == 'submitted';
+    }).length;
+  }
 
   List<Map<String, dynamic>> get _filteredSubmissions {
-    if (_selectedFilter == 'all') return _submissions;
-    return _submissions
-        .where((s) => _status(s) == _selectedFilter)
-        .toList();
+    if (_selectedFilter == 'all') {
+      return _submissions;
+    }
+
+    return _submissions.where((submission) {
+      return _status(submission) == _selectedFilter;
+    }).toList();
   }
 
   Future<void> _loadPage() async {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -81,27 +102,26 @@ class _InstructorAssessmentGradingScreenState
     });
 
     try {
-      final id = widget.assessmentId.trim();
+      final String assessmentId = widget.assessmentId.trim();
 
-      if (id.isEmpty) {
+      if (assessmentId.isEmpty) {
         throw AssessmentSubmissionException('Assessment ID is missing.');
       }
 
       final assessmentDocument = await _firestore
           .collection('assessments')
-          .doc(id)
+          .doc(assessmentId)
           .get();
 
-      final assessment = assessmentDocument.data();
+      final Map<String, dynamic>? assessment = assessmentDocument.data();
 
       if (assessment == null) {
-        throw AssessmentSubmissionException(
-          'Assessment could not be found.',
-        );
+        throw AssessmentSubmissionException('Assessment could not be found.');
       }
 
-      final courseId = (assessment['courseId'] ?? '').toString();
-      final moduleId = (assessment['moduleId'] ?? '').toString();
+      final String courseId = (assessment['courseId'] ?? '').toString().trim();
+
+      final String moduleId = (assessment['moduleId'] ?? '').toString().trim();
 
       if (courseId.isEmpty || moduleId.isEmpty) {
         throw AssessmentSubmissionException(
@@ -109,8 +129,8 @@ class _InstructorAssessmentGradingScreenState
         );
       }
 
-      final submissions = await _submissionService
-          .getAssessmentSubmissions(assessmentId: id);
+      final List<Map<String, dynamic>> submissions = await _submissionService
+          .getAssessmentSubmissions(assessmentId: assessmentId);
 
       final courseDocument = await _firestore
           .collection('courses')
@@ -122,34 +142,43 @@ class _InstructorAssessmentGradingScreenState
           .doc(moduleId)
           .get();
 
-      submissions.sort((a, b) {
-        final aPending = _status(a) == 'submitted';
-        final bPending = _status(b) == 'submitted';
+      submissions.sort((first, second) {
+        final bool firstPending = _status(first) == 'submitted';
 
-        if (aPending != bPending) return aPending ? -1 : 1;
+        final bool secondPending = _status(second) == 'submitted';
 
-        return (a['studentName'] ?? '')
-            .toString()
-            .toLowerCase()
-            .compareTo(
-              (b['studentName'] ?? '').toString().toLowerCase(),
-            );
+        if (firstPending != secondPending) {
+          return firstPending ? -1 : 1;
+        }
+
+        return (first['studentName'] ?? '').toString().toLowerCase().compareTo(
+          (second['studentName'] ?? '').toString().toLowerCase(),
+        );
       });
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
-        _assessment = {...assessment, 'id': id};
+        _assessment = {...assessment, 'id': assessmentId};
+
         _course = courseDocument.data();
+
         _module = moduleDocument.data();
+
         _submissions = submissions;
+
         _isLoading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _isLoading = false;
+
         _errorMessage = error is AssessmentSubmissionException
             ? error.message
             : error.toString();
@@ -158,22 +187,27 @@ class _InstructorAssessmentGradingScreenState
   }
 
   num _submissionTotal(Map<String, dynamic> submission) {
-    return submission['totalPoints'] is num
-        ? submission['totalPoints'] as num
-        : _totalPoints;
+    if (submission['totalPoints'] is num) {
+      return submission['totalPoints'] as num;
+    }
+
+    return _totalPoints;
   }
 
   String _rating(Map<String, dynamic> submission) {
-    final stored = submission['percentage'];
+    final dynamic stored = submission['percentage'];
 
     if (stored is num && stored.isFinite) {
       return '${stored.toStringAsFixed(1)}%';
     }
 
-    final score = submission['score'];
-    final total = _submissionTotal(submission);
+    final dynamic score = submission['score'];
 
-    if (score is! num || total <= 0) return 'Not available';
+    final num total = _submissionTotal(submission);
+
+    if (score is! num || total <= 0) {
+      return 'Not available';
+    }
 
     return '${(score / total * 100).toStringAsFixed(1)}%';
   }
@@ -185,78 +219,227 @@ class _InstructorAssessmentGradingScreenState
         ? value.toLocal()
         : null;
 
-    if (date == null) return 'Unknown';
+    if (date == null) {
+      return 'Unknown';
+    }
 
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    const List<String> months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
 
-    final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
-    final minute = date.minute.toString().padLeft(2, '0');
-    final period = date.hour >= 12 ? 'PM' : 'AM';
+    final int hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
 
-    return '${months[date.month - 1]} ${date.day}, ${date.year}'
-        ' • $hour:$minute $period';
+    final String minute = date.minute.toString().padLeft(2, '0');
+
+    final String period = date.hour >= 12 ? 'PM' : 'AM';
+
+    return '${months[date.month - 1]} '
+        '${date.day}, ${date.year} '
+        '• $hour:$minute $period';
   }
 
-  Future<void> _openGradeDialog(
-    Map<String, dynamic> submission,
-  ) async {
-    if (!mounted || _gradeDialogOpen) return;
-
-    final id = (submission['submissionId'] ?? submission['id'] ?? '')
+  String _submissionId(Map<String, dynamic> submission) {
+    return (submission['submissionId'] ?? submission['id'] ?? '')
         .toString()
         .trim();
+  }
 
-    if (id.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Submission ID is missing.')),
-      );
+  String _submissionType(Map<String, dynamic> submission) {
+    return (submission['submissionType'] ?? '').toString().trim().toLowerCase();
+  }
+
+  String _submissionTypeLabel(Map<String, dynamic> submission) {
+    switch (_submissionType(submission)) {
+      case 'github_repository':
+        return 'GitHub Repository';
+
+      case 'zip_file':
+        return 'ZIP Project File';
+
+      case 'technical_document':
+        return 'Technical Document';
+
+      default:
+        return 'External Assessment';
+    }
+  }
+
+  IconData _submissionTypeIcon(Map<String, dynamic> submission) {
+    switch (_submissionType(submission)) {
+      case 'github_repository':
+        return Icons.link_rounded;
+
+      case 'zip_file':
+        return Icons.folder_zip_outlined;
+
+      case 'technical_document':
+        return Icons.description_outlined;
+
+      default:
+        return Icons.assignment_turned_in_outlined;
+    }
+  }
+
+  bool _canOpenSubmission(Map<String, dynamic> submission) {
+    return const {
+      'github_repository',
+      'zip_file',
+      'technical_document',
+    }.contains(_submissionType(submission));
+  }
+
+  Future<void> _openSubmittedWork(Map<String, dynamic> submission) async {
+    final String submissionId = _submissionId(submission);
+
+    if (submissionId.isEmpty || _openingSubmissionId != null) {
       return;
     }
 
-    _gradeDialogOpen = true;
+    setState(() {
+      _openingSubmissionId = submissionId;
+    });
 
     try {
-      final navigator = Navigator.of(context, rootNavigator: true);
+      final String type = _submissionType(submission);
 
-      // Do not put the automatic scoring message into the
-      // instructor's feedback editor on a new quiz submission.
-      final automaticWithoutFeedback =
+      late final Uri uri;
+
+      if (type == 'github_repository') {
+        final Uri? parsedUri = Uri.tryParse(
+          (submission['repositoryUrl'] ?? '').toString().trim(),
+        );
+
+        if (parsedUri == null ||
+            parsedUri.scheme != 'https' ||
+            parsedUri.host.toLowerCase() != 'github.com') {
+          throw AssessmentArtifactSubmissionException(
+            'The submitted GitHub repository link is invalid.',
+          );
+        }
+
+        uri = parsedUri;
+      } else if (type == 'zip_file' || type == 'technical_document') {
+        uri = await _artifactService.createFileDownloadUrl(
+          submissionId: submissionId,
+        );
+      } else {
+        throw AssessmentArtifactSubmissionException(
+          'This older submission does not include a link or uploaded file.',
+        );
+      }
+
+      bool opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+      if (!opened) {
+        opened = await launchUrl(uri, mode: LaunchMode.platformDefault);
+      }
+
+      if (!opened) {
+        throw AssessmentArtifactSubmissionException(
+          'Unable to open the submitted work.',
+        );
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      final String message = error is AssessmentArtifactSubmissionException
+          ? error.message
+          : 'Unable to open the submitted work: $error';
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _openingSubmissionId = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _openFeedbackDialog(Map<String, dynamic> submission) async {
+    if (!mounted || _feedbackDialogOpen) {
+      return;
+    }
+
+    final String submissionId = _submissionId(submission);
+
+    if (submissionId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Submission ID is missing.')),
+      );
+
+      return;
+    }
+
+    _feedbackDialogOpen = true;
+
+    try {
+      final NavigatorState navigator = Navigator.of(
+        context,
+        rootNavigator: true,
+      );
+
+      final bool automaticWithoutFeedback =
           submission['gradingMode'] == 'automatic' &&
           submission['feedbackBy'] == null;
 
-      final route = DialogRoute<bool>(
+      final DialogRoute<bool> route = DialogRoute<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (_) => _AssessmentFeedbackDialog(
-          service: _submissionService,
-          submissionId: id,
-          studentName:
-              (submission['studentName'] ?? 'Student').toString(),
-          assessmentTitle: _assessmentTitle,
-          score: submission['score'] is num
-              ? submission['score'] as num
-              : null,
-          totalPoints: _submissionTotal(submission),
-          rating: _rating(submission),
-          feedback: automaticWithoutFeedback
-              ? ''
-              : (submission['feedback'] ?? '').toString(),
-        ),
+        builder: (_) {
+          return _AssessmentFeedbackDialog(
+            service: _submissionService,
+            submissionId: submissionId,
+            studentName: (submission['studentName'] ?? 'Student').toString(),
+            assessmentTitle: _assessmentTitle,
+            score: submission['score'] is num
+                ? submission['score'] as num
+                : null,
+            totalPoints: _submissionTotal(submission),
+            rating: _rating(submission),
+            feedback: automaticWithoutFeedback
+                ? ''
+                : (submission['feedback'] ?? '').toString(),
+          );
+        },
       );
 
-      final saved = await navigator.push<bool>(route);
+      final bool? saved = await navigator.push<bool>(route);
 
-      // Wait for the overlay and closing transition to finish.
       await route.completed;
 
-      if (!mounted || saved != true) return;
+      if (!mounted || saved != true) {
+        return;
+      }
 
       await _loadPage();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -266,7 +449,7 @@ class _InstructorAssessmentGradingScreenState
         ),
       );
     } finally {
-      _gradeDialogOpen = false;
+      _feedbackDialogOpen = false;
     }
   }
 
@@ -306,9 +489,7 @@ class _InstructorAssessmentGradingScreenState
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: primaryTeal),
-      );
+      return const Center(child: CircularProgressIndicator(color: primaryTeal));
     }
 
     if (_errorMessage != null) {
@@ -333,7 +514,7 @@ class _InstructorAssessmentGradingScreenState
       );
     }
 
-    final visible = _filteredSubmissions;
+    final List<Map<String, dynamic>> visible = _filteredSubmissions;
 
     return RefreshIndicator(
       onRefresh: _loadPage,
@@ -385,7 +566,7 @@ class _InstructorAssessmentGradingScreenState
           ),
           const SizedBox(height: 5),
           const Text(
-            'View scores and ratings. Only instructor feedback is editable.',
+            'Open submitted work, view scores and ratings, and provide feedback.',
             style: TextStyle(color: textGrey, fontSize: 12),
           ),
           const SizedBox(height: 14),
@@ -427,8 +608,9 @@ class _InstructorAssessmentGradingScreenState
   }
 
   Widget _buildHeader() {
-    final courseCode = (_course?['code'] ?? '').toString();
-    final moduleTitle = (_module?['title'] ?? '').toString();
+    final String courseCode = (_course?['code'] ?? '').toString();
+
+    final String moduleTitle = (_module?['title'] ?? '').toString();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -509,10 +691,7 @@ class _InstructorAssessmentGradingScreenState
               fontWeight: FontWeight.w800,
             ),
           ),
-          Text(
-            label,
-            style: const TextStyle(color: textGrey, fontSize: 11),
-          ),
+          Text(label, style: const TextStyle(color: textGrey, fontSize: 11)),
         ],
       ),
     );
@@ -524,17 +703,36 @@ class _InstructorAssessmentGradingScreenState
       selected: _selectedFilter == value,
       selectedColor: primaryTeal.withValues(alpha: 0.12),
       onSelected: (_) {
-        setState(() => _selectedFilter = value);
+        setState(() {
+          _selectedFilter = value;
+        });
       },
     );
   }
 
   Widget _submissionCard(Map<String, dynamic> submission) {
-    final name = (submission['studentName'] ?? 'Student').toString();
-    final graded = _status(submission) == 'graded';
-    final score = submission['score'];
-    final total = _submissionTotal(submission);
-    final feedback = (submission['feedback'] ?? '').toString().trim();
+    final String studentName = (submission['studentName'] ?? 'Student')
+        .toString();
+
+    final bool graded = _status(submission) == 'graded';
+
+    final dynamic score = submission['score'];
+
+    final num total = _submissionTotal(submission);
+
+    final String feedback = (submission['feedback'] ?? '').toString().trim();
+
+    final String submissionId = _submissionId(submission);
+
+    final String submissionType = _submissionType(submission);
+
+    final String fileName = (submission['fileName'] ?? '').toString().trim();
+
+    final String repositoryUrl = (submission['repositoryUrl'] ?? '')
+        .toString()
+        .trim();
+
+    final bool opening = _openingSubmissionId == submissionId;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -550,9 +748,9 @@ class _InstructorAssessmentGradingScreenState
           Row(
             children: [
               CircleAvatar(
-                backgroundColor: primaryTeal.withValues(alpha: 0.1),
+                backgroundColor: primaryTeal.withValues(alpha: 0.10),
                 child: Text(
-                  name.isEmpty ? '?' : name[0].toUpperCase(),
+                  studentName.isEmpty ? '?' : studentName[0].toUpperCase(),
                   style: const TextStyle(color: primaryTeal),
                 ),
               ),
@@ -562,7 +760,7 @@ class _InstructorAssessmentGradingScreenState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      name,
+                      studentName,
                       style: const TextStyle(
                         color: textDark,
                         fontWeight: FontWeight.w800,
@@ -573,10 +771,7 @@ class _InstructorAssessmentGradingScreenState
                       graded
                           ? 'Graded ${_formatDate(submission['gradedAt'])}'
                           : 'Submitted ${_formatDate(submission['submittedAt'])}',
-                      style: const TextStyle(
-                        color: textGrey,
-                        fontSize: 11,
-                      ),
+                      style: const TextStyle(color: textGrey, fontSize: 11),
                     ),
                   ],
                 ),
@@ -591,6 +786,90 @@ class _InstructorAssessmentGradingScreenState
               ),
             ],
           ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(13),
+            decoration: BoxDecoration(
+              color: primaryTeal.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: primaryTeal.withValues(alpha: 0.16)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _submissionTypeIcon(submission),
+                  color: primaryTeal,
+                  size: 21,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _submissionTypeLabel(submission),
+                        style: const TextStyle(
+                          color: textDark,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      if (fileName.isNotEmpty || repositoryUrl.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          submissionType == 'github_repository'
+                              ? repositoryUrl
+                              : fileName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: textGrey, fontSize: 11),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_canOpenSubmission(submission)) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _openingSubmissionId == null
+                    ? () {
+                        _openSubmittedWork(submission);
+                      }
+                    : null,
+                icon: opening
+                    ? const SizedBox(
+                        width: 17,
+                        height: 17,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: primaryTeal,
+                        ),
+                      )
+                    : Icon(
+                        submissionType == 'github_repository'
+                            ? Icons.open_in_new_rounded
+                            : Icons.download_rounded,
+                      ),
+                label: Text(
+                  opening
+                      ? 'Opening...'
+                      : submissionType == 'github_repository'
+                      ? 'Open GitHub Repository'
+                      : 'Open Submitted File',
+                ),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: primaryTeal,
+                  side: const BorderSide(color: primaryTeal),
+                  minimumSize: const Size(0, 45),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           Text(
             score is num ? 'Score: $score / $total' : 'Score: Not graded',
@@ -611,7 +890,9 @@ class _InstructorAssessmentGradingScreenState
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => _openGradeDialog(submission),
+              onPressed: () {
+                _openFeedbackDialog(submission);
+              },
               icon: const Icon(Icons.comment_outlined),
               label: const Text('View Score & Feedback'),
               style: ElevatedButton.styleFrom(
@@ -640,11 +921,14 @@ class _AssessmentFeedbackDialog extends StatefulWidget {
   });
 
   final AssessmentSubmissionService service;
+
   final String submissionId;
   final String studentName;
   final String assessmentTitle;
+
   final num? score;
   final num totalPoints;
+
   final String rating;
   final String feedback;
 
@@ -653,15 +937,16 @@ class _AssessmentFeedbackDialog extends StatefulWidget {
       _AssessmentFeedbackDialogState();
 }
 
-class _AssessmentFeedbackDialogState
-    extends State<_AssessmentFeedbackDialog> {
+class _AssessmentFeedbackDialogState extends State<_AssessmentFeedbackDialog> {
   late final TextEditingController _controller;
+
   bool _saving = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+
     _controller = TextEditingController(text: widget.feedback);
   }
 
@@ -672,12 +957,17 @@ class _AssessmentFeedbackDialogState
   }
 
   Future<void> _save() async {
-    if (_saving) return;
+    if (_saving) {
+      return;
+    }
 
-    final feedback = _controller.text.trim();
+    final String feedback = _controller.text.trim();
 
     if (feedback.isEmpty) {
-      setState(() => _error = 'Please enter feedback.');
+      setState(() {
+        _error = 'Please enter feedback.';
+      });
+
       return;
     }
 
@@ -694,18 +984,25 @@ class _AssessmentFeedbackDialogState
         feedback: feedback,
       );
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _saving = false;
+
         _error = error is AssessmentSubmissionException
             ? error.message
             : 'Unable to save feedback: $error';
       });
+
       return;
     }
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
+
     Navigator.of(context).pop(true);
   }
 
@@ -794,6 +1091,7 @@ class _AssessmentFeedbackDialogState
                 ? null
                 : () {
                     FocusScope.of(context).unfocus();
+
                     Navigator.of(context).pop(false);
                   },
             child: const Text('Close'),
