@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/assessment_artifact_submission_service.dart';
 import '../../services/assessment_submission_service.dart';
+import '../../services/roster_service.dart';
 
 class InstructorAssessmentGradingScreen extends StatefulWidget {
   const InstructorAssessmentGradingScreen({
@@ -37,11 +38,15 @@ class _InstructorAssessmentGradingScreenState
   final AssessmentArtifactSubmissionService _artifactService =
       AssessmentArtifactSubmissionService();
 
+  final RosterService _rosterService = RosterService();
+
   bool _isLoading = true;
   bool _feedbackDialogOpen = false;
 
   String? _openingSubmissionId;
   String? _errorMessage;
+
+  final Set<String> _busyComplianceStudentIds = <String>{};
 
   Map<String, dynamic>? _assessment;
   Map<String, dynamic>? _course;
@@ -65,6 +70,38 @@ class _InstructorAssessmentGradingScreenState
 
   num get _totalPoints => (_assessment?['totalPoints'] as num?) ?? 0;
 
+  bool _isGoogleForm(Map<String, dynamic>? assessment) {
+    final String submissionMethod = (assessment?['submissionMethod'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    if (submissionMethod.isNotEmpty) {
+      return submissionMethod == 'google_form';
+    }
+
+    final String url = (assessment?['externalUrl'] ?? '')
+        .toString()
+        .toLowerCase();
+
+    return url.contains('docs.google.com/forms') || url.contains('forms.gle');
+  }
+
+  bool get _isGoogleFormAssessment => _isGoogleForm(_assessment);
+
+  String _complianceStatus(Map<String, dynamic> submission) {
+    final String stored = (submission['complianceStatus'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    if (stored == 'complied' || stored == 'not_complied') {
+      return stored;
+    }
+
+    return 'pending_verification';
+  }
+
   String _status(Map<String, dynamic> submission) {
     return (submission['status'] ?? '').toString().trim().toLowerCase();
   }
@@ -81,13 +118,27 @@ class _InstructorAssessmentGradingScreenState
     }).length;
   }
 
+  int get _compliedCount => _submissions.where((submission) {
+    return _complianceStatus(submission) == 'complied';
+  }).length;
+
+  int get _notCompliedCount => _submissions.where((submission) {
+    return _complianceStatus(submission) == 'not_complied';
+  }).length;
+
+  int get _pendingVerificationCount => _submissions.where((submission) {
+    return _complianceStatus(submission) == 'pending_verification';
+  }).length;
+
   List<Map<String, dynamic>> get _filteredSubmissions {
     if (_selectedFilter == 'all') {
       return _submissions;
     }
 
     return _submissions.where((submission) {
-      return _status(submission) == _selectedFilter;
+      return _isGoogleFormAssessment
+          ? _complianceStatus(submission) == _selectedFilter
+          : _status(submission) == _selectedFilter;
     }).toList();
   }
 
@@ -129,8 +180,41 @@ class _InstructorAssessmentGradingScreenState
         );
       }
 
-      final List<Map<String, dynamic>> submissions = await _submissionService
+      List<Map<String, dynamic>> submissions = await _submissionService
           .getAssessmentSubmissions(assessmentId: assessmentId);
+
+      if (_isGoogleForm(assessment)) {
+        final List<Map<String, dynamic>> students = await _rosterService
+            .getCourseStudents(courseId);
+
+        final Map<String, Map<String, dynamic>> submissionsByStudent = {
+          for (final submission in submissions)
+            (submission['studentId'] ?? '').toString(): submission,
+        };
+
+        submissions = students.map((student) {
+          final String studentId = (student['studentId'] ?? student['id'] ?? '')
+              .toString()
+              .trim();
+          final Map<String, dynamic>? existing =
+              submissionsByStudent[studentId];
+
+          return <String, dynamic>{
+            'assessmentId': assessmentId,
+            'courseId': courseId,
+            'moduleId': moduleId,
+            'studentId': studentId,
+            'studentName': (student['name'] ?? 'Student').toString(),
+            'studentEmail': (student['email'] ?? '').toString(),
+            'submissionId': '${assessmentId}_$studentId',
+            'id': '${assessmentId}_$studentId',
+            'submissionType': 'google_form',
+            'status': 'pending_verification',
+            'complianceStatus': 'pending_verification',
+            if (existing != null) ...existing,
+          };
+        }).toList();
+      }
 
       final courseDocument = await _firestore
           .collection('courses')
@@ -143,6 +227,21 @@ class _InstructorAssessmentGradingScreenState
           .get();
 
       submissions.sort((first, second) {
+        if (_isGoogleForm(assessment)) {
+          const Map<String, int> order = {
+            'pending_verification': 0,
+            'not_complied': 1,
+            'complied': 2,
+          };
+
+          final int firstOrder = order[_complianceStatus(first)] ?? 3;
+          final int secondOrder = order[_complianceStatus(second)] ?? 3;
+
+          if (firstOrder != secondOrder) {
+            return firstOrder.compareTo(secondOrder);
+          }
+        }
+
         final bool firstPending = _status(first) == 'submitted';
 
         final bool secondPending = _status(second) == 'submitted';
@@ -270,6 +369,9 @@ class _InstructorAssessmentGradingScreenState
       case 'technical_document':
         return 'Technical Document';
 
+      case 'google_form':
+        return 'Google Form Response';
+
       default:
         return 'External Assessment';
     }
@@ -285,6 +387,9 @@ class _InstructorAssessmentGradingScreenState
 
       case 'technical_document':
         return Icons.description_outlined;
+
+      case 'google_form':
+        return Icons.fact_check_outlined;
 
       default:
         return Icons.assignment_turned_in_outlined;
@@ -372,6 +477,106 @@ class _InstructorAssessmentGradingScreenState
       if (mounted) {
         setState(() {
           _openingSubmissionId = null;
+        });
+      }
+    }
+  }
+
+  Future<void> _setGoogleFormCompliance(
+    Map<String, dynamic> student,
+    bool complied,
+  ) async {
+    final String studentId = (student['studentId'] ?? '').toString().trim();
+    final String studentName = (student['studentName'] ?? 'Student')
+        .toString()
+        .trim();
+
+    if (studentId.isEmpty || _busyComplianceStudentIds.contains(studentId)) {
+      return;
+    }
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(complied ? 'Mark as Complied?' : 'Mark as Not Complied?'),
+          content: Text(
+            complied
+                ? 'Confirm that you found a valid Google Form response for $studentName.'
+                : 'Confirm that you could not verify a valid Google Form response for $studentName.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: complied ? green : red,
+                foregroundColor: Colors.white,
+              ),
+              child: Text(complied ? 'Complied' : 'Not Complied'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _busyComplianceStudentIds.add(studentId);
+    });
+
+    try {
+      await _submissionService.setGoogleFormCompliance(
+        assessmentId: widget.assessmentId,
+        studentId: studentId,
+        complied: complied,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      await _loadPage();
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '$studentName was marked ${complied ? 'Complied' : 'Not Complied'}.',
+          ),
+          backgroundColor: complied ? green : red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is AssessmentSubmissionException
+                ? error.message
+                : 'Unable to save the compliance decision: $error',
+          ),
+          backgroundColor: red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busyComplianceStudentIds.remove(studentId);
         });
       }
     }
@@ -529,45 +734,61 @@ class _InstructorAssessmentGradingScreenState
             children: [
               Expanded(
                 child: _stat(
-                  'Total',
-                  '${_submissions.length}',
-                  Icons.people_alt_outlined,
-                  primaryTeal,
+                  _isGoogleFormAssessment ? 'Complied' : 'Total',
+                  _isGoogleFormAssessment
+                      ? '$_compliedCount'
+                      : '${_submissions.length}',
+                  _isGoogleFormAssessment
+                      ? Icons.check_circle_outline
+                      : Icons.people_alt_outlined,
+                  _isGoogleFormAssessment ? green : primaryTeal,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: _stat(
-                  'Submitted',
-                  '$_submittedCount',
-                  Icons.pending_actions,
+                  _isGoogleFormAssessment ? 'Pending' : 'Submitted',
+                  _isGoogleFormAssessment
+                      ? '$_pendingVerificationCount'
+                      : '$_submittedCount',
+                  _isGoogleFormAssessment
+                      ? Icons.hourglass_empty_rounded
+                      : Icons.pending_actions,
                   orange,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: _stat(
-                  'Graded',
-                  '$_gradedCount',
-                  Icons.verified_outlined,
-                  green,
+                  _isGoogleFormAssessment ? 'Not Complied' : 'Graded',
+                  _isGoogleFormAssessment
+                      ? '$_notCompliedCount'
+                      : '$_gradedCount',
+                  _isGoogleFormAssessment
+                      ? Icons.cancel_outlined
+                      : Icons.verified_outlined,
+                  _isGoogleFormAssessment ? red : green,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 24),
-          const Text(
-            'Student Submissions',
-            style: TextStyle(
+          Text(
+            _isGoogleFormAssessment
+                ? 'Student Compliance'
+                : 'Student Submissions',
+            style: const TextStyle(
               color: textDark,
               fontSize: 18,
               fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 5),
-          const Text(
-            'Open submitted work, view scores and ratings, and provide feedback.',
-            style: TextStyle(color: textGrey, fontSize: 12),
+          Text(
+            _isGoogleFormAssessment
+                ? 'Check the Google Form responses, then verify each enrolled student.'
+                : 'Open submitted work, view scores and ratings, and provide feedback.',
+            style: const TextStyle(color: textGrey, fontSize: 12),
           ),
           const SizedBox(height: 14),
           Wrap(
@@ -575,8 +796,20 @@ class _InstructorAssessmentGradingScreenState
             runSpacing: 8,
             children: [
               _filter('all', 'All (${_submissions.length})'),
-              _filter('submitted', 'Submitted ($_submittedCount)'),
-              _filter('graded', 'Graded ($_gradedCount)'),
+              if (_isGoogleFormAssessment) ...[
+                _filter('complied', 'Complied ($_compliedCount)'),
+                _filter(
+                  'pending_verification',
+                  'Pending ($_pendingVerificationCount)',
+                ),
+                _filter(
+                  'not_complied',
+                  'Not Complied ($_notCompliedCount)',
+                ),
+              ] else ...[
+                _filter('submitted', 'Submitted ($_submittedCount)'),
+                _filter('graded', 'Graded ($_gradedCount)'),
+              ],
             ],
           ),
           const SizedBox(height: 16),
@@ -601,7 +834,11 @@ class _InstructorAssessmentGradingScreenState
               ),
             )
           else
-            ...visible.map(_submissionCard),
+            ...visible.map((submission) {
+              return _isGoogleFormAssessment
+                  ? _googleFormComplianceCard(submission)
+                  : _submissionCard(submission);
+            }),
         ],
       ),
     );
@@ -710,6 +947,158 @@ class _InstructorAssessmentGradingScreenState
     );
   }
 
+  Widget _googleFormComplianceCard(Map<String, dynamic> student) {
+    final String studentId = (student['studentId'] ?? '').toString().trim();
+    final String studentName = (student['studentName'] ?? 'Student')
+        .toString()
+        .trim();
+    final String studentEmail = (student['studentEmail'] ?? '')
+        .toString()
+        .trim();
+    final String decision = _complianceStatus(student);
+    final bool complied = decision == 'complied';
+    final bool notComplied = decision == 'not_complied';
+    final bool busy = _busyComplianceStudentIds.contains(studentId);
+
+    final String statusLabel = complied
+        ? 'COMPLIED'
+        : notComplied
+        ? 'NOT COMPLIED'
+        : 'PENDING';
+
+    final Color statusColor = complied
+        ? green
+        : notComplied
+        ? red
+        : orange;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: statusColor.withValues(alpha: 0.10),
+                child: Text(
+                  studentName.isEmpty ? '?' : studentName[0].toUpperCase(),
+                  style: TextStyle(
+                    color: statusColor,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      studentName.isEmpty ? 'Student' : studentName,
+                      style: const TextStyle(
+                        color: textDark,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (studentEmail.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        studentEmail,
+                        style: const TextStyle(color: textGrey, fontSize: 11),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 13),
+          Text(
+            decision == 'pending_verification'
+                ? 'Check Google Forms for a response using this student’s registered email.'
+                : 'Decision recorded ${_formatDate(student['verifiedAt'])}. You can correct it if needed.',
+            style: const TextStyle(color: textGrey, fontSize: 11.5),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: busy || complied
+                      ? null
+                      : () => _setGoogleFormCompliance(student, true),
+                  icon: busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.check_circle_outline),
+                  label: const Text('Complied'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: green,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: complied
+                        ? green.withValues(alpha: 0.55)
+                        : Colors.grey.shade300,
+                    minimumSize: const Size(0, 45),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: busy || notComplied
+                      ? null
+                      : () => _setGoogleFormCompliance(student, false),
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Not Complied'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: red,
+                    side: BorderSide(
+                      color: notComplied
+                          ? red.withValues(alpha: 0.45)
+                          : red,
+                    ),
+                    minimumSize: const Size(0, 45),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _submissionCard(Map<String, dynamic> submission) {
     final String studentName = (submission['studentName'] ?? 'Student')
         .toString();
@@ -731,6 +1120,13 @@ class _InstructorAssessmentGradingScreenState
     final String repositoryUrl = (submission['repositoryUrl'] ?? '')
         .toString()
         .trim();
+
+    final String studentEmail = (submission['studentEmail'] ?? '')
+        .toString()
+        .trim();
+
+    final String googleFormResponseId =
+        (submission['googleFormResponseId'] ?? '').toString().trim();
 
     final bool opening = _openingSubmissionId == submissionId;
 
@@ -820,6 +1216,18 @@ class _InstructorAssessmentGradingScreenState
                           submissionType == 'github_repository'
                               ? repositoryUrl
                               : fileName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: textGrey, fontSize: 11),
+                        ),
+                      ] else if (submissionType == 'google_form') ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          studentEmail.isNotEmpty
+                              ? 'Verified response from $studentEmail'
+                              : googleFormResponseId.isNotEmpty
+                              ? 'Verified response ID: $googleFormResponseId'
+                              : 'Verified by the Google Forms webhook',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(color: textGrey, fontSize: 11),

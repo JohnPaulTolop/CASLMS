@@ -678,6 +678,12 @@ class _NotificationsScreenState
     } else if (type == 'grade') {
       icon = Icons.workspace_premium_rounded;
       iconColor = const Color(0xFF16A365);
+    } else if (type == 'compliance_approved') {
+      icon = Icons.check_circle_rounded;
+      iconColor = const Color(0xFF16A365);
+    } else if (type == 'compliance_rejected') {
+      icon = Icons.cancel_rounded;
+      iconColor = const Color(0xFFE53935);
     }
 
     final String courseLabel =

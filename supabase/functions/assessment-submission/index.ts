@@ -6,6 +6,7 @@ import {
 
 import {
   getAuth,
+  type UserRecord,
 } from "npm:firebase-admin@13.4.0/auth";
 
 import {
@@ -77,6 +78,115 @@ function clean(
   return String(
     value ?? "",
   ).trim();
+}
+
+function secretsMatch(
+  provided: string,
+  expected: string,
+): boolean {
+  if (
+    !provided ||
+    provided.length !== expected.length
+  ) {
+    return false;
+  }
+
+  let difference = 0;
+
+  for (
+    let index = 0;
+    index < expected.length;
+    index += 1
+  ) {
+    difference |=
+      provided.charCodeAt(index) ^
+      expected.charCodeAt(index);
+  }
+
+  return difference === 0;
+}
+
+function assessmentSubmissionMethod(
+  assessment: Record<string, unknown>,
+): string {
+  const configured =
+    clean(
+      assessment.submissionMethod,
+    ).toLowerCase();
+
+  if (configured) {
+    return configured;
+  }
+
+  const deliveryType =
+    clean(
+      assessment.deliveryType,
+    ).toLowerCase();
+
+  if (deliveryType === "ai_generated") {
+    return "in_app_quiz";
+  }
+
+  if (deliveryType === "artifact_submission") {
+    return "artifact";
+  }
+
+  try {
+    const url = new URL(
+      clean(
+        assessment.externalUrl,
+      ),
+    );
+
+    const host =
+      url.hostname.toLowerCase();
+
+    if (
+      host === "forms.gle" ||
+      (
+        host === "docs.google.com" &&
+        url.pathname
+          .toLowerCase()
+          .includes("/forms/")
+      )
+    ) {
+      return "google_form";
+    }
+  } catch (_) {
+    // Legacy non-link assessments use the artifact workflow.
+  }
+
+  return "artifact";
+}
+
+function configuredArtifactTypes(
+  assessment: Record<string, unknown>,
+): string[] {
+  const configured =
+    assessment.allowedSubmissionTypes;
+
+  if (!Array.isArray(configured)) {
+    return [
+      "github_repository",
+      "zip_file",
+      "technical_document",
+    ];
+  }
+
+  return configured
+    .map(
+      (value) =>
+        clean(value)
+          .toLowerCase(),
+    )
+    .filter(
+      (value) =>
+        [
+          "github_repository",
+          "zip_file",
+          "technical_document",
+        ].includes(value),
+    );
 }
 
 function bearerToken(
@@ -547,6 +657,30 @@ async function submitAssessment(
       assessmentId,
     );
 
+  if (
+    assessmentSubmissionMethod(
+      context.assessment,
+    ) !== "artifact"
+  ) {
+    throw new RequestError(
+      "This assessment does not accept GitHub or file submissions.",
+      403,
+    );
+  }
+
+  if (
+    !configuredArtifactTypes(
+      context.assessment,
+    ).includes(
+      submissionType,
+    )
+  ) {
+    throw new RequestError(
+      "Your instructor did not enable this submission option.",
+      403,
+    );
+  }
+
   const submissionId =
     `${assessmentId}_${context.uid}`;
 
@@ -813,6 +947,270 @@ async function submitAssessment(
     submissionId,
     message:
       "Assessment submitted successfully.",
+  });
+}
+
+async function recordGoogleFormSubmission(
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const webhookSecret =
+    clean(
+      body.webhookSecret,
+    );
+
+  if (
+    !secretsMatch(
+      webhookSecret,
+      requiredSecret(
+        "GOOGLE_FORM_WEBHOOK_SECRET",
+      ),
+    )
+  ) {
+    throw new RequestError(
+      "Invalid Google Forms webhook secret.",
+      401,
+    );
+  }
+
+  const assessmentId =
+    clean(
+      body.assessmentId,
+    );
+
+  const studentEmail =
+    clean(
+      body.studentEmail,
+    ).toLowerCase();
+
+  const responseId =
+    clean(
+      body.responseId,
+    );
+
+  if (
+    !assessmentId ||
+    !studentEmail ||
+    !responseId
+  ) {
+    throw new RequestError(
+      "Assessment ID, student email, and Google Form response ID are required.",
+    );
+  }
+
+  let firebaseUser: UserRecord;
+
+  try {
+    firebaseUser =
+      await firebaseAuth
+        .getUserByEmail(
+          studentEmail,
+        );
+  } catch (_) {
+    throw new RequestError(
+      "No CASLMS student account matches this Google Form email.",
+      404,
+    );
+  }
+
+  const userDocument =
+    await firestore
+      .collection("users")
+      .doc(firebaseUser.uid)
+      .get();
+
+  const profile =
+    userDocument.data();
+
+  if (
+    !userDocument.exists ||
+    !profile ||
+    clean(profile.role).toLowerCase() !==
+      "student" ||
+    clean(profile.status).toLowerCase() !==
+      "active"
+  ) {
+    throw new RequestError(
+      "The matching CASLMS account is not an active student.",
+      403,
+    );
+  }
+
+  const assessmentDocument =
+    await firestore
+      .collection("assessments")
+      .doc(assessmentId)
+      .get();
+
+  const assessment =
+    assessmentDocument.data();
+
+  if (
+    !assessmentDocument.exists ||
+    !assessment
+  ) {
+    throw new RequestError(
+      "Assessment could not be found.",
+      404,
+    );
+  }
+
+  if (
+    clean(assessment.status)
+      .toLowerCase() !== "published" ||
+    assessmentSubmissionMethod(
+      assessment,
+    ) !== "google_form"
+  ) {
+    throw new RequestError(
+      "This is not an available Google Form assessment.",
+      403,
+    );
+  }
+
+  const courseId =
+    clean(
+      assessment.courseId,
+    );
+
+  const moduleId =
+    clean(
+      assessment.moduleId,
+    );
+
+  if (!courseId || !moduleId) {
+    throw new RequestError(
+      "Assessment course or module information is incomplete.",
+    );
+  }
+
+  const dueAt =
+    assessment.dueAt as
+      | { toDate?: () => Date }
+      | undefined;
+
+  if (
+    dueAt &&
+    typeof dueAt.toDate === "function" &&
+    dueAt.toDate().getTime() <
+      Date.now()
+  ) {
+    throw new RequestError(
+      "The deadline for this assessment has passed.",
+      403,
+    );
+  }
+
+  const enrollmentDocument =
+    await firestore
+      .collection("enrollments")
+      .doc(
+        `${courseId}_${firebaseUser.uid}`,
+      )
+      .get();
+
+  const enrollment =
+    enrollmentDocument.data();
+
+  if (
+    !enrollmentDocument.exists ||
+    !enrollment ||
+    enrollment.studentId !==
+      firebaseUser.uid ||
+    enrollment.courseId !==
+      courseId ||
+    clean(enrollment.status)
+      .toLowerCase() !== "active"
+  ) {
+    throw new RequestError(
+      "The student is not actively enrolled in this course.",
+      403,
+    );
+  }
+
+  const submissionId =
+    `${assessmentId}_${firebaseUser.uid}`;
+
+  const submissionReference =
+    firestore
+      .collection("assessmentSubmissions")
+      .doc(submissionId);
+
+  const existingDocument =
+    await submissionReference.get();
+
+  const existing =
+    existingDocument.data();
+
+  if (
+    existingDocument.exists &&
+    existing
+  ) {
+    if (
+      clean(
+        existing.googleFormResponseId,
+      ) === responseId
+    ) {
+      return json({
+        success: true,
+        duplicate: true,
+        submissionId,
+        message:
+          "Google Form response was already recorded.",
+      });
+    }
+
+    throw new RequestError(
+      "This student already has a recorded submission.",
+      409,
+    );
+  }
+
+  const studentName =
+    clean(
+      profile.name ??
+        profile.displayName ??
+        firebaseUser.displayName,
+    ) || studentEmail;
+
+  await submissionReference.set({
+    assessmentId,
+    courseId,
+    moduleId,
+    studentId:
+      firebaseUser.uid,
+    studentName,
+    studentEmail,
+    submissionType:
+      "google_form",
+    submissionSource:
+      "google_forms_webhook",
+    googleFormResponseId:
+      responseId,
+    repositoryUrl: null,
+    storageProvider: null,
+    storageBucket: null,
+    storagePath: null,
+    fileName: null,
+    mimeType: null,
+    sizeBytes: null,
+    status: "submitted",
+    score: null,
+    feedback: null,
+    gradedAt: null,
+    gradedBy: null,
+    submittedAt:
+      FieldValue.serverTimestamp(),
+    createdAt:
+      FieldValue.serverTimestamp(),
+    updatedAt:
+      FieldValue.serverTimestamp(),
+  });
+
+  return json({
+    success: true,
+    submissionId,
+    message:
+      "Google Form response recorded successfully.",
   });
 }
 

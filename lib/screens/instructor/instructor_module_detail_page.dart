@@ -3220,6 +3220,21 @@ class _InstructorModuleDetailScreenState
 
     final String url = (assessment['externalUrl'] ?? '').toString();
 
+    final String submissionMethod = (assessment['submissionMethod'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    final bool isGoogleForm =
+        submissionMethod == 'google_form' ||
+        (submissionMethod.isEmpty &&
+            (url.contains('docs.google.com/forms') ||
+                url.contains('forms.gle')));
+
+    final bool isArtifact =
+        submissionMethod == 'artifact' ||
+        deliveryType == 'artifact_submission';
+
     final num points = (assessment['totalPoints'] as num?) ?? 0;
 
     final bool isAiGeneratedQuiz =
@@ -3340,9 +3355,11 @@ class _InstructorModuleDetailScreenState
                     Row(
                       children: [
                         Icon(
-                          deliveryType == 'external_link'
-                              ? Icons.open_in_new_rounded
-                              : Icons.auto_awesome_rounded,
+                          isAiGeneratedQuiz
+                              ? Icons.auto_awesome_rounded
+                              : isGoogleForm
+                              ? Icons.description_outlined
+                              : Icons.upload_file_rounded,
 
                           color: primaryTeal,
                           size: 14,
@@ -3352,9 +3369,13 @@ class _InstructorModuleDetailScreenState
 
                         Expanded(
                           child: Text(
-                            deliveryType == 'external_link'
-                                ? (url.isEmpty ? 'External Assessment' : url)
-                                : 'AI Generated Assessment',
+                            isAiGeneratedQuiz
+                                ? 'AI Generated Assessment'
+                                : isGoogleForm
+                                ? (url.isEmpty ? 'Google Form' : url)
+                                : isArtifact
+                                ? 'GitHub / File Submission'
+                                : 'External Assessment',
 
                             maxLines: 1,
 

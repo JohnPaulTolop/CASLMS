@@ -272,6 +272,201 @@ class AssessmentSubmissionService {
     }).toList();
   }
 
+  bool _isGoogleFormAssessment(Map<String, dynamic> assessment) {
+    final String submissionMethod = (assessment['submissionMethod'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    if (submissionMethod.isNotEmpty) {
+      return submissionMethod == 'google_form';
+    }
+
+    final Uri? uri = Uri.tryParse(
+      (assessment['externalUrl'] ?? '').toString().trim(),
+    );
+
+    if (uri == null) {
+      return false;
+    }
+
+    final String host = uri.host.toLowerCase();
+
+    return host == 'forms.gle' ||
+        (host == 'docs.google.com' &&
+            uri.path.toLowerCase().contains('/forms/'));
+  }
+
+  Future<void> setGoogleFormCompliance({
+    required String assessmentId,
+    required String studentId,
+    required bool complied,
+  }) async {
+    final Map<String, dynamic> instructor = await _requireRole('instructor');
+    final String cleanAssessmentId = assessmentId.trim();
+    final String cleanStudentId = studentId.trim();
+    final String instructorId = instructor['id'].toString();
+
+    if (cleanAssessmentId.isEmpty || cleanStudentId.isEmpty) {
+      throw AssessmentSubmissionException(
+        'Assessment and student information are required.',
+      );
+    }
+
+    final DocumentReference<Map<String, dynamic>> assessmentReference =
+        _firestore.collection(assessmentsCollection).doc(cleanAssessmentId);
+
+    final String submissionId = buildSubmissionId(
+      assessmentId: cleanAssessmentId,
+      studentId: cleanStudentId,
+    );
+
+    final DocumentReference<Map<String, dynamic>> submissionReference =
+        _firestore.collection(submissionsCollection).doc(submissionId);
+
+    // A new notification is created only when the decision changes.
+    final DocumentReference<Map<String, dynamic>> notificationReference =
+        _firestore.collection('notifications').doc();
+
+    await _firestore.runTransaction((transaction) async {
+      final DocumentSnapshot<Map<String, dynamic>> assessmentDocument =
+          await transaction.get(assessmentReference);
+
+      final Map<String, dynamic>? assessment = assessmentDocument.data();
+
+      if (assessment == null || !_isGoogleFormAssessment(assessment)) {
+        throw AssessmentSubmissionException(
+          'This assessment is not configured as a Google Form.',
+        );
+      }
+
+      final String courseId = (assessment['courseId'] ?? '')
+          .toString()
+          .trim();
+      final String moduleId = (assessment['moduleId'] ?? '')
+          .toString()
+          .trim();
+
+      if (courseId.isEmpty || moduleId.isEmpty) {
+        throw AssessmentSubmissionException(
+          'Assessment course or module information is missing.',
+        );
+      }
+
+      final DocumentReference<Map<String, dynamic>> courseReference =
+          _firestore.collection('courses').doc(courseId);
+      final DocumentReference<Map<String, dynamic>> studentReference =
+          _firestore.collection('users').doc(cleanStudentId);
+      final DocumentReference<Map<String, dynamic>> enrollmentReference =
+          _firestore
+              .collection('enrollments')
+              .doc('${courseId}_$cleanStudentId');
+
+      final DocumentSnapshot<Map<String, dynamic>> courseDocument =
+          await transaction.get(courseReference);
+      final DocumentSnapshot<Map<String, dynamic>> studentDocument =
+          await transaction.get(studentReference);
+      final DocumentSnapshot<Map<String, dynamic>> enrollmentDocument =
+          await transaction.get(enrollmentReference);
+      final DocumentSnapshot<Map<String, dynamic>> existingDocument =
+          await transaction.get(submissionReference);
+
+      if (courseDocument.data()?['instructorId'] != instructorId) {
+        throw AssessmentSubmissionException(
+          'You can verify students only in your own courses.',
+        );
+      }
+
+      final Map<String, dynamic>? student = studentDocument.data();
+      final Map<String, dynamic>? enrollment = enrollmentDocument.data();
+
+      if (student == null ||
+          (student['role'] ?? '').toString().toLowerCase() != 'student' ||
+          (student['status'] ?? '').toString().toLowerCase() != 'active') {
+        throw AssessmentSubmissionException(
+          'The selected student account is not active.',
+        );
+      }
+
+      if (enrollment == null ||
+          enrollment['courseId'] != courseId ||
+          enrollment['studentId'] != cleanStudentId ||
+          (enrollment['status'] ?? '').toString().toLowerCase() != 'active') {
+        throw AssessmentSubmissionException(
+          'The selected student is not actively enrolled in this course.',
+        );
+      }
+
+      final String decision = complied ? 'complied' : 'not_complied';
+      final Map<String, dynamic>? existing = existingDocument.data();
+
+      if ((existing?['complianceStatus'] ?? '').toString().toLowerCase() ==
+          decision) {
+        return;
+      }
+
+      final String studentName =
+          (student['name'] ??
+                  student['displayName'] ??
+                  enrollment['studentName'] ??
+                  'Student')
+              .toString()
+              .trim();
+
+      final Map<String, dynamic> submissionData = {
+        'assessmentId': cleanAssessmentId,
+        'courseId': courseId,
+        'moduleId': moduleId,
+        'studentId': cleanStudentId,
+        'studentName': studentName,
+        'studentEmail': (student['email'] ?? '').toString().trim(),
+        'submissionType': 'google_form',
+        'submissionSource': 'instructor_verification',
+        'complianceStatus': decision,
+        'status': complied ? 'submitted' : 'not_complied',
+        'verifiedBy': instructorId,
+        'verifiedAt': FieldValue.serverTimestamp(),
+        'complianceNotificationId': notificationReference.id,
+        'submittedAt': complied ? FieldValue.serverTimestamp() : null,
+        'updatedAt': FieldValue.serverTimestamp(),
+        if (!existingDocument.exists) ...{
+          'score': null,
+          'feedback': null,
+          'gradedAt': null,
+          'gradedBy': null,
+          'createdAt': FieldValue.serverTimestamp(),
+        },
+      };
+
+      transaction.set(
+        submissionReference,
+        submissionData,
+        SetOptions(merge: true),
+      );
+
+      transaction.set(notificationReference, {
+        'userId': cleanStudentId,
+        'type': complied ? 'compliance_approved' : 'compliance_rejected',
+        'sourceType': 'googleFormCompliance',
+        'sourceId': submissionId,
+        'actorId': instructorId,
+        'actorName': (instructor['name'] ?? 'Your instructor').toString(),
+        'title': complied
+            ? 'Google Form response verified'
+            : 'Google Form response not verified',
+        'message': complied
+            ? 'You were marked Complied for ${assessment['title']}.'
+            : 'No valid response was verified for ${assessment['title']}. '
+                  'Please contact your instructor if you already submitted.',
+        'courseId': courseId,
+        'moduleId': moduleId,
+        'isRead': false,
+        'readAt': null,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
   // Retain the old method signature, but reject manual score changes.
   Future<void> gradeSubmission({
     required String submissionId,

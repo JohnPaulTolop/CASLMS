@@ -36,6 +36,17 @@ class AssessmentService {
 
   static const List<String> allowedStatuses = ['draft', 'published', 'closed'];
 
+  static const List<String> allowedSubmissionMethods = [
+    'google_form',
+    'artifact',
+  ];
+
+  static const List<String> allowedArtifactSubmissionTypes = [
+    'github_repository',
+    'zip_file',
+    'technical_document',
+  ];
+
   // ============================================================
   // CURRENT USER
   // ============================================================
@@ -223,6 +234,57 @@ class AssessmentService {
     return cleanUrl;
   }
 
+  String _validateSubmissionMethod(String value) {
+    final String method = value.trim().toLowerCase();
+
+    if (!allowedSubmissionMethods.contains(method)) {
+      throw AssessmentServiceException('Invalid submission method.');
+    }
+
+    return method;
+  }
+
+  String _validateGoogleFormUrl(String value) {
+    final String cleanUrl = _validateExternalUrl(value);
+    final Uri uri = Uri.parse(cleanUrl);
+    final String host = uri.host.toLowerCase();
+
+    final bool isGoogleForm =
+        host == 'forms.gle' ||
+        ((host == 'docs.google.com' || host.endsWith('.docs.google.com')) &&
+            uri.path.toLowerCase().contains('/forms/'));
+
+    if (!isGoogleForm) {
+      throw AssessmentServiceException(
+        'Use a valid Google Forms link from forms.gle or docs.google.com/forms.',
+      );
+    }
+
+    return cleanUrl;
+  }
+
+  List<String> _validateArtifactSubmissionTypes(Iterable<String> values) {
+    final List<String> cleanValues = values
+        .map((value) => value.trim().toLowerCase())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+
+    if (cleanValues.isEmpty) {
+      throw AssessmentServiceException(
+        'Select at least one allowed submission option.',
+      );
+    }
+
+    if (cleanValues.any(
+      (value) => !allowedArtifactSubmissionTypes.contains(value),
+    )) {
+      throw AssessmentServiceException('Invalid artifact submission option.');
+    }
+
+    return cleanValues;
+  }
+
   // ============================================================
   // CREATE EXTERNAL ASSESSMENT
   // ============================================================
@@ -233,7 +295,13 @@ class AssessmentService {
     required String title,
     required String instructions,
     required String assessmentType,
-    required String externalUrl,
+    required String submissionMethod,
+    String externalUrl = '',
+    List<String> allowedSubmissionTypes = const [
+      'github_repository',
+      'zip_file',
+      'technical_document',
+    ],
     required num totalPoints,
     required DateTime dueAt,
     String status = 'published',
@@ -261,7 +329,18 @@ class AssessmentService {
 
     final String cleanStatus = _validateStatus(status);
 
-    final String cleanExternalUrl = _validateExternalUrl(externalUrl);
+    final String cleanSubmissionMethod = _validateSubmissionMethod(
+      submissionMethod,
+    );
+
+    final String? cleanExternalUrl = cleanSubmissionMethod == 'google_form'
+        ? _validateGoogleFormUrl(externalUrl)
+        : null;
+
+    final List<String> cleanAllowedSubmissionTypes =
+        cleanSubmissionMethod == 'artifact'
+        ? _validateArtifactSubmissionTypes(allowedSubmissionTypes)
+        : const <String>[];
 
     final Map<String, dynamic> instructor = await _requireInstructor();
 
@@ -286,9 +365,17 @@ class AssessmentService {
       // quiz / activity / assignment / exam
       'assessmentType': cleanAssessmentType,
 
-      // Current version uses external URLs.
-      // Later AI-generated assessments can use "ai_generated".
-      'deliveryType': 'external_link',
+      // Controls exactly what the student sees and what the server accepts.
+      'submissionMethod': cleanSubmissionMethod,
+      'allowedSubmissionTypes': cleanAllowedSubmissionTypes,
+      'submissionTracking': cleanSubmissionMethod == 'google_form'
+          ? 'instructor_verification'
+          : 'verified_artifact',
+
+      // Keep deliveryType for compatibility with existing assessment screens.
+      'deliveryType': cleanSubmissionMethod == 'google_form'
+          ? 'external_link'
+          : 'artifact_submission',
 
       'externalUrl': cleanExternalUrl,
 
@@ -418,7 +505,13 @@ class AssessmentService {
     required String title,
     required String instructions,
     required String assessmentType,
-    required String externalUrl,
+    required String submissionMethod,
+    String externalUrl = '',
+    List<String> allowedSubmissionTypes = const [
+      'github_repository',
+      'zip_file',
+      'technical_document',
+    ],
     required num totalPoints,
     required DateTime dueAt,
   }) async {
@@ -459,6 +552,19 @@ class AssessmentService {
       );
     }
 
+    final String cleanSubmissionMethod = _validateSubmissionMethod(
+      submissionMethod,
+    );
+
+    final String? cleanExternalUrl = cleanSubmissionMethod == 'google_form'
+        ? _validateGoogleFormUrl(externalUrl)
+        : null;
+
+    final List<String> cleanAllowedSubmissionTypes =
+        cleanSubmissionMethod == 'artifact'
+        ? _validateArtifactSubmissionTypes(allowedSubmissionTypes)
+        : const <String>[];
+
     await _firestore
         .collection(assessmentsCollection)
         .doc(cleanAssessmentId)
@@ -466,7 +572,15 @@ class AssessmentService {
           'title': cleanTitle,
           'instructions': cleanInstructions,
           'assessmentType': _validateAssessmentType(assessmentType),
-          'externalUrl': _validateExternalUrl(externalUrl),
+          'submissionMethod': cleanSubmissionMethod,
+          'allowedSubmissionTypes': cleanAllowedSubmissionTypes,
+          'submissionTracking': cleanSubmissionMethod == 'google_form'
+              ? 'instructor_verification'
+              : 'verified_artifact',
+          'deliveryType': cleanSubmissionMethod == 'google_form'
+              ? 'external_link'
+              : 'artifact_submission',
+          'externalUrl': cleanExternalUrl,
           'totalPoints': totalPoints,
           'dueAt': Timestamp.fromDate(dueAt),
           'updatedAt': FieldValue.serverTimestamp(),

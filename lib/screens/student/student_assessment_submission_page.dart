@@ -69,6 +69,24 @@ class _StudentAssessmentSubmissionScreenState
     ).toString().trim();
   }
 
+  Set<String> get _allowedSubmissionTypes {
+    final dynamic value = widget.assessment['allowedSubmissionTypes'];
+
+    // Existing assessments created before Phase 7F keep all three options.
+    if (value is! Iterable) {
+      return const {
+        'github_repository',
+        'zip_file',
+        'technical_document',
+      };
+    }
+
+    return value
+        .map((item) => item.toString().trim().toLowerCase())
+        .where((item) => item.isNotEmpty)
+        .toSet();
+  }
+
   Future<void>
       _submitGitHubRepository() async {
     if (_isSubmitting) {
@@ -663,9 +681,11 @@ class _StudentAssessmentSubmissionScreenState
                       const SizedBox(
                         height: 5,
                       ),
-                      const Text(
-                        'Choose one submission type for your assessment.',
-                        style: TextStyle(
+                      Text(
+                        _allowedSubmissionTypes.length == 1
+                            ? 'Use the submission option selected by your instructor.'
+                            : 'Choose one of the submission options allowed by your instructor.',
+                        style: const TextStyle(
                           color:
                               textGrey,
                           fontSize:
@@ -675,36 +695,34 @@ class _StudentAssessmentSubmissionScreenState
                       const SizedBox(
                         height: 17,
                       ),
-                      _submissionOption(
-                        icon:
-                            Icons.link_rounded,
-                        title:
-                            'GitHub Repository Link',
-                        description:
-                            'Submit a public or instructor-accessible GitHub repository.',
-                        onPressed:
-                            _submitGitHubRepository,
-                      ),
-                      _submissionOption(
-                        icon:
-                            Icons.folder_zip_outlined,
-                        title:
-                            'Upload ZIP File',
-                        description:
-                            'Upload your project source code as a ZIP file.',
-                        onPressed:
-                            _selectZipFile,
-                      ),
-                      _submissionOption(
-                        icon:
-                            Icons.description_outlined,
-                        title:
-                            'Upload Technical Docs',
-                        description:
-                            'Accepted: PDF, DOC, DOCX, or TXT — maximum 20 MB.',
-                        onPressed:
-                            _selectTechnicalDocument,
-                      ),
+                      if (_allowedSubmissionTypes.contains(
+                        'github_repository',
+                      ))
+                        _submissionOption(
+                          icon: Icons.link_rounded,
+                          title: 'GitHub Repository Link',
+                          description:
+                              'Submit a public or instructor-accessible GitHub repository.',
+                          onPressed: _submitGitHubRepository,
+                        ),
+                      if (_allowedSubmissionTypes.contains('zip_file'))
+                        _submissionOption(
+                          icon: Icons.folder_zip_outlined,
+                          title: 'Upload ZIP File',
+                          description:
+                              'Upload your project source code as a ZIP file.',
+                          onPressed: _selectZipFile,
+                        ),
+                      if (_allowedSubmissionTypes.contains(
+                        'technical_document',
+                      ))
+                        _submissionOption(
+                          icon: Icons.description_outlined,
+                          title: 'Upload Technical Docs',
+                          description:
+                              'Accepted: PDF, DOC, DOCX, or TXT — maximum 20 MB.',
+                          onPressed: _selectTechnicalDocument,
+                        ),
                       if (_isSubmitting) ...[
                         const SizedBox(
                           height: 12,

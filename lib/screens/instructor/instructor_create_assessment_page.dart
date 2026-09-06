@@ -54,6 +54,12 @@ class _InstructorCreateAssessmentScreenState
 
   String _assessmentType = 'quiz';
 
+  String _submissionMethod = 'artifact';
+
+  bool _allowGitHub = true;
+  bool _allowZip = true;
+  bool _allowTechnicalDocument = true;
+
   DateTime? _dueAt;
 
   bool _isSaving = false;
@@ -175,6 +181,17 @@ class _InstructorCreateAssessmentScreenState
       return;
     }
 
+    final List<String> allowedSubmissionTypes = [
+      if (_allowGitHub) 'github_repository',
+      if (_allowZip) 'zip_file',
+      if (_allowTechnicalDocument) 'technical_document',
+    ];
+
+    if (_submissionMethod == 'artifact' && allowedSubmissionTypes.isEmpty) {
+      _showError('Select at least one student submission option.');
+      return;
+    }
+
     setState(() {
       _isSaving = true;
       _savingStatus = status;
@@ -188,7 +205,9 @@ class _InstructorCreateAssessmentScreenState
             title: _titleController.text,
             instructions: _instructionsController.text,
             assessmentType: _assessmentType,
+            submissionMethod: _submissionMethod,
             externalUrl: _urlController.text,
+            allowedSubmissionTypes: allowedSubmissionTypes,
             totalPoints: totalPoints,
             dueAt: _dueAt!,
             status: status,
@@ -398,6 +417,82 @@ class _InstructorCreateAssessmentScreenState
                   const SizedBox(height: 26),
 
                   // ==================================================
+                  // SUBMISSION METHOD
+                  // ==================================================
+                  _buildSectionTitle(
+                    'Submission Method',
+                    'Students will see only the method selected here.',
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  DropdownButtonFormField<String>(
+                    initialValue: _submissionMethod,
+                    decoration: _inputDecoration(
+                      label: 'How students submit',
+                      icon: Icons.assignment_turned_in_outlined,
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'artifact',
+                        child: Text('GitHub or file upload'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'google_form',
+                        child: Text('Google Form'),
+                      ),
+                    ],
+                    onChanged: _isSaving
+                        ? null
+                        : (value) {
+                            if (value == null) {
+                              return;
+                            }
+
+                            setState(() {
+                              _submissionMethod = value;
+                            });
+                          },
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  if (_submissionMethod == 'artifact') ...[
+                    _buildArtifactOption(
+                      value: _allowGitHub,
+                      icon: Icons.link_rounded,
+                      title: 'GitHub Repository Link',
+                      onChanged: (value) {
+                        setState(() {
+                          _allowGitHub = value;
+                        });
+                      },
+                    ),
+                    _buildArtifactOption(
+                      value: _allowZip,
+                      icon: Icons.folder_zip_outlined,
+                      title: 'ZIP File',
+                      onChanged: (value) {
+                        setState(() {
+                          _allowZip = value;
+                        });
+                      },
+                    ),
+                    _buildArtifactOption(
+                      value: _allowTechnicalDocument,
+                      icon: Icons.description_outlined,
+                      title: 'Technical Document',
+                      onChanged: (value) {
+                        setState(() {
+                          _allowTechnicalDocument = value;
+                        });
+                      },
+                    ),
+                  ],
+
+                  const SizedBox(height: 26),
+
+                  // ==================================================
                   // DETAILS
                   // ==================================================
                   _buildSectionTitle(
@@ -464,88 +559,91 @@ class _InstructorCreateAssessmentScreenState
                   // ==================================================
                   // EXTERNAL LINK
                   // ==================================================
-                  _buildSectionTitle(
-                    'External Assessment',
-                    'Paste the link where students will answer.',
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  TextFormField(
-                    controller: _urlController,
-
-                    enabled: !_isSaving,
-
-                    keyboardType: TextInputType.url,
-
-                    autocorrect: false,
-
-                    decoration: _inputDecoration(
-                      label: 'Assessment URL',
-                      icon: Icons.link_rounded,
-                      hint: 'https://docs.google.com/forms/...',
+                  if (_submissionMethod == 'google_form') ...[
+                    _buildSectionTitle(
+                      'Google Form',
+                      'Paste the form link where students will answer.',
                     ),
 
-                    validator: (value) {
-                      final String text = value?.trim() ?? '';
+                    const SizedBox(height: 12),
 
-                      if (text.isEmpty) {
-                        return 'Enter the assessment URL.';
-                      }
+                    TextFormField(
+                      controller: _urlController,
+                      enabled: !_isSaving,
+                      keyboardType: TextInputType.url,
+                      autocorrect: false,
+                      decoration: _inputDecoration(
+                        label: 'Google Form URL',
+                        icon: Icons.link_rounded,
+                        hint: 'https://docs.google.com/forms/...',
+                      ),
+                      validator: (value) {
+                        if (_submissionMethod != 'google_form') {
+                          return null;
+                        }
 
-                      final Uri? uri = Uri.tryParse(text);
+                        final String text = value?.trim() ?? '';
+                        final Uri? uri = Uri.tryParse(text);
 
-                      if (uri == null ||
-                          !uri.hasScheme ||
-                          !uri.hasAuthority ||
-                          (uri.scheme != 'http' && uri.scheme != 'https')) {
-                        return 'Enter a valid http or https URL.';
-                      }
+                        if (text.isEmpty) {
+                          return 'Enter the Google Form URL.';
+                        }
 
-                      return null;
-                    },
-                  ),
+                        if (uri == null ||
+                            uri.scheme != 'https' ||
+                            !uri.hasAuthority) {
+                          return 'Enter a valid HTTPS Google Form URL.';
+                        }
 
-                  const SizedBox(height: 12),
+                        final String host = uri.host.toLowerCase();
+                        final bool isGoogleForm =
+                            host == 'forms.gle' ||
+                            (host == 'docs.google.com' &&
+                                uri.path.toLowerCase().contains('/forms/'));
 
-                  Container(
-                    padding: const EdgeInsets.all(14),
+                        if (!isGoogleForm) {
+                          return 'Use a forms.gle or docs.google.com/forms link.';
+                        }
 
-                    decoration: BoxDecoration(
-                      color: primaryTeal.withValues(alpha: 0.07),
-
-                      borderRadius: BorderRadius.circular(14),
+                        return null;
+                      },
                     ),
 
-                    child: const Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 12),
 
-                      children: [
-                        Icon(
-                          Icons.info_outline_rounded,
-                          color: primaryTeal,
-                          size: 20,
-                        ),
-
-                        SizedBox(width: 10),
-
-                        Expanded(
-                          child: Text(
-                            'Students will open this link from CASLMS. '
-                            'Their answers remain on the external platform, '
-                            'while submission tracking and grading will be handled in CASLMS.',
-                            style: TextStyle(
-                              color: textGrey,
-                              fontSize: 11.5,
-                              height: 1.5,
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: primaryTeal.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.verified_user_outlined,
+                            color: primaryTeal,
+                            size: 20,
+                          ),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'GitHub and file options will be hidden. CASLMS '
+                              'marks completion only after you verify the '
+                              'student response as Complied.',
+                              style: TextStyle(
+                                color: textGrey,
+                                fontSize: 11.5,
+                                height: 1.5,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(height: 26),
+                    const SizedBox(height: 26),
+                  ],
 
                   // ==================================================
                   // GRADING / DEADLINE
@@ -815,7 +913,44 @@ class _InstructorCreateAssessmentScreenState
   // DELIVERY TYPE
   // ============================================================
 
+  Widget _buildArtifactOption({
+    required bool value,
+    required IconData icon,
+    required String title,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
+      ),
+      child: CheckboxListTile(
+        value: value,
+        onChanged: _isSaving
+            ? null
+            : (selected) {
+                onChanged(selected ?? false);
+              },
+        activeColor: primaryTeal,
+        controlAffinity: ListTileControlAffinity.trailing,
+        secondary: Icon(icon, color: primaryTeal),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: textDark,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDeliveryMethodCard() {
+    final bool googleForm = _submissionMethod == 'google_form';
+
     return Container(
       padding: const EdgeInsets.all(17),
 
@@ -839,19 +974,24 @@ class _InstructorCreateAssessmentScreenState
               borderRadius: BorderRadius.circular(14),
             ),
 
-            child: const Icon(Icons.open_in_new_rounded, color: primaryTeal),
+            child: Icon(
+              googleForm ? Icons.description_outlined : Icons.upload_file,
+              color: primaryTeal,
+            ),
           ),
 
           const SizedBox(width: 13),
 
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
 
               children: [
                 Text(
-                  'External Link Assessment',
-                  style: TextStyle(
+                  googleForm
+                      ? 'Google Form Assessment'
+                      : 'GitHub / File Submission',
+                  style: const TextStyle(
                     color: textDark,
                     fontWeight: FontWeight.w800,
                     fontSize: 13.5,
@@ -861,8 +1001,10 @@ class _InstructorCreateAssessmentScreenState
                 SizedBox(height: 3),
 
                 Text(
-                  'Current delivery method',
-                  style: TextStyle(color: textGrey, fontSize: 11),
+                  googleForm
+                      ? 'You verify each student as Complied or Not Complied'
+                      : 'Only selected submission options will be shown',
+                  style: const TextStyle(color: textGrey, fontSize: 11),
                 ),
               ],
             ),

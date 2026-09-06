@@ -479,6 +479,49 @@ service cloud.firestore {
     // ============================================================
 
     match /assessmentSubmissions/{submissionId} {
+      function validAiQuizSubmissionCreate() {
+        let assessmentId =
+          request.resource.data.assessmentId;
+
+        let assessment = get(
+          /databases/$(database)/documents/assessments/$(assessmentId)
+        ).data;
+
+        return
+          isStudent() &&
+          request.resource.data.studentId ==
+            request.auth.uid &&
+          submissionId ==
+            assessmentId +
+            "_" +
+            request.auth.uid &&
+          assessment.deliveryType ==
+            'ai_generated' &&
+          assessment.assessmentType ==
+            'quiz' &&
+          assessment.status ==
+            'published' &&
+          request.resource.data.courseId ==
+            assessment.courseId &&
+          request.resource.data.moduleId ==
+            assessment.moduleId &&
+          request.resource.data.submissionType ==
+            'ai_quiz' &&
+          request.resource.data.gradingMode ==
+            'automatic' &&
+          request.resource.data.status ==
+            'graded' &&
+          request.resource.data.score is number &&
+          request.resource.data.totalPoints is number &&
+          request.resource.data.answers is list &&
+          request.resource.data.submittedAt ==
+            request.time &&
+          request.resource.data.gradedAt ==
+            request.time &&
+          request.resource.data.updatedAt ==
+            request.time;
+      }
+
       function validFeedbackUpdate() {
         let assessmentId =
           resource.data.assessmentId;
@@ -533,6 +576,131 @@ service cloud.firestore {
             request.resource.data.feedback;
       }
 
+      function validGoogleFormComplianceData(
+        data
+      ) {
+        let assessment = get(
+          /databases/$(database)/documents/assessments/$(data.assessmentId)
+        ).data;
+
+        let enrollmentPath =
+          /databases/$(database)/documents/enrollments/$(data.courseId + '_' + data.studentId);
+
+        let studentPath =
+          /databases/$(database)/documents/users/$(data.studentId);
+
+        let notificationPath =
+          /databases/$(database)/documents/notifications/$(data.complianceNotificationId);
+
+        let notification =
+          getAfter(notificationPath).data;
+
+        return
+          isInstructor() &&
+          ownsCourse(assessment.courseId) &&
+          assessment.get(
+            'submissionMethod',
+            ''
+          ) == 'google_form' &&
+          assessment.status == 'published' &&
+          data.assessmentId is string &&
+          data.studentId is string &&
+          submissionId ==
+            data.assessmentId +
+            '_' +
+            data.studentId &&
+          data.courseId ==
+            assessment.courseId &&
+          data.moduleId ==
+            assessment.moduleId &&
+          data.submissionType ==
+            'google_form' &&
+          data.submissionSource ==
+            'instructor_verification' &&
+          data.complianceStatus in [
+            'complied',
+            'not_complied'
+          ] &&
+          data.status ==
+            (
+              data.complianceStatus ==
+                'complied'
+                ? 'submitted'
+                : 'not_complied'
+            ) &&
+          data.verifiedBy ==
+            request.auth.uid &&
+          data.verifiedAt ==
+            request.time &&
+          data.updatedAt ==
+            request.time &&
+          (
+            data.complianceStatus ==
+              'complied'
+              ? data.submittedAt ==
+                  request.time
+              : data.submittedAt == null
+          ) &&
+          exists(enrollmentPath) &&
+          get(enrollmentPath).data.status ==
+            'active' &&
+          get(enrollmentPath).data.studentId ==
+            data.studentId &&
+          exists(studentPath) &&
+          get(studentPath).data.role ==
+            'student' &&
+          get(studentPath).data.status ==
+            'active' &&
+          !exists(notificationPath) &&
+          notification.userId ==
+            data.studentId &&
+          notification.sourceType ==
+            'googleFormCompliance' &&
+          notification.sourceId ==
+            submissionId &&
+          notification.actorId ==
+            request.auth.uid &&
+          notification.courseId ==
+            data.courseId &&
+          notification.moduleId ==
+            data.moduleId &&
+          notification.createdAt ==
+            request.time;
+      }
+
+      function validGoogleFormComplianceCreate() {
+        return
+          validGoogleFormComplianceData(
+            request.resource.data
+          ) &&
+          request.resource.data.createdAt ==
+            request.time &&
+          request.resource.data.score == null &&
+          request.resource.data.gradedAt == null &&
+          request.resource.data.gradedBy == null;
+      }
+
+      function validGoogleFormComplianceUpdate() {
+        return
+          validGoogleFormComplianceData(
+            request.resource.data
+          ) &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly([
+              'studentName',
+              'studentEmail',
+              'submissionType',
+              'submissionSource',
+              'complianceStatus',
+              'status',
+              'verifiedBy',
+              'verifiedAt',
+              'complianceNotificationId',
+              'submittedAt',
+              'updatedAt'
+            ]);
+      }
+
       allow get: if isStaff() || (
         isStudent() &&
         (
@@ -557,38 +725,25 @@ service cloud.firestore {
           request.auth.uid
       );
 
+      // File and Google Form submissions are written only by the verified
+      // Supabase Edge Function through the Firebase Admin SDK. The client may
+      // directly create only its automatically scored in-app quiz result.
       allow create: if
-        isStudent() &&
-        request.resource.data.studentId ==
-          request.auth.uid &&
-        submissionId ==
-          request.resource.data.assessmentId +
-          "_" +
-          request.auth.uid &&
-        request.resource.data.status in [
-          'submitted',
-          'graded'
-        ];
+        validAiQuizSubmissionCreate()
+        ||
+        validGoogleFormComplianceCreate();
 
-      // Instructors can modify feedback only.
+      // Instructors can modify feedback or a Google Form compliance decision.
       allow update: if
         isAdmin()
         ||
         (
           isInstructor() &&
-          validFeedbackUpdate()
-        )
-        ||
-        (
-          isStudent() &&
-          resource.data.studentId ==
-            request.auth.uid &&
-          request.resource.data.studentId ==
-            resource.data.studentId &&
-          request.resource.data.assessmentId ==
-            resource.data.assessmentId &&
-          resource.data.status != 'submitted' &&
-          resource.data.status != 'graded'
+          (
+            validFeedbackUpdate()
+            ||
+            validGoogleFormComplianceUpdate()
+          )
         );
 
       allow delete: if isAdmin();
@@ -1065,6 +1220,67 @@ service cloud.firestore {
             assessment.title;
       }
 
+      function validGoogleFormComplianceNotice(
+        data
+      ) {
+        let submission = getAfter(
+          /databases/$(database)/documents/assessmentSubmissions/$(data.sourceId)
+        ).data;
+
+        let assessment = get(
+          /databases/$(database)/documents/assessments/$(submission.assessmentId)
+        ).data;
+
+        return
+          isInstructor() &&
+          validAssessmentNoticeShape(data) &&
+          data.sourceType ==
+            'googleFormCompliance' &&
+          data.type in [
+            'compliance_approved',
+            'compliance_rejected'
+          ] &&
+          ownsCourse(
+            assessment.courseId
+          ) &&
+          assessment.get(
+            'submissionMethod',
+            ''
+          ) == 'google_form' &&
+          submission.courseId ==
+            assessment.courseId &&
+          submission.moduleId ==
+            assessment.moduleId &&
+          submission.studentId ==
+            data.userId &&
+          submission.submissionType ==
+            'google_form' &&
+          submission.submissionSource ==
+            'instructor_verification' &&
+          submission.verifiedBy ==
+            request.auth.uid &&
+          submission.verifiedAt ==
+            request.time &&
+          submission.complianceNotificationId ==
+            notificationId &&
+          data.courseId ==
+            assessment.courseId &&
+          data.moduleId ==
+            assessment.moduleId &&
+          (
+            data.type ==
+              'compliance_approved'
+              ? submission.complianceStatus ==
+                  'complied' &&
+                submission.status ==
+                  'submitted'
+              : submission.complianceStatus ==
+                  'not_complied' &&
+                submission.status ==
+                  'not_complied'
+          );
+      }
+
       function validAutomaticGradeNotice(
         data
       ) {
@@ -1172,6 +1388,11 @@ service cloud.firestore {
           request.resource.data.sourceType ==
             'assessmentFeedback'
               ? validAssessmentFeedbackNotice(
+                  request.resource.data
+                )
+          : request.resource.data.sourceType ==
+              'googleFormCompliance'
+              ? validGoogleFormComplianceNotice(
                   request.resource.data
                 )
           : request.resource.data.sourceType ==

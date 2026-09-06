@@ -626,6 +626,14 @@ class _ProgressCalculator {
                     size <= 20 * 1024 * 1024;
               }
 
+              if (submissionType == 'google_form') {
+                return lower(result['submissionSource']) ==
+                        'instructor_verification' &&
+                    lower(result['complianceStatus']) == 'complied' &&
+                    text(result['verifiedBy']).isNotEmpty &&
+                    result['verifiedAt'] != null;
+              }
+
               return false;
             });
 

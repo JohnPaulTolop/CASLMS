@@ -27,7 +27,8 @@ class StudentModuleDetailScreen extends StatefulWidget {
       _StudentModuleDetailScreenState();
 }
 
-class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
+class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
+    with WidgetsBindingObserver {
   // ============================================================
   // DESIGN
   // ============================================================
@@ -78,7 +79,22 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
   void initState() {
     super.initState();
 
+    WidgetsBinding.instance.addObserver(this);
+
     _loadPage();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_isLoading) {
+      _loadPage();
+    }
   }
 
   // ============================================================
@@ -335,6 +351,42 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
     return null;
   }
 
+  String _assessmentSubmissionMethod(Map<String, dynamic> assessment) {
+    final String configured = (assessment['submissionMethod'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    if (configured == 'google_form' || configured == 'artifact') {
+      return configured;
+    }
+
+    final String deliveryType = (assessment['deliveryType'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+
+    if (deliveryType == 'ai_generated') {
+      return 'in_app_quiz';
+    }
+
+    if (deliveryType == 'artifact_submission') {
+      return 'artifact';
+    }
+
+    // Automatically recognize Google Forms created before Phase 7F.
+    final Uri? uri = Uri.tryParse(
+      (assessment['externalUrl'] ?? '').toString().trim(),
+    );
+    final String host = uri?.host.toLowerCase() ?? '';
+    final bool googleForm =
+        host == 'forms.gle' ||
+        (host == 'docs.google.com' &&
+            (uri?.path.toLowerCase().contains('/forms/') ?? false));
+
+    return googleForm ? 'google_form' : 'artifact';
+  }
+
   // ============================================================
   // OPEN EXTERNAL LINK
   // ============================================================
@@ -510,6 +562,11 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
   Future<void> _openAssessmentSubmission(
     Map<String, dynamic> assessment,
   ) async {
+    if (_assessmentSubmissionMethod(assessment) != 'artifact') {
+      _showError('This assessment does not accept GitHub or file uploads.');
+      return;
+    }
+
     final String assessmentId =
         (assessment['assessmentId'] ?? assessment['id'] ?? '')
             .toString()
@@ -1018,7 +1075,7 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
           const SizedBox(height: 4),
 
           const Text(
-            'Open the assessment instructions, complete the required work, then submit a GitHub repository, ZIP file, or technical document.',
+            'Complete each assessment using only the submission method selected by your instructor.',
             style: TextStyle(color: textGrey, fontSize: 11.5, height: 1.45),
           ),
 
@@ -1059,6 +1116,16 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
 
     final bool isAiQuiz = deliveryType == 'ai_generated' && type == 'quiz';
 
+    final String submissionMethod = _assessmentSubmissionMethod(assessment);
+    final bool isGoogleForm = submissionMethod == 'google_form';
+    final bool isArtifact = submissionMethod == 'artifact';
+    final bool hasExternalUrl = (assessment['externalUrl'] ?? '')
+        .toString()
+        .trim()
+        .isNotEmpty;
+    final bool showPrimaryAction =
+        isAiQuiz || isGoogleForm || (isArtifact && hasExternalUrl);
+
     final Map<String, dynamic>? submission = _submissionFor(assessmentId);
 
     final String submissionStatus = (submission?['status'] ?? '')
@@ -1069,6 +1136,8 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
         submissionStatus == 'submitted' || submissionStatus == 'graded';
 
     final bool graded = submissionStatus == 'graded';
+
+    final bool notComplied = submissionStatus == 'not_complied';
 
     final bool pastDue = _isPastDue(assessment);
 
@@ -1131,6 +1200,7 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
                 submitted: submitted,
                 graded: graded,
                 pastDue: pastDue,
+                notComplied: notComplied,
               ),
             ],
           ),
@@ -1173,14 +1243,18 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
             ],
           ),
 
-          if (submission != null) ...[
+          if (submission != null && (submitted || notComplied)) ...[
             const SizedBox(height: 9),
 
             Row(
               children: [
                 Icon(
-                  graded ? Icons.verified_rounded : Icons.check_circle_rounded,
-                  color: green,
+                  notComplied
+                      ? Icons.cancel_outlined
+                      : graded
+                      ? Icons.verified_rounded
+                      : Icons.check_circle_rounded,
+                  color: notComplied ? red : green,
                   size: 16,
                 ),
 
@@ -1188,11 +1262,13 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
 
                 Expanded(
                   child: Text(
-                    graded
+                    notComplied
+                        ? 'Your instructor could not verify a Google Form response.'
+                        : graded
                         ? 'Graded'
                         : _formatSubmittedAt(submission['submittedAt']),
-                    style: const TextStyle(
-                      color: green,
+                    style: TextStyle(
+                      color: notComplied ? red : green,
                       fontSize: 10.5,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1202,53 +1278,86 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
             ),
           ],
 
-          const SizedBox(height: 17),
-
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton.icon(
-              onPressed: submitted || pastDue
-                  ? null
-                  : () {
-                      _openAssessment(assessment);
-                    },
-              icon: Icon(
-                isAiQuiz ? Icons.quiz_rounded : Icons.open_in_new_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
-              label: Text(
-                submitted
-                    ? graded
-                          ? 'Assessment Graded'
-                          : isAiQuiz
-                          ? 'Quiz Submitted'
-                          : 'Assessment Submitted'
-                    : pastDue
-                    ? 'Deadline Passed'
-                    : isAiQuiz
-                    ? 'Take Quiz in CASLMS'
-                    : 'Open Assessment',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
+          if (isGoogleForm && !submitted && !pastDue) ...[
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.sync_rounded, color: primaryBlue, size: 16),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    notComplied
+                        ? 'Submit the form using your registered email, then ask your instructor to verify it again.'
+                        : 'After submitting the form, your instructor will verify your response. Progress updates only after you are marked Complied.',
+                    style: const TextStyle(
+                      color: textGrey,
+                      fontSize: 10.5,
+                      height: 1.4,
+                    ),
+                  ),
                 ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryBlue,
-                disabledBackgroundColor: submitted
-                    ? green
-                    : const Color(0xFF9AA3B3),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(13),
+              ],
+            ),
+          ],
+
+          if (showPrimaryAction) ...[
+            const SizedBox(height: 17),
+
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton.icon(
+                onPressed: submitted || pastDue
+                    ? null
+                    : () {
+                        _openAssessment(assessment);
+                      },
+                icon: Icon(
+                  isAiQuiz
+                      ? Icons.quiz_rounded
+                      : isGoogleForm
+                      ? Icons.description_outlined
+                      : Icons.open_in_new_rounded,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                label: Text(
+                  submitted
+                      ? graded
+                            ? 'Assessment Graded'
+                            : isAiQuiz
+                            ? 'Quiz Submitted'
+                            : isGoogleForm
+                            ? 'Form Response Received'
+                            : 'Assessment Submitted'
+                      : pastDue
+                      ? 'Deadline Passed'
+                      : isAiQuiz
+                      ? 'Take Quiz in CASLMS'
+                      : isGoogleForm
+                      ? 'Open Google Form'
+                      : 'Open Assessment',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryBlue,
+                  disabledBackgroundColor: submitted
+                      ? green
+                      : const Color(0xFF9AA3B3),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
 
-          if (!isAiQuiz) ...[
+          if (isArtifact) ...[
             const SizedBox(height: 9),
 
             SizedBox(
@@ -1295,6 +1404,7 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
     required bool submitted,
     required bool graded,
     required bool pastDue,
+    required bool notComplied,
   }) {
     String text;
     Color color;
@@ -1305,6 +1415,9 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen> {
     } else if (submitted) {
       text = 'SUBMITTED';
       color = green;
+    } else if (notComplied) {
+      text = 'NOT COMPLIED';
+      color = red;
     } else if (pastDue) {
       text = 'CLOSED';
       color = red;
