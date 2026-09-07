@@ -2,14 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/password_reset_service.dart';
 import '../../services/profile_picture_service.dart';
 
 class StudentProfileScreen extends StatefulWidget {
   const StudentProfileScreen({super.key});
 
   @override
-  State<StudentProfileScreen> createState() =>
-      _StudentProfileScreenState();
+  State<StudentProfileScreen> createState() => _StudentProfileScreenState();
 }
 
 class _StudentProfileScreenState extends State<StudentProfileScreen> {
@@ -32,8 +32,8 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final ProfilePictureService _profilePictureService =
-      ProfilePictureService();
+  final ProfilePictureService _profilePictureService = ProfilePictureService();
+  final PasswordResetService _passwordResetService = PasswordResetService();
 
   // ============================================================
   // STATE
@@ -42,6 +42,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isUploadingPhoto = false;
+  bool _isRequestingPasswordReset = false;
   String? _errorMessage;
 
   Map<String, dynamic>? _profile;
@@ -85,8 +86,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
       final Map<String, dynamic> profileData = profileDocument.data()!;
 
-      final String role =
-          (profileData['role'] ?? '').toString().trim().toLowerCase();
+      final String role = (profileData['role'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
 
       if (role != 'student') {
         throw Exception('This account is not a student account.');
@@ -102,8 +105,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
       for (final QueryDocumentSnapshot<Map<String, dynamic>> document
           in enrollmentSnapshot.docs) {
-        final String status =
-            (document.data()['status'] ?? '').toString().trim().toLowerCase();
+        final String status = (document.data()['status'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (status == 'active') {
           activeClasses++;
@@ -115,10 +120,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       }
 
       setState(() {
-        _profile = {
-          ...profileData,
-          'uid': user.uid,
-        };
+        _profile = {...profileData, 'uid': user.uid};
 
         _activeClasses = activeClasses;
         _isLoading = false;
@@ -131,8 +133,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e.message ?? 'Unable to load your student profile.';
+        _errorMessage = e.message ?? 'Unable to load your student profile.';
       });
     } catch (e) {
       if (!mounted) {
@@ -141,8 +142,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -185,8 +185,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   }
 
   String get _status {
-    final String value =
-        (_profile?['status'] ?? 'active').toString().trim().toLowerCase();
+    final String value = (_profile?['status'] ?? 'active')
+        .toString()
+        .trim()
+        .toLowerCase();
 
     return value.isEmpty ? 'active' : value;
   }
@@ -205,8 +207,8 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     });
 
     try {
-      final ProfilePictureResult? result =
-          await _profilePictureService.pickAndUploadProfilePicture();
+      final ProfilePictureResult? result = await _profilePictureService
+          .pickAndUploadProfilePicture();
 
       if (!mounted) {
         return;
@@ -263,13 +265,9 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         return AlertDialog(
           title: const Text(
             'Remove Profile Picture',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w800),
           ),
-          content: const Text(
-            'Your initials will be shown instead.',
-          ),
+          content: const Text('Your initials will be shown instead.'),
           actions: [
             TextButton(
               onPressed: () {
@@ -307,9 +305,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         return;
       }
 
-      final Map<String, dynamic> updatedProfile = {
-        ...?_profile,
-      };
+      final Map<String, dynamic> updatedProfile = {...?_profile};
 
       updatedProfile.remove('photoUrl');
       updatedProfile.remove('photoPath');
@@ -344,8 +340,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   }
 
   String get _initials {
-    final List<String> parts =
-        _name.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).toList();
+    final List<String> parts = _name
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList();
 
     if (parts.isEmpty) {
       return 'S';
@@ -371,17 +369,13 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     }
 
     String newName = _name;
-    String newEmail =
-        (_profile?['email'] ?? '').toString();
+    String newEmail = (_profile?['email'] ?? '').toString();
 
-    String newDepartment =
-        (_profile?['department'] ?? '').toString();
+    String newDepartment = (_profile?['department'] ?? '').toString();
 
-    String newCourse =
-        (_profile?['course'] ?? '').toString();
+    String newCourse = (_profile?['course'] ?? '').toString();
 
-    final Map<String, String>? result =
-        await showDialog<Map<String, String>>(
+    final Map<String, String>? result = await showDialog<Map<String, String>>(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
@@ -390,10 +384,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           ),
           title: const Text(
             'Personal Information',
-            style: TextStyle(
-              color: darkText,
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(color: darkText, fontWeight: FontWeight.w800),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -401,12 +392,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               children: [
                 TextFormField(
                   initialValue: newName,
-                  textCapitalization:
-                      TextCapitalization.words,
+                  textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Full Name',
-                    prefixIcon:
-                        Icon(Icons.person_outline_rounded),
+                    prefixIcon: Icon(Icons.person_outline_rounded),
                   ),
                   onChanged: (String value) {
                     newName = value;
@@ -415,12 +404,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                 const SizedBox(height: 14),
                 TextFormField(
                   initialValue: newEmail,
-                  keyboardType:
-                      TextInputType.emailAddress,
+                  keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
                     labelText: 'Contact Email',
-                    prefixIcon:
-                        Icon(Icons.email_outlined),
+                    prefixIcon: Icon(Icons.email_outlined),
                   ),
                   onChanged: (String value) {
                     newEmail = value;
@@ -429,12 +416,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                 const SizedBox(height: 14),
                 TextFormField(
                   initialValue: newDepartment,
-                  textCapitalization:
-                      TextCapitalization.words,
+                  textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Department',
-                    prefixIcon:
-                        Icon(Icons.apartment_rounded),
+                    prefixIcon: Icon(Icons.apartment_rounded),
                   ),
                   onChanged: (String value) {
                     newDepartment = value;
@@ -443,12 +428,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                 const SizedBox(height: 14),
                 TextFormField(
                   initialValue: newCourse,
-                  textCapitalization:
-                      TextCapitalization.words,
+                  textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Course / Program',
-                    prefixIcon:
-                        Icon(Icons.school_outlined),
+                    prefixIcon: Icon(Icons.school_outlined),
                   ),
                   onChanged: (String value) {
                     newCourse = value;
@@ -458,8 +441,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                 InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'Student ID',
-                    prefixIcon:
-                        Icon(Icons.badge_outlined),
+                    prefixIcon: Icon(Icons.badge_outlined),
                     helperText:
                         'Student ID cannot be changed from the profile.',
                   ),
@@ -508,17 +490,13 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       return;
     }
 
-    final String cleanName =
-        (result['name'] ?? '').trim();
+    final String cleanName = (result['name'] ?? '').trim();
 
-    final String cleanEmail =
-        (result['email'] ?? '').trim();
+    final String cleanEmail = (result['email'] ?? '').trim();
 
-    final String cleanDepartment =
-        (result['department'] ?? '').trim();
+    final String cleanDepartment = (result['department'] ?? '').trim();
 
-    final String cleanCourse =
-        (result['course'] ?? '').trim();
+    final String cleanCourse = (result['course'] ?? '').trim();
 
     if (cleanName.isEmpty) {
       _showError('Full name cannot be empty.');
@@ -526,8 +504,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     }
 
     if (cleanEmail.isNotEmpty &&
-        (!cleanEmail.contains('@') ||
-            !cleanEmail.contains('.'))) {
+        (!cleanEmail.contains('@') || !cleanEmail.contains('.'))) {
       _showError('Enter a valid contact email address.');
       return;
     }
@@ -544,10 +521,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     });
 
     try {
-      await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .update({
+      await _firestore.collection('users').doc(user.uid).update({
         'name': cleanName,
         'email': cleanEmail,
         'department': cleanDepartment,
@@ -589,9 +563,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         _isSaving = false;
       });
 
-      _showError(
-        e.message ?? 'Unable to update your profile.',
-      );
+      _showError(e.message ?? 'Unable to update your profile.');
     } catch (_) {
       if (!mounted) {
         return;
@@ -635,16 +607,8 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 18),
-                _buildDetailRow(
-                  Icons.badge_outlined,
-                  'Student ID',
-                  _studentId,
-                ),
-                _buildDetailRow(
-                  Icons.email_outlined,
-                  'Contact Email',
-                  _email,
-                ),
+                _buildDetailRow(Icons.badge_outlined, 'Student ID', _studentId),
+                _buildDetailRow(Icons.email_outlined, 'Contact Email', _email),
                 _buildDetailRow(
                   Icons.school_outlined,
                   'Course / Program',
@@ -675,6 +639,149 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   }
 
   // ============================================================
+  // PASSWORD RESET
+  // ============================================================
+
+  Future<void> _requestPasswordReset() async {
+    if (_profile == null || _isRequestingPasswordReset || _isSaving) {
+      return;
+    }
+
+    final String campusId = _studentId;
+    final String registeredEmail = _email;
+
+    if (campusId == 'Not set' || registeredEmail == 'Not set') {
+      _showError(
+        'Your student ID or registered email is missing. '
+        'Please update your profile or contact the administrator.',
+      );
+      return;
+    }
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.lock_reset_rounded, color: primaryBlue),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Reset Password',
+                  style: TextStyle(
+                    color: darkText,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'CASLMS will send a secure password reset link to your registered email:',
+                style: TextStyle(color: greyText, height: 1.45),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: primaryBlue.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.email_outlined,
+                      color: primaryBlue,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        registeredEmail,
+                        style: const TextStyle(
+                          color: darkText,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'The link will work on both web and mobile. Check your spam folder if the email does not appear.',
+                style: TextStyle(color: greyText, fontSize: 12, height: 1.4),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Send Reset Link'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isRequestingPasswordReset = true;
+    });
+
+    try {
+      final String message = await _passwordResetService.requestPasswordReset(
+        campusId: campusId,
+        email: registeredEmail,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage(message);
+    } on PasswordResetException catch (error) {
+      if (mounted) {
+        _showError(error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        _showError('Unable to request a password reset. Please try again.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRequestingPasswordReset = false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
   // LOGOUT
   // ============================================================
 
@@ -688,17 +795,11 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           ),
           title: const Text(
             'Log Out',
-            style: TextStyle(
-              color: darkText,
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(color: darkText, fontWeight: FontWeight.w800),
           ),
           content: const Text(
             'Are you sure you want to log out of your CASLMS account?',
-            style: TextStyle(
-              color: greyText,
-              height: 1.45,
-            ),
+            style: TextStyle(color: greyText, height: 1.45),
           ),
           actions: [
             TextButton(
@@ -733,10 +834,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         return;
       }
 
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/',
-        (route) => false,
-      );
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     } on FirebaseAuthException catch (e) {
       if (!mounted) {
         return;
@@ -771,18 +869,12 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           IconButton(
             onPressed: _isLoading ? null : _loadProfile,
             tooltip: 'Refresh Profile',
-            icon: const Icon(
-              Icons.refresh_rounded,
-              color: darkText,
-            ),
+            icon: const Icon(Icons.refresh_rounded, color: darkText),
           ),
           IconButton(
             onPressed: _isLoading ? null : _showAccountDetails,
             tooltip: 'Account Details',
-            icon: const Icon(
-              Icons.settings_outlined,
-              color: darkText,
-            ),
+            icon: const Icon(Icons.settings_outlined, color: darkText),
           ),
           const SizedBox(width: 5),
         ],
@@ -802,11 +894,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: primaryBlue,
-        ),
-      );
+      return const Center(child: CircularProgressIndicator(color: primaryBlue));
     }
 
     if (_errorMessage != null) {
@@ -814,9 +902,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     }
 
     if (_profile == null) {
-      return _buildErrorState(
-        message: 'Student profile is unavailable.',
-      );
+      return _buildErrorState(message: 'Student profile is unavailable.');
     }
 
     return RefreshIndicator(
@@ -856,10 +942,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: primaryBlue,
-                  width: 2,
-                ),
+                border: Border.all(color: primaryBlue, width: 2),
               ),
               child: _buildProfileAvatar(),
             ),
@@ -867,9 +950,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               color: primaryBlue,
               shape: const CircleBorder(),
               child: InkWell(
-                onTap: _isUploadingPhoto
-                    ? null
-                    : _changeProfilePicture,
+                onTap: _isUploadingPhoto ? null : _changeProfilePicture,
                 customBorder: const CircleBorder(),
                 child: SizedBox(
                   width: 34,
@@ -894,13 +975,8 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         ),
         const SizedBox(height: 8),
         TextButton.icon(
-          onPressed: _isUploadingPhoto
-              ? null
-              : _changeProfilePicture,
-          icon: const Icon(
-            Icons.photo_camera_outlined,
-            size: 17,
-          ),
+          onPressed: _isUploadingPhoto ? null : _changeProfilePicture,
+          icon: const Icon(Icons.photo_camera_outlined, size: 17),
           label: Text(
             _photoUrl.isEmpty
                 ? 'Upload Profile Picture'
@@ -940,10 +1016,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         ),
         const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 6,
-          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: primaryBlue.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(20),
@@ -969,13 +1042,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           width: 96,
           height: 96,
           fit: BoxFit.cover,
-          errorBuilder: (
-            BuildContext context,
-            Object error,
-            StackTrace? stackTrace,
-          ) {
-            return _buildInitialAvatar();
-          },
+          errorBuilder:
+              (BuildContext context, Object error, StackTrace? stackTrace) {
+                return _buildInitialAvatar();
+              },
         ),
       );
     }
@@ -986,8 +1056,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   Widget _buildInitialAvatar() {
     return CircleAvatar(
       radius: 48,
-      backgroundColor:
-          primaryBlue.withValues(alpha: 0.10),
+      backgroundColor: primaryBlue.withValues(alpha: 0.10),
       child: Text(
         _initials,
         style: const TextStyle(
@@ -1069,6 +1138,15 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           ),
           _buildDivider(),
           _buildMenuTile(
+            icon: Icons.lock_reset_rounded,
+            title: _isRequestingPasswordReset
+                ? 'Sending Reset Link...'
+                : 'Reset Password',
+            subtitle: 'Send a secure reset link to your registered email',
+            onTap: _requestPasswordReset,
+          ),
+          _buildDivider(),
+          _buildMenuTile(
             icon: Icons.refresh_rounded,
             title: 'Refresh Profile',
             subtitle: 'Reload your latest Firebase account data',
@@ -1083,21 +1161,14 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     return Container(
       decoration: _cardDecoration(),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 7,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: red.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(
-            Icons.logout_rounded,
-            color: red,
-            size: 20,
-          ),
+          child: const Icon(Icons.logout_rounded, color: red, size: 20),
         ),
         title: const Text(
           'Log Out',
@@ -1109,10 +1180,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         ),
         subtitle: const Text(
           'Sign out of this student account',
-          style: TextStyle(
-            color: greyText,
-            fontSize: 12,
-          ),
+          style: TextStyle(color: greyText, fontSize: 12),
         ),
         trailing: const Icon(
           Icons.chevron_right_rounded,
@@ -1134,10 +1202,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        vertical: 17,
-        horizontal: 12,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 17, horizontal: 12),
       decoration: _cardDecoration(),
       child: Column(
         children: [
@@ -1147,11 +1212,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               color: color.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 23,
-            ),
+            child: Icon(icon, color: color, size: 23),
           ),
           const SizedBox(height: 11),
           Text(
@@ -1187,21 +1248,14 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     required VoidCallback onTap,
   }) {
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: 6,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       leading: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: primaryBlue.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: Icon(
-          icon,
-          color: primaryBlue,
-          size: 20,
-        ),
+        child: Icon(icon, color: primaryBlue, size: 20),
       ),
       title: Text(
         title,
@@ -1239,11 +1293,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            icon,
-            size: 20,
-            color: primaryBlue,
-          ),
+          Icon(icon, size: 20, color: primaryBlue),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -1284,9 +1334,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     );
   }
 
-  Widget _buildErrorState({
-    String? message,
-  }) {
+  Widget _buildErrorState({String? message}) {
     final String text =
         message ?? _errorMessage ?? 'Unable to load your profile.';
 
@@ -1296,11 +1344,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              color: red,
-              size: 50,
-            ),
+            const Icon(Icons.error_outline_rounded, color: red, size: 50),
             const SizedBox(height: 14),
             Text(
               text,
@@ -1331,10 +1375,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     return BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(18),
-      border: Border.all(
-        color: borderColor,
-        width: 1.5,
-      ),
+      border: Border.all(color: borderColor, width: 1.5),
       boxShadow: [
         BoxShadow(
           color: Colors.black.withValues(alpha: 0.025),

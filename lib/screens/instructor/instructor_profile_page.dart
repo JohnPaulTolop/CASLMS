@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'instructor_ui.dart';
 
+import '../../services/password_reset_service.dart';
 import '../../services/profile_picture_service.dart';
 
 class InstructorProfileScreen extends StatefulWidget {
@@ -35,6 +36,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final ProfilePictureService _profilePictureService = ProfilePictureService();
+  final PasswordResetService _passwordResetService = PasswordResetService();
 
   // ============================================================
   // STATE
@@ -43,6 +45,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isUploadingPhoto = false;
+  bool _isRequestingPasswordReset = false;
   String? _errorMessage;
 
   Map<String, dynamic>? _profile;
@@ -642,6 +645,149 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
   }
 
   // ============================================================
+  // PASSWORD RESET
+  // ============================================================
+
+  Future<void> _requestPasswordReset() async {
+    if (_profile == null || _isRequestingPasswordReset || _isSaving) {
+      return;
+    }
+
+    final String campusId = _facultyId;
+    final String registeredEmail = _email;
+
+    if (campusId == 'Not set' || registeredEmail == 'Not set') {
+      _showError(
+        'Your faculty ID or registered email is missing. '
+        'Please update your profile or contact the administrator.',
+      );
+      return;
+    }
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.lock_reset_rounded, color: primaryTeal),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Reset Password',
+                  style: TextStyle(
+                    color: textDark,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'CASLMS will send a secure password reset link to your registered email:',
+                style: TextStyle(color: textGrey, height: 1.45),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(13),
+                decoration: BoxDecoration(
+                  color: primaryTeal.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.email_outlined,
+                      color: primaryTeal,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        registeredEmail,
+                        style: const TextStyle(
+                          color: textDark,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'The link will work on both web and mobile. Check your spam folder if the email does not appear.',
+                style: TextStyle(color: textGrey, fontSize: 12, height: 1.4),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryTeal,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Send Reset Link'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isRequestingPasswordReset = true;
+    });
+
+    try {
+      final String message = await _passwordResetService.requestPasswordReset(
+        campusId: campusId,
+        email: registeredEmail,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      _showMessage(message);
+    } on PasswordResetException catch (error) {
+      if (mounted) {
+        _showError(error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        _showError('Unable to request a password reset. Please try again.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRequestingPasswordReset = false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
   // LOGOUT
   // ============================================================
 
@@ -1017,6 +1163,15 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
             title: 'Account Details',
             subtitle: 'Faculty ID, role, and account status',
             onTap: _showAccountDetails,
+          ),
+          _buildDivider(),
+          _buildMenuTile(
+            icon: Icons.lock_reset_rounded,
+            title: _isRequestingPasswordReset
+                ? 'Sending Reset Link...'
+                : 'Reset Password',
+            subtitle: 'Send a secure reset link to your registered email',
+            onTap: _requestPasswordReset,
           ),
           _buildDivider(),
           _buildMenuTile(
