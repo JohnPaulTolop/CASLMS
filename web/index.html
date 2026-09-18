@@ -21,7 +21,12 @@
   <meta name="description" content="A new Flutter project.">
 
   <!-- iOS meta tags & icons -->
-  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">Set-Content `
+  -Path "C:\caslms-main\build\web\vercel.json" `
+  -Encoding ascii `
+  -Value '{"rewrites":[{"source":"/(.*)","destination":"/index.html"}]}'
+
+Get-Content "C:\caslms-main\build\web\vercel.json" | ConvertFrom-Json
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="caslms">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
