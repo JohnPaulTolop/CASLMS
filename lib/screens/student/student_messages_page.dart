@@ -5,37 +5,26 @@ import '../../services/chat_service.dart';
 import 'student_chat_page.dart';
 
 class StudentMessagesScreen extends StatefulWidget {
-  const StudentMessagesScreen({
-    super.key,
-  });
+  const StudentMessagesScreen({super.key});
 
   @override
-  State<StudentMessagesScreen> createState() =>
-      _StudentMessagesScreenState();
+  State<StudentMessagesScreen> createState() => _StudentMessagesScreenState();
 }
 
-class _StudentMessagesScreenState
-    extends State<StudentMessagesScreen> {
-  static const Color primaryBlue =
-      Color(0xFF1769FF);
+class _StudentMessagesScreenState extends State<StudentMessagesScreen> {
+  static const Color primaryBlue = Color(0xFF1769FF);
 
-  static const Color background =
-      Color(0xFFF7F9FC);
+  static const Color background = Color(0xFFF7F9FC);
 
-  static const Color textDark =
-      Color(0xFF10182F);
+  static const Color textDark = Color(0xFF10182F);
 
-  static const Color textGrey =
-      Color(0xFF68738A);
+  static const Color textGrey = Color(0xFF68738A);
 
-  static const Color borderColor =
-      Color(0xFFE6EAF0);
+  static const Color borderColor = Color(0xFFE6EAF0);
 
-  final ChatService _chatService =
-      ChatService();
+  final ChatService _chatService = ChatService();
 
-  List<Map<String, dynamic>> _contacts =
-      [];
+  List<Map<String, dynamic>> _contacts = [];
 
   bool _isLoading = true;
 
@@ -67,9 +56,7 @@ class _StudentMessagesScreenState
     }
 
     try {
-      final contacts =
-          await _chatService
-              .getStudentChatContacts();
+      final contacts = await _chatService.getStudentChatContacts();
 
       if (!mounted) {
         return;
@@ -95,8 +82,7 @@ class _StudentMessagesScreenState
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            'Unable to load messages.';
+        _errorMessage = 'Unable to load messages.';
       });
     }
   }
@@ -105,40 +91,30 @@ class _StudentMessagesScreenState
   // SEARCH
   // ============================================================
 
-  List<Map<String, dynamic>>
-      get _filteredContacts {
-    final String query =
-        _searchQuery
-            .trim()
-            .toLowerCase();
+  List<Map<String, dynamic>> get _filteredContacts {
+    final String query = _searchQuery.trim().toLowerCase();
 
     if (query.isEmpty) {
       return _contacts;
     }
 
-    return _contacts.where(
-      (contact) {
-        final String instructor =
-            (contact['instructorName'] ??
-                    '')
-                .toString()
-                .toLowerCase();
+    return _contacts.where((contact) {
+      final String instructor = (contact['instructorName'] ?? '')
+          .toString()
+          .toLowerCase();
 
-        final String courseCode =
-            (contact['courseCode'] ?? '')
-                .toString()
-                .toLowerCase();
+      final String courseCode = (contact['courseCode'] ?? '')
+          .toString()
+          .toLowerCase();
 
-        final String courseTitle =
-            (contact['courseTitle'] ?? '')
-                .toString()
-                .toLowerCase();
+      final String courseTitle = (contact['courseTitle'] ?? '')
+          .toString()
+          .toLowerCase();
 
-        return instructor.contains(query) ||
-            courseCode.contains(query) ||
-            courseTitle.contains(query);
-      },
-    ).toList();
+      return instructor.contains(query) ||
+          courseCode.contains(query) ||
+          courseTitle.contains(query);
+    }).toList();
   }
 
   // ============================================================
@@ -157,23 +133,15 @@ class _StudentMessagesScreenState
         centerTitle: true,
         title: const Text(
           'Messages',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight:
-                FontWeight.w800,
-          ),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
         ),
       ),
 
       body: SafeArea(
         child: Align(
-          alignment:
-              Alignment.topCenter,
+          alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints:
-                const BoxConstraints(
-              maxWidth: 900,
-            ),
+            constraints: const BoxConstraints(maxWidth: 900),
             child: Column(
               children: [
                 // ================================================
@@ -181,80 +149,41 @@ class _StudentMessagesScreenState
                 // ================================================
 
                 Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(
-                    20,
-                    14,
-                    20,
-                    12,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
 
                   child: TextField(
-                    onChanged: (
-                      value,
-                    ) {
+                    onChanged: (value) {
                       setState(() {
-                        _searchQuery =
-                            value;
+                        _searchQuery = value;
                       });
                     },
 
-                    decoration:
-                        InputDecoration(
-                      hintText:
-                          'Search instructor or course...',
+                    decoration: InputDecoration(
+                      hintText: 'Search instructor or course...',
 
-                      prefixIcon:
-                          const Icon(
+                      prefixIcon: const Icon(
                         Icons.search_rounded,
-                        color:
-                            primaryBlue,
+                        color: primaryBlue,
                       ),
 
                       filled: true,
 
-                      fillColor:
-                          Colors.white,
+                      fillColor: Colors.white,
 
-                      border:
-                          OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius
-                                .circular(
-                          15,
-                        ),
-                        borderSide:
-                            const BorderSide(
-                          color:
-                              borderColor,
-                        ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: const BorderSide(color: borderColor),
                       ),
 
-                      enabledBorder:
-                          OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius
-                                .circular(
-                          15,
-                        ),
-                        borderSide:
-                            const BorderSide(
-                          color:
-                              borderColor,
-                        ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: const BorderSide(color: borderColor),
                       ),
 
-                      focusedBorder:
-                          OutlineInputBorder(
-                        borderRadius:
-                            BorderRadius
-                                .circular(
-                          15,
-                        ),
-                        borderSide:
-                            const BorderSide(
-                          color:
-                              primaryBlue,
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: const BorderSide(
+                          color: primaryBlue,
                           width: 1.5,
                         ),
                       ),
@@ -262,9 +191,7 @@ class _StudentMessagesScreenState
                   ),
                 ),
 
-                Expanded(
-                  child: _buildContent(),
-                ),
+                Expanded(child: _buildContent()),
               ],
             ),
           ),
@@ -279,61 +206,39 @@ class _StudentMessagesScreenState
 
   Widget _buildContent() {
     if (_isLoading) {
-      return const Center(
-        child:
-            CircularProgressIndicator(
-          color: primaryBlue,
-        ),
-      );
+      return const Center(child: CircularProgressIndicator(color: primaryBlue));
     }
 
     if (_errorMessage != null) {
       return Center(
         child: Padding(
-          padding:
-              const EdgeInsets.all(30),
+          padding: const EdgeInsets.all(30),
           child: Column(
-            mainAxisSize:
-                MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
                 Icons.cloud_off_rounded,
-                color:
-                    Colors.redAccent,
+                color: Colors.redAccent,
                 size: 48,
               ),
 
-              const SizedBox(
-                height: 12,
-              ),
+              const SizedBox(height: 12),
 
               Text(
                 _errorMessage!,
-                textAlign:
-                    TextAlign.center,
-                style:
-                    const TextStyle(
+                textAlign: TextAlign.center,
+                style: const TextStyle(
                   color: textGrey,
-                  fontWeight:
-                      FontWeight.w600,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
 
-              const SizedBox(
-                height: 12,
-              ),
+              const SizedBox(height: 12),
 
               TextButton.icon(
-                onPressed:
-                    _loadContacts,
-                icon:
-                    const Icon(
-                  Icons.refresh_rounded,
-                ),
-                label:
-                    const Text(
-                  'Try Again',
-                ),
+                onPressed: _loadContacts,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try Again'),
               ),
             ],
           ),
@@ -344,45 +249,29 @@ class _StudentMessagesScreenState
     if (_contacts.isEmpty) {
       return const Center(
         child: Padding(
-          padding:
-              EdgeInsets.all(30),
+          padding: EdgeInsets.all(30),
           child: Column(
-            mainAxisSize:
-                MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.forum_outlined,
-                color: primaryBlue,
-                size: 54,
-              ),
+              Icon(Icons.forum_outlined, color: primaryBlue, size: 54),
 
-              SizedBox(
-                height: 12,
-              ),
+              SizedBox(height: 12),
 
               Text(
                 'No instructors available',
-                style:
-                    TextStyle(
+                style: TextStyle(
                   color: textDark,
                   fontSize: 16,
-                  fontWeight:
-                      FontWeight.w800,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
 
-              SizedBox(
-                height: 5,
-              ),
+              SizedBox(height: 5),
 
               Text(
                 'Instructors from your active courses will appear here.',
-                textAlign:
-                    TextAlign.center,
-                style:
-                    TextStyle(
-                  color: textGrey,
-                ),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: textGrey),
               ),
             ],
           ),
@@ -394,120 +283,63 @@ class _StudentMessagesScreenState
       return const Center(
         child: Text(
           'No matching conversations.',
-          style: TextStyle(
-            color: textGrey,
-            fontWeight:
-                FontWeight.w600,
-          ),
+          style: TextStyle(color: textGrey, fontWeight: FontWeight.w600),
         ),
       );
     }
 
-    return StreamBuilder<
-        List<Map<String, dynamic>>>(
-      stream:
-          _chatService
-              .watchMyConversations(),
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _chatService.watchStudentConversations(),
 
-      builder: (
-        context,
-        snapshot,
-      ) {
+      builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const Center(
             child: Text(
               'Unable to load conversation updates.',
-              style: TextStyle(
-                color: textGrey,
-              ),
+              style: TextStyle(color: textGrey),
             ),
           );
         }
 
-        final List<Map<String, dynamic>>
-            conversations =
-            snapshot.data ?? [];
+        final List<Map<String, dynamic>> conversations = snapshot.data ?? [];
 
         return RefreshIndicator(
-          onRefresh:
-              _loadContacts,
+          onRefresh: _loadContacts,
 
-          color:
-              primaryBlue,
+          color: primaryBlue,
 
           child: ListView.builder(
-            physics:
-                const AlwaysScrollableScrollPhysics(
-              parent:
-                  BouncingScrollPhysics(),
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
             ),
 
-            padding:
-                const EdgeInsets.fromLTRB(
-              20,
-              4,
-              20,
-              30,
-            ),
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 30),
 
-            itemCount:
-                _filteredContacts.length,
+            itemCount: _filteredContacts.length,
 
-            itemBuilder: (
-              context,
-              index,
-            ) {
-              final contact =
-                  _filteredContacts[index];
+            itemBuilder: (context, index) {
+              final contact = _filteredContacts[index];
 
-              final String courseId =
-                  (contact['courseId'] ??
-                          '')
-                      .toString();
+              final String instructorId = (contact['instructorId'] ?? '')
+                  .toString();
 
-              final String instructorId =
-                  (contact[
-                              'instructorId'] ??
-                          '')
-                      .toString();
+              final String studentId = (contact['studentId'] ?? '').toString();
 
-              final String studentId =
-                  (contact['studentId'] ??
-                          '')
-                      .toString();
+              Map<String, dynamic>? conversation;
 
-              // ----------------------------------------------
-              // Match using the exact new course-aware ID.
-              // This prevents old test conversations from
-              // being displayed accidentally.
-              // ----------------------------------------------
+              for (final item in conversations) {
+                final bool sameUserPair =
+                    (item['instructorId'] ?? '').toString() == instructorId &&
+                    (item['studentId'] ?? '').toString() == studentId;
 
-              final String expectedConversationId =
-                  _chatService
-                      .buildConversationId(
-                courseId: courseId,
-                instructorId:
-                    instructorId,
-                studentId: studentId,
-              );
-
-              Map<String, dynamic>?
-                  conversation;
-
-              for (final item
-                  in conversations) {
-                if ((item['id'] ?? '')
-                        .toString() ==
-                    expectedConversationId) {
+                if (sameUserPair &&
+                    (conversation == null ||
+                        _isConversationNewer(item, conversation))) {
                   conversation = item;
-                  break;
                 }
               }
 
-              return _buildContactCard(
-                contact,
-                conversation,
-              );
+              return _buildContactCard(contact, conversation);
             },
           ),
         );
@@ -523,105 +355,63 @@ class _StudentMessagesScreenState
     Map<String, dynamic> contact,
     Map<String, dynamic>? conversation,
   ) {
-    final String instructorName =
-        (contact['instructorName'] ??
-                'Instructor')
-            .toString();
+    final String instructorName = (contact['instructorName'] ?? 'Instructor')
+        .toString();
 
-    final String instructorEmail =
-        (contact['instructorEmail'] ??
-                '')
-            .toString();
+    final String instructorEmail = (contact['instructorEmail'] ?? '')
+        .toString();
 
-    final String courseCode =
-        (contact['courseCode'] ?? '')
-            .toString();
+    final int sharedCourseCount =
+        (contact['courseIds'] as List<dynamic>?)?.length ?? 0;
 
-    final String courseTitle =
-        (contact['courseTitle'] ?? '')
-            .toString();
+    final String relationshipLabel = sharedCourseCount <= 0
+        ? 'Direct conversation'
+        : '$sharedCourseCount shared ${sharedCourseCount == 1 ? 'course' : 'courses'}';
 
-    final String lastMessage =
-        (conversation?['lastMessage'] ??
-                '')
-            .toString();
+    final String lastMessage = (conversation?['lastMessage'] ?? '').toString();
 
-    final DateTime? lastMessageAt =
-        _toDate(
-      conversation?['lastMessageAt'],
-    );
+    final DateTime? lastMessageAt = _toDate(conversation?['lastMessageAt']);
 
-    final String initial =
-        instructorName.trim().isEmpty
-            ? '?'
-            : instructorName
-                .trim()[0]
-                .toUpperCase();
+    final String initial = instructorName.trim().isEmpty
+        ? '?'
+        : instructorName.trim()[0].toUpperCase();
 
     return InkWell(
-      borderRadius:
-          BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(18),
 
       onTap: () {
         Navigator.push(
           context,
 
           MaterialPageRoute(
-            builder: (
-              context,
-            ) =>
-                StudentChatScreen(
-              courseId:
-                  (contact['courseId'] ??
-                          '')
-                      .toString(),
+            builder: (context) => StudentChatScreen(
+              courseId: (contact['courseId'] ?? '').toString(),
 
-              studentId:
-                  (contact['studentId'] ??
-                          '')
-                      .toString(),
+              studentId: (contact['studentId'] ?? '').toString(),
 
-              studentName:
-                  (contact['studentName'] ??
-                          'Student')
-                      .toString(),
+              studentName: (contact['studentName'] ?? 'Student').toString(),
 
-              instructorId:
-                  (contact[
-                              'instructorId'] ??
-                          '')
-                      .toString(),
+              instructorId: (contact['instructorId'] ?? '').toString(),
 
-              instructorName:
-                  instructorName,
+              instructorName: instructorName,
 
-              instructorEmail:
-                  instructorEmail,
+              instructorEmail: instructorEmail,
             ),
           ),
         );
       },
 
       child: Container(
-        margin:
-            const EdgeInsets.only(
-          bottom: 11,
-        ),
+        margin: const EdgeInsets.only(bottom: 11),
 
-        padding:
-            const EdgeInsets.all(15),
+        padding: const EdgeInsets.all(15),
 
-        decoration:
-            BoxDecoration(
+        decoration: BoxDecoration(
           color: Colors.white,
 
-          borderRadius:
-              BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(18),
 
-          border:
-              Border.all(
-            color: borderColor,
-          ),
+          border: Border.all(color: borderColor),
         ),
 
         child: Row(
@@ -629,33 +419,24 @@ class _StudentMessagesScreenState
             CircleAvatar(
               radius: 23,
 
-              backgroundColor:
-                  primaryBlue.withValues(
-                alpha: 0.10,
-              ),
+              backgroundColor: primaryBlue.withValues(alpha: 0.10),
 
               child: Text(
                 initial,
 
-                style:
-                    const TextStyle(
-                  color:
-                      primaryBlue,
+                style: const TextStyle(
+                  color: primaryBlue,
 
-                  fontWeight:
-                      FontWeight.w800,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
 
-            const SizedBox(
-              width: 13,
-            ),
+            const SizedBox(width: 13),
 
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
 
                 children: [
                   Row(
@@ -666,116 +447,63 @@ class _StudentMessagesScreenState
 
                           maxLines: 1,
 
-                          overflow:
-                              TextOverflow
-                                  .ellipsis,
+                          overflow: TextOverflow.ellipsis,
 
-                          style:
-                              const TextStyle(
-                            color:
-                                textDark,
+                          style: const TextStyle(
+                            color: textDark,
 
-                            fontSize:
-                                14.5,
+                            fontSize: 14.5,
 
-                            fontWeight:
-                                FontWeight
-                                    .w800,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
 
-                      if (lastMessageAt !=
-                          null)
+                      if (lastMessageAt != null)
                         Text(
-                          _formatTime(
-                            lastMessageAt,
-                          ),
+                          _formatTime(lastMessageAt),
 
-                          style:
-                              const TextStyle(
-                            color:
-                                textGrey,
-
-                            fontSize:
-                                10,
-                          ),
+                          style: const TextStyle(color: textGrey, fontSize: 10),
                         ),
                     ],
                   ),
 
-                  const SizedBox(
-                    height: 3,
-                  ),
+                  const SizedBox(height: 3),
 
                   Text(
-                    [
-                      courseCode,
-                      courseTitle,
-                    ]
-                        .where(
-                          (value) =>
-                              value
-                                  .trim()
-                                  .isNotEmpty,
-                        )
-                        .join(' • '),
+                    relationshipLabel,
 
                     maxLines: 1,
 
-                    overflow:
-                        TextOverflow.ellipsis,
+                    overflow: TextOverflow.ellipsis,
 
-                    style:
-                        const TextStyle(
-                      color:
-                          primaryBlue,
+                    style: const TextStyle(
+                      color: primaryBlue,
 
-                      fontSize:
-                          11,
+                      fontSize: 11,
 
-                      fontWeight:
-                          FontWeight.w700,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
 
-                  const SizedBox(
-                    height: 5,
-                  ),
+                  const SizedBox(height: 5),
 
                   Text(
-                    lastMessage.isEmpty
-                        ? 'Start a conversation'
-                        : lastMessage,
+                    lastMessage.isEmpty ? 'Start a conversation' : lastMessage,
 
                     maxLines: 1,
 
-                    overflow:
-                        TextOverflow.ellipsis,
+                    overflow: TextOverflow.ellipsis,
 
-                    style:
-                        const TextStyle(
-                      color: textGrey,
-
-                      fontSize: 12,
-                    ),
+                    style: const TextStyle(color: textGrey, fontSize: 12),
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(
-              width: 8,
-            ),
+            const SizedBox(width: 8),
 
-            const Icon(
-              Icons.chevron_right_rounded,
-
-              color:
-                  Color(
-                0xFF9AA3B3,
-              ),
-            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF9AA3B3)),
           ],
         ),
       ),
@@ -786,9 +514,7 @@ class _StudentMessagesScreenState
   // DATE HELPERS
   // ============================================================
 
-  DateTime? _toDate(
-    dynamic value,
-  ) {
+  DateTime? _toDate(dynamic value) {
     if (value is Timestamp) {
       return value.toDate();
     }
@@ -800,28 +526,33 @@ class _StudentMessagesScreenState
     return null;
   }
 
-  String _formatTime(
-    DateTime value,
+  bool _isConversationNewer(
+    Map<String, dynamic> candidate,
+    Map<String, dynamic> current,
   ) {
-    final int hour =
-        value.hour == 0
-            ? 12
-            : value.hour > 12
-                ? value.hour - 12
-                : value.hour;
+    final DateTime? candidateTime = _toDate(candidate['lastMessageAt']);
+    final DateTime? currentTime = _toDate(current['lastMessageAt']);
 
-    final String minute =
-        value.minute
-            .toString()
-            .padLeft(
-              2,
-              '0',
-            );
+    if (candidateTime == null) {
+      return false;
+    }
+    if (currentTime == null) {
+      return true;
+    }
 
-    final String period =
-        value.hour >= 12
-            ? 'PM'
-            : 'AM';
+    return candidateTime.isAfter(currentTime);
+  }
+
+  String _formatTime(DateTime value) {
+    final int hour = value.hour == 0
+        ? 12
+        : value.hour > 12
+        ? value.hour - 12
+        : value.hour;
+
+    final String minute = value.minute.toString().padLeft(2, '0');
+
+    final String period = value.hour >= 12 ? 'PM' : 'AM';
 
     return '$hour:$minute $period';
   }

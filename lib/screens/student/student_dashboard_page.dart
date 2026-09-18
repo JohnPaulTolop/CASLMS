@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../services/enrollment_service.dart';
 
 import 'notifications_page.dart';
+import 'student_course_invitations_page.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
   final Function(int)? onNavigateToTab;
@@ -437,61 +438,17 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   }
 
   // ============================================================
-  // JOIN CLASS
-  //
-  // IMPORTANT:
-  //
-  // No BuildContext is passed across the async boundary.
-  // The bottom sheet has its own State.
+  // COURSE INVITATIONS
   // ============================================================
 
-  Future<void> _showJoinSubjectModal() async {
-    final Map<String, dynamic>? joinedCourse =
-        await showModalBottomSheet<Map<String, dynamic>>(
-          context: context,
-
-          isScrollControlled: true,
-
-          backgroundColor: Colors.transparent,
-
-          // Prevent the parent dashboard from rebuilding
-          // while a reverse overlay animation is tearing down.
-          sheetAnimationStyle: AnimationStyle.noAnimation,
-
-          builder: (BuildContext sheetContext) {
-            return _JoinClassSheet(enrollmentService: _enrollmentService);
-          },
-        );
-
-    // This mounted check protects the State.context
-    // after awaiting the bottom sheet.
-    if (!mounted || joinedCourse == null) {
-      return;
-    }
-
-    final String code = (joinedCourse['code'] ?? '').toString().trim();
-
-    final String title = (joinedCourse['title'] ?? 'Class').toString().trim();
-
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-
-    messenger.hideCurrentSnackBar();
-
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          code.isEmpty
-              ? 'Successfully joined $title.'
-              : 'Successfully joined $code • $title.',
-        ),
-
-        backgroundColor: green,
-
-        behavior: SnackBarBehavior.floating,
+  Future<void> _openCourseInvitations() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const StudentCourseInvitationsScreen(),
       ),
     );
 
-    // Refresh only after the sheet returned.
+    if (!mounted) return;
     await _loadDashboard(showLoading: false);
   }
 
@@ -655,12 +612,12 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           height: 52,
 
           child: OutlinedButton.icon(
-            onPressed: _showJoinSubjectModal,
+            onPressed: _openCourseInvitations,
 
-            icon: const Icon(Icons.add_rounded),
+            icon: const Icon(Icons.mark_email_unread_outlined),
 
             label: const Text(
-              'Join a Class',
+              'View Course Invitations',
 
               style: TextStyle(fontWeight: FontWeight.w800),
             ),
@@ -1469,14 +1426,18 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   }
 }
 
+/*
 // ============================================================
-// JOIN CLASS BOTTOM SHEET
+// LEGACY CLASS-CODE ENROLLMENT (DISABLED)
 //
 // This is deliberately its OWN StatefulWidget.
 //
 // We do NOT use StatefulBuilder for the Firestore operation.
 // ============================================================
 
+// Kept temporarily for compatibility with older compiled routes. New
+// enrollment is handled exclusively by StudentCourseInvitationsScreen.
+// ignore: unused_element
 class _JoinClassSheet extends StatefulWidget {
   final EnrollmentService enrollmentService;
 
@@ -1802,3 +1763,4 @@ class _JoinClassSheetState extends State<_JoinClassSheet> {
     );
   }
 }
+*/

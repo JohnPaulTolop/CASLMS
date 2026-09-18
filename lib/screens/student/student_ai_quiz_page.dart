@@ -15,8 +15,7 @@ class StudentAiQuizScreen extends StatefulWidget {
   final String moduleId;
 
   @override
-  State<StudentAiQuizScreen> createState() =>
-      _StudentAiQuizScreenState();
+  State<StudentAiQuizScreen> createState() => _StudentAiQuizScreenState();
 }
 
 class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
@@ -35,7 +34,11 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
   bool _isSubmitting = false;
   bool _hasSubmitted = false;
   bool _confirming = false;
+  bool _hasStarted = false;
+  bool _isStarting = false;
 
+  int _lastAnsweredQuestion = 0;
+  Future<void> _draftWriteChain = Future<void>.value();
   String? _errorMessage;
   Map<String, dynamic>? _assessment;
 
@@ -55,7 +58,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
       (_assessment?['instructions'] ?? '').toString().trim();
 
   int get _totalPoints =>
-      _questions.fold<int>(0, (sum, question) => sum + question.points);
+    _questions.fold<int>(0, (total, question) => total + question.points);
 
   bool get _allAnswered =>
       _questions.isNotEmpty && _answers.length == _questions.length;
@@ -71,8 +74,18 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
     if (date == null) return 'No due date';
 
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
 
     final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
@@ -93,10 +106,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
     }
   }
 
-  void _validateEnrollment(
-    Map<String, dynamic>? enrollment,
-    String studentId,
-  ) {
+  void _validateEnrollment(Map<String, dynamic>? enrollment, String studentId) {
     if (enrollment == null ||
         enrollment['status'] != 'active' ||
         enrollment['courseId'] != widget.courseId ||
@@ -152,10 +162,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
         throw Exception('You must be logged in to take this quiz.');
       }
 
-      final profile = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      final profile = await _firestore.collection('users').doc(user.uid).get();
 
       _validateStudent(profile.data());
 
@@ -183,13 +190,34 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
 
       final questions = _parseQuestions(assessment!['questions']);
 
+      final draftDocument = await _firestore
+          .collection('aiQuizDrafts')
+          .doc('${widget.assessmentId}_${user.uid}')
+          .get();
+
+      final draftData = draftDocument.data();
+      final restoredAnswers = _parseDraftAnswers(
+        draftData?['answers'],
+        questions,
+      );
+
+      final lastAnsweredQuestion = _restoreLastAnsweredQuestion(
+        draftData,
+        restoredAnswers,
+        questions.length,
+      );
+
       if (!mounted) return;
 
       setState(() {
         _assessment = assessment;
         _questions = questions;
-        _answers.clear();
-        _currentQuestion = 0;
+        _answers
+          ..clear()
+          ..addAll(restoredAnswers);
+        _currentQuestion = lastAnsweredQuestion;
+        _lastAnsweredQuestion = lastAnsweredQuestion;
+        _hasStarted = draftDocument.exists;
         _isLoading = false;
       });
     } catch (error) {
@@ -255,6 +283,185 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
     return result;
   }
 
+  Map<int, int> _parseDraftAnswers(
+    dynamic rawAnswers,
+    List<_QuizQuestion> questions,
+  ) {
+    final restored = <int, int>{};
+
+    if (rawAnswers is! List) {
+      return restored;
+    }
+
+    for (final rawAnswer in rawAnswers) {
+      if (rawAnswer is! Map) continue;
+
+      final data = Map<String, dynamic>.from(rawAnswer);
+      final order = data['order'];
+      final selected = data['selectedAnswerIndex'];
+
+      if (order is! num || selected is! num) continue;
+
+      final questionIndex = order.toInt() - 1;
+      final selectedIndex = selected.toInt();
+
+      if (questionIndex < 0 || questionIndex >= questions.length) continue;
+      if (selectedIndex < 0 ||
+          selectedIndex >= questions[questionIndex].options.length) {
+        continue;
+      }
+
+      restored[questionIndex] = selectedIndex;
+    }
+
+    return restored;
+  }
+
+  int _restoreLastAnsweredQuestion(
+    Map<String, dynamic>? draft,
+    Map<int, int> restoredAnswers,
+    int questionCount,
+  ) {
+    if (questionCount <= 0) return 0;
+
+    final storedIndex = draft?['lastAnsweredQuestion'];
+
+    if (storedIndex is num) {
+      final index = storedIndex.toInt();
+      if (index >= 0 && index < questionCount) {
+        return index;
+      }
+    }
+
+    if (restoredAnswers.isEmpty) return 0;
+
+    return restoredAnswers.keys.reduce(
+      (current, next) => current > next ? current : next,
+    );
+  }
+
+  List<Map<String, dynamic>> _draftAnswersSnapshot() {
+    final entries = _answers.entries.toList()
+      ..sort((left, right) => left.key.compareTo(right.key));
+
+    return entries
+        .map(
+          (entry) => <String, dynamic>{
+            'order': entry.key + 1,
+            'selectedAnswerIndex': entry.value,
+          },
+        )
+        .toList();
+  }
+
+  Future<void> _startQuiz() async {
+    if (_isStarting || _hasStarted || _assessment == null) return;
+
+    setState(() => _isStarting = true);
+
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        throw Exception('You must be logged in to take this quiz.');
+      }
+
+      await _firestore
+          .collection('aiQuizDrafts')
+          .doc('${widget.assessmentId}_${user.uid}')
+          .set({
+            'assessmentId': widget.assessmentId,
+            'courseId': widget.courseId,
+            'moduleId': widget.moduleId,
+            'studentId': user.uid,
+            'answers': _draftAnswersSnapshot(),
+            'lastAnsweredQuestion': -1,
+            'startedAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      if (!mounted) return;
+
+      setState(() {
+        _hasStarted = true;
+        _currentQuestion = 0;
+        _lastAnsweredQuestion = 0;
+      });
+    } catch (error) {
+      _showError(error.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) {
+        setState(() => _isStarting = false);
+      }
+    }
+  }
+
+  void _selectAnswer(int selectedIndex) {
+    if (_isSubmitting || _hasSubmitted || !_hasStarted) return;
+
+    setState(() {
+      _answers[_currentQuestion] = selectedIndex;
+      _lastAnsweredQuestion = _currentQuestion;
+    });
+
+    _queueDraftSave();
+  }
+
+  void _queueDraftSave() {
+    final user = _auth.currentUser;
+    if (user == null || !_hasStarted || _hasSubmitted) return;
+
+    final answers = _draftAnswersSnapshot();
+    final lastAnsweredQuestion = _lastAnsweredQuestion;
+    final reference = _firestore
+        .collection('aiQuizDrafts')
+        .doc('${widget.assessmentId}_${user.uid}');
+
+    _draftWriteChain = _draftWriteChain
+        .then<void>((_) async {
+          await reference.set({
+            'assessmentId': widget.assessmentId,
+            'courseId': widget.courseId,
+            'moduleId': widget.moduleId,
+            'studentId': user.uid,
+            'answers': answers,
+            'lastAnsweredQuestion': lastAnsweredQuestion,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        })
+        .catchError((Object error) {
+          if (mounted && _hasStarted && !_hasSubmitted) {
+            _showError(
+              'Your answer is selected, but CASLMS could not save '
+              'the latest progress. Check your connection.',
+            );
+          }
+        });
+  }
+
+  void _returnToLastAnsweredQuestion() {
+    if (!_hasStarted || _hasSubmitted || _isSubmitting || _isStarting) {
+      return;
+    }
+
+    final target = _answers.isEmpty ? 0 : _lastAnsweredQuestion;
+
+    setState(() {
+      _currentQuestion = target.clamp(0, _questions.length - 1).toInt();
+    });
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text(
+          'This quiz attempt is active. Submit the quiz to leave it.',
+        ),
+        backgroundColor: primaryBlue,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Future<T?> _showModal<T>(WidgetBuilder builder) async {
     final navigator = Navigator.of(context, rootNavigator: true);
     final route = DialogRoute<T>(
@@ -266,43 +473,6 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
     final result = await navigator.push<T>(route);
     await route.completed;
     return result;
-  }
-
-  Future<void> _leaveQuiz() async {
-    if (_isSubmitting || _confirming) return;
-
-    if (_answers.isEmpty || _hasSubmitted) {
-      Navigator.of(context).pop();
-      return;
-    }
-
-    _confirming = true;
-
-    try {
-      final leave = await _showModal<bool>((dialogContext) {
-        return AlertDialog(
-          title: const Text('Leave Quiz?'),
-          content: const Text(
-            'Your selected answers have not been submitted and will be lost.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('Stay'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Leave', style: TextStyle(color: red)),
-            ),
-          ],
-        );
-      });
-
-      if (!mounted || leave != true) return;
-      Navigator.of(context).pop();
-    } finally {
-      _confirming = false;
-    }
   }
 
   Future<void> _submitQuiz() async {
@@ -347,6 +517,9 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
 
     if (!mounted || confirmed != true) return;
 
+    await _draftWriteChain;
+
+    if (!mounted) return;
     setState(() => _isSubmitting = true);
 
     try {
@@ -376,6 +549,10 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
           .collection('notifications')
           .doc('assessmentGrade_$submissionId');
 
+      final draftReference = _firestore
+          .collection('aiQuizDrafts')
+          .doc(submissionId);
+
       final result = await _firestore.runTransaction<_QuizResult>((
         transaction,
       ) async {
@@ -396,9 +573,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
         final latestQuestions = _parseQuestions(assessment!['questions']);
 
         if (_answers.length != latestQuestions.length) {
-          throw Exception(
-            'The quiz has changed. Reopen it before submitting.',
-          );
+          throw Exception('The quiz has changed. Reopen it before submitting.');
         }
 
         var score = 0;
@@ -448,9 +623,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
           );
         }
 
-        final percentage = totalPoints > 0
-            ? score / totalPoints * 100
-            : 0.0;
+        final percentage = totalPoints > 0 ? score / totalPoints * 100 : 0.0;
 
         final submissionData = <String, dynamic>{
           'assessmentId': widget.assessmentId,
@@ -503,6 +676,8 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
           'createdAt': FieldValue.serverTimestamp(),
         });
 
+        transaction.delete(draftReference);
+
         return _QuizResult(
           score: score,
           totalPoints: totalPoints,
@@ -513,7 +688,9 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
 
       if (!mounted) return;
 
-      setState(() => _hasSubmitted = true);
+      setState(() {
+        _hasSubmitted = true;
+      });
 
       await _showResult(result);
 
@@ -532,11 +709,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
     await _showModal<void>((dialogContext) {
       return AlertDialog(
         title: const Text('Quiz Submitted'),
-        icon: const Icon(
-          Icons.verified_rounded,
-          color: primaryBlue,
-          size: 42,
-        ),
+        icon: const Icon(Icons.verified_rounded, color: primaryBlue, size: 42),
         content: SizedBox(
           width: 560,
           height: 440,
@@ -563,8 +736,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
               Expanded(
                 child: ListView.separated(
                   itemCount: result.items.length,
-                  separatorBuilder: (_, index) =>
-                      const SizedBox(height: 10),
+                  separatorBuilder: (_, index) => const SizedBox(height: 10),
                   itemBuilder: (_, index) {
                     final item = result.items[index];
                     final color = item.correct ? green : red;
@@ -591,18 +763,14 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                                 size: 20,
                               ),
                               const SizedBox(width: 8),
-                              Expanded(
-                                child: Text('Question ${item.order}'),
-                              ),
+                              Expanded(child: Text('Question ${item.order}')),
                               Text('${item.earned}/${item.possible}'),
                             ],
                           ),
                           const SizedBox(height: 8),
                           Text(
                             item.question,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           const SizedBox(height: 7),
                           Text(
@@ -671,9 +839,9 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope<Object?>(
-      canPop: !_isSubmitting && (_answers.isEmpty || _hasSubmitted),
+      canPop: !_hasStarted || _hasSubmitted,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) _leaveQuiz();
+        if (!didPop) _returnToLastAnsweredQuestion();
       },
       child: Scaffold(
         backgroundColor: background,
@@ -682,18 +850,20 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
           foregroundColor: textDark,
           centerTitle: true,
           leading: IconButton(
-            onPressed: _isSubmitting ? null : _leaveQuiz,
+            onPressed: _isSubmitting || _isStarting
+                ? null
+                : _hasStarted
+                ? _returnToLastAnsweredQuestion
+                : () => Navigator.of(context).pop(),
             icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           ),
-          title: const Text(
-            'Take Quiz',
+          title: Text(
+            _hasStarted ? 'Take Quiz' : 'Quiz Overview',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
           ),
         ),
         body: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: primaryBlue),
-              )
+            ? const Center(child: CircularProgressIndicator(color: primaryBlue))
             : _errorMessage != null
             ? Center(
                 child: Padding(
@@ -701,16 +871,9 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
-                        Icons.error_outline,
-                        color: red,
-                        size: 52,
-                      ),
+                      const Icon(Icons.error_outline, color: red, size: 52),
                       const SizedBox(height: 14),
-                      Text(
-                        _errorMessage!,
-                        textAlign: TextAlign.center,
-                      ),
+                      Text(_errorMessage!, textAlign: TextAlign.center),
                       const SizedBox(height: 14),
                       TextButton(
                         onPressed: _loadQuiz,
@@ -720,7 +883,223 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                   ),
                 ),
               )
-            : _buildQuiz(),
+            : _hasStarted
+            ? _buildQuiz()
+            : _buildOverview(),
+      ),
+    );
+  }
+
+  Widget _buildOverview() {
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 36),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: primaryBlue.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: const Icon(
+                          Icons.quiz_rounded,
+                          color: primaryBlue,
+                          size: 32,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        _title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: textDark,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      if (_instructions.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          _instructions,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: textGrey,
+                            fontSize: 13,
+                            height: 1.5,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 22),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          _overviewStat(
+                            icon: Icons.help_outline_rounded,
+                            value: '${_questions.length}',
+                            label: 'Questions',
+                          ),
+                          _overviewStat(
+                            icon: Icons.stars_rounded,
+                            value: '$_totalPoints',
+                            label: 'Total points',
+                          ),
+                          _overviewStat(
+                            icon: Icons.event_outlined,
+                            value: _formatDate(_assessment?['dueAt']),
+                            label: 'Due date',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF8E8),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: const Color(0xFFFFD98A)),
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.lock_clock_outlined,
+                            color: Color(0xFFB66A00),
+                          ),
+                          SizedBox(width: 9),
+                          Text(
+                            'Before you begin',
+                            style: TextStyle(
+                              color: textDark,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 12),
+                      Text(
+                        '• Starting creates an active quiz attempt.\n'
+                        '• Every answer is saved automatically.\n'
+                        '• Back cannot close an active attempt.\n'
+                        '• Reopening the quiz returns to your latest answered item.\n'
+                        '• Submit only after reviewing all answers.',
+                        style: TextStyle(
+                          color: textGrey,
+                          fontSize: 12.5,
+                          height: 1.7,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _isStarting
+                            ? null
+                            : () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.arrow_back_rounded),
+                        label: const Text('Not Yet'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: FilledButton.icon(
+                        onPressed: _isStarting ? null : _startQuiz,
+                        icon: _isStarting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.play_arrow_rounded),
+                        label: Text(_isStarting ? 'Starting...' : 'Begin Quiz'),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: primaryBlue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _overviewStat({
+    required IconData icon,
+    required String value,
+    required String label,
+  }) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 150),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: primaryBlue, size: 20),
+          const SizedBox(width: 9),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 210),
+                child: Text(
+                  value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: textDark,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              Text(
+                label,
+                style: const TextStyle(color: textGrey, fontSize: 10.5),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -824,9 +1203,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                                   child: Text(
                                     '${index + 1}',
                                     style: TextStyle(
-                                      color: current
-                                          ? Colors.white
-                                          : textDark,
+                                      color: current ? Colors.white : textDark,
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
@@ -881,11 +1258,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                                   borderRadius: BorderRadius.circular(14),
                                   onTap: _isSubmitting || _hasSubmitted
                                       ? null
-                                      : () {
-                                          setState(() {
-                                            _answers[_currentQuestion] = index;
-                                          });
-                                        },
+                                      : () => _selectAnswer(index),
                                   child: Container(
                                     padding: const EdgeInsets.all(13),
                                     decoration: BoxDecoration(

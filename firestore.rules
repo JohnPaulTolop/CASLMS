@@ -218,59 +218,299 @@ service cloud.firestore {
     }
 
     // ============================================================
+    // VERIFIED COURSE INVITATIONS
+    // ============================================================
+
+    match /courseInvitations/{invitationId} {
+      function validInvitationIdentity(data) {
+        let course = get(
+          /databases/$(database)/documents/courses/$(data.courseId)
+        ).data;
+
+        let student = get(
+          /databases/$(database)/documents/users/$(data.studentId)
+        ).data;
+
+        return
+          data.keys().hasOnly([
+            'courseId',
+            'courseCode',
+            'courseTitle',
+            'instructorId',
+            'instructorName',
+            'studentId',
+            'studentCampusId',
+            'studentName',
+            'studentEmail',
+            'status',
+            'createdAt',
+            'updatedAt',
+            'respondedAt'
+          ]) &&
+          data.courseId is string &&
+          data.courseCode is string &&
+          data.courseTitle is string &&
+          data.instructorId is string &&
+          data.instructorName is string &&
+          data.studentId is string &&
+          data.studentCampusId is string &&
+          data.studentName is string &&
+          data.studentEmail is string &&
+          invitationId ==
+            data.courseId + "_" + data.studentId &&
+          course.instructorId == data.instructorId &&
+          course.status == 'active' &&
+          student.uid == data.studentId &&
+          student.role == 'student' &&
+          student.status == 'active' &&
+          student.universityId == data.studentCampusId;
+      }
+
+      function invitationIdentityIsUnchanged() {
+        return
+          request.resource.data.courseId == resource.data.courseId &&
+          request.resource.data.courseCode == resource.data.courseCode &&
+          request.resource.data.courseTitle == resource.data.courseTitle &&
+          request.resource.data.instructorId == resource.data.instructorId &&
+          request.resource.data.instructorName == resource.data.instructorName &&
+          request.resource.data.studentId == resource.data.studentId &&
+          request.resource.data.studentCampusId == resource.data.studentCampusId &&
+          request.resource.data.studentName == resource.data.studentName &&
+          request.resource.data.studentEmail == resource.data.studentEmail;
+      }
+
+      function acceptedEnrollmentExistsAfter() {
+        let enrollmentPath =
+          /databases/$(database)/documents/enrollments/$(invitationId);
+
+        let enrollment = getAfter(enrollmentPath).data;
+
+        return
+          existsAfter(enrollmentPath) &&
+          enrollment.courseId == resource.data.courseId &&
+          enrollment.studentId == request.auth.uid &&
+          enrollment.invitationId == invitationId &&
+          enrollment.invitedBy == resource.data.instructorId &&
+          enrollment.enrollmentSource == 'instructor_invitation' &&
+          enrollment.status == 'active';
+      }
+
+      allow get: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          (
+            !exists(
+              /databases/$(database)/documents/courseInvitations/$(invitationId)
+            )
+            ||
+            ownsCourse(resource.data.courseId)
+          )
+        )
+        ||
+        (
+          isStudent() &&
+          resource.data.studentId == request.auth.uid
+        );
+
+      allow list: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(resource.data.courseId)
+        )
+        ||
+        (
+          isStudent() &&
+          resource.data.studentId == request.auth.uid
+        );
+
+      allow create: if
+        isInstructor() &&
+        validInvitationIdentity(request.resource.data) &&
+        request.resource.data.instructorId == request.auth.uid &&
+        request.resource.data.status == 'pending' &&
+        request.resource.data.createdAt == request.time &&
+        request.resource.data.updatedAt == request.time &&
+        request.resource.data.respondedAt == null;
+
+      allow update: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(resource.data.courseId) &&
+          invitationIdentityIsUnchanged() &&
+          validInvitationIdentity(request.resource.data) &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly([
+              'status',
+              'createdAt',
+              'updatedAt',
+              'respondedAt'
+            ]) &&
+          request.resource.data.updatedAt == request.time &&
+          (
+            (
+              resource.data.status == 'pending' &&
+              request.resource.data.status == 'cancelled' &&
+              request.resource.data.createdAt == resource.data.createdAt &&
+              request.resource.data.respondedAt == request.time
+            )
+            ||
+            (
+              resource.data.status in ['accepted', 'declined', 'cancelled'] &&
+              request.resource.data.status == 'pending' &&
+              request.resource.data.createdAt == request.time &&
+              request.resource.data.respondedAt == null
+            )
+          )
+        )
+        ||
+        (
+          isStudent() &&
+          resource.data.studentId == request.auth.uid &&
+          resource.data.status == 'pending' &&
+          invitationIdentityIsUnchanged() &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.updatedAt == request.time &&
+          request.resource.data.respondedAt == request.time &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly([
+              'status',
+              'updatedAt',
+              'respondedAt'
+            ]) &&
+          request.resource.data.status in ['accepted', 'declined'] &&
+          (
+            request.resource.data.status == 'declined'
+            ||
+            acceptedEnrollmentExistsAfter()
+          )
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    // ============================================================
     // ENROLLMENTS
     // ============================================================
 
     match /enrollments/{enrollmentId} {
-      allow get: if isStaff() || (
-        isStudent() &&
-        enrollmentId.matches(
-          '.*_' + request.auth.uid
-        )
-      );
+      function acceptedInvitation(data) {
+        let invitationPath =
+          /databases/$(database)/documents/courseInvitations/$(enrollmentId);
 
-      allow list: if isStaff() || (
-        isStudent() &&
-        resource.data.studentId ==
-          request.auth.uid
-      );
+        let invitation = getAfter(invitationPath).data;
+
+        return
+          existsAfter(invitationPath) &&
+          invitation.status == 'accepted' &&
+          invitation.courseId == data.courseId &&
+          invitation.studentId == request.auth.uid &&
+          invitation.studentCampusId == currentUser().universityId &&
+          data.invitationId == enrollmentId &&
+          data.invitedBy == invitation.instructorId &&
+          data.enrollmentSource == 'instructor_invitation';
+      }
+
+      function validAcceptedEnrollment(data) {
+        return
+          data.keys().hasOnly([
+            'courseId',
+            'studentId',
+            'studentName',
+            'studentCampusId',
+            'status',
+            'enrollmentSource',
+            'invitationId',
+            'invitedBy',
+            'enrolledAt',
+            'acceptedAt'
+          ]) &&
+          data.courseId is string &&
+          data.studentId == request.auth.uid &&
+          data.studentName is string &&
+          data.studentCampusId == currentUser().universityId &&
+          data.status == 'active' &&
+          data.enrolledAt == request.time &&
+          data.acceptedAt == request.time &&
+          enrollmentId == data.courseId + "_" + request.auth.uid &&
+          acceptedInvitation(data);
+      }
+
+      allow get: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          (
+            !exists(
+              /databases/$(database)/documents/enrollments/$(enrollmentId)
+            )
+            ||
+            ownsCourse(resource.data.courseId)
+          )
+        )
+        ||
+        (
+          isStudent() &&
+          enrollmentId.matches('.*_' + request.auth.uid)
+        );
+
+      allow list: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(resource.data.courseId)
+        )
+        ||
+        (
+          isStudent() &&
+          resource.data.studentId == request.auth.uid
+        );
 
       allow create: if
-        isStudent() &&
-        request.resource.data.studentId ==
-          request.auth.uid &&
-        enrollmentId ==
-          request.resource.data.courseId +
-          "_" +
-          request.auth.uid &&
-        request.resource.data.status == 'active';
+        isAdmin()
+        ||
+        (
+          isStudent() &&
+          validAcceptedEnrollment(request.resource.data)
+        );
 
-      allow update: if isStaff() || (
-        isStudent() &&
-        resource.data.studentId ==
-          request.auth.uid &&
-        request.resource.data.studentId ==
-          resource.data.studentId &&
-        request.resource.data.courseId ==
-          resource.data.courseId &&
-        enrollmentId ==
-          resource.data.courseId +
-          "_" +
-          request.auth.uid &&
-        request.resource.data.status == 'active' &&
-        request.resource.data.diff(resource.data)
-          .affectedKeys().hasOnly([
-            'studentName',
-            'status',
-            'enrolledAt'
-          ])
-      );
+      allow update: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(resource.data.courseId) &&
+          request.resource.data.courseId == resource.data.courseId &&
+          request.resource.data.studentId == resource.data.studentId
+        )
+        ||
+        (
+          isStudent() &&
+          resource.data.studentId == request.auth.uid &&
+          request.resource.data.courseId == resource.data.courseId &&
+          request.resource.data.studentId == resource.data.studentId &&
+          validAcceptedEnrollment(request.resource.data)
+        );
 
-      allow delete: if isStaff() || (
-        isStudent() &&
-        resource.data.studentId ==
-          request.auth.uid
-      );
+      allow delete: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(resource.data.courseId)
+        )
+        ||
+        (
+          isStudent() &&
+          resource.data.studentId == request.auth.uid
+        );
     }
 
     // ============================================================
@@ -747,6 +987,95 @@ service cloud.firestore {
         );
 
       allow delete: if isAdmin();
+    }
+
+    // ============================================================
+    // PRIVATE AI QUIZ DRAFTS
+    // ============================================================
+
+    match /aiQuizDrafts/{draftId} {
+      function validDraftData(data) {
+        let assessment = get(
+          /databases/$(database)/documents/assessments/$(data.assessmentId)
+        ).data;
+
+        let enrollmentPath =
+          /databases/$(database)/documents/enrollments/$(data.courseId + '_' + request.auth.uid);
+
+        return
+          isStudent() &&
+          data.keys().hasOnly([
+            'assessmentId',
+            'courseId',
+            'moduleId',
+            'studentId',
+            'answers',
+            'lastAnsweredQuestion',
+            'startedAt',
+            'updatedAt'
+          ]) &&
+          data.assessmentId is string &&
+          data.courseId is string &&
+          data.moduleId is string &&
+          data.studentId == request.auth.uid &&
+          draftId ==
+            data.assessmentId + '_' + request.auth.uid &&
+          assessment.deliveryType == 'ai_generated' &&
+          assessment.assessmentType == 'quiz' &&
+          assessment.status == 'published' &&
+          data.courseId == assessment.courseId &&
+          data.moduleId == assessment.moduleId &&
+          assessment.questions is list &&
+          data.answers is list &&
+          data.answers.size() <= assessment.questions.size() &&
+          data.lastAnsweredQuestion is int &&
+          data.lastAnsweredQuestion >= -1 &&
+          data.lastAnsweredQuestion < assessment.questions.size() &&
+          data.updatedAt == request.time &&
+          exists(enrollmentPath) &&
+          get(enrollmentPath).data.studentId == request.auth.uid &&
+          get(enrollmentPath).data.courseId == data.courseId &&
+          get(enrollmentPath).data.status == 'active';
+      }
+
+      allow get: if
+        isStudent() &&
+        (
+          (
+            resource == null &&
+            draftId.matches('.*_' + request.auth.uid)
+          )
+          ||
+          (
+            resource != null &&
+            resource.data.studentId == request.auth.uid
+          )
+        );
+
+      allow create: if
+        validDraftData(request.resource.data) &&
+        request.resource.data.startedAt == request.time;
+
+      allow update: if
+        resource.data.studentId == request.auth.uid &&
+        request.resource.data.assessmentId == resource.data.assessmentId &&
+        request.resource.data.courseId == resource.data.courseId &&
+        request.resource.data.moduleId == resource.data.moduleId &&
+        request.resource.data.studentId == resource.data.studentId &&
+        request.resource.data.startedAt == resource.data.startedAt &&
+        request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly([
+            'answers',
+            'lastAnsweredQuestion',
+            'updatedAt'
+          ]) &&
+        validDraftData(request.resource.data);
+
+      allow delete: if
+        isStudent() &&
+        resource.data.studentId == request.auth.uid;
+
+      allow list: if false;
     }
 
     // ============================================================
@@ -1492,8 +1821,14 @@ service cloud.firestore {
 
       allow list: if
         isAdmin() ||
-        isConversationParticipant(
-          resource.data
+        (
+          isActive() &&
+          (
+            resource.data.instructorId ==
+              request.auth.uid ||
+            resource.data.studentId ==
+              request.auth.uid
+          )
         );
 
       allow create: if
@@ -1539,6 +1874,90 @@ service cloud.firestore {
           ).data;
         }
 
+        function validMessageParticipants(data) {
+          return
+            data.senderId == request.auth.uid &&
+            data.receiverId in conversation().participantIds &&
+            data.receiverId != request.auth.uid &&
+            data.sentAt == request.time &&
+            data.isRead == false;
+        }
+
+        function validTextMessage(data) {
+          return
+            data.keys().hasOnly([
+              'senderId',
+              'receiverId',
+              'text',
+              'sentAt',
+              'isRead'
+            ]) &&
+            data.text is string &&
+            data.text.size() > 0 &&
+            data.text.size() <= 20000;
+        }
+
+        function validAttachmentMessage(data) {
+          return
+            data.keys().hasOnly([
+              'senderId',
+              'receiverId',
+              'text',
+              'messageType',
+              'attachmentKind',
+              'attachmentName',
+              'attachmentUrl',
+              'attachmentPath',
+              'attachmentMimeType',
+              'attachmentSizeBytes',
+              'storageProvider',
+              'storageBucket',
+              'sentAt',
+              'isRead'
+            ]) &&
+            data.messageType == 'attachment' &&
+            data.attachmentKind in ['image', 'file'] &&
+            data.text is string &&
+            data.text.size() <= 20000 &&
+            data.attachmentName is string &&
+            data.attachmentName.size() > 0 &&
+            data.attachmentName.size() <= 255 &&
+            data.attachmentUrl is string &&
+            data.attachmentUrl.matches(
+              'https://jymjlterjhznsxrwpjqz.supabase.co/storage/v1/object/public/caslms-learning-materials/.*'
+            ) &&
+            data.attachmentPath is string &&
+            data.attachmentPath.matches(
+              'courses/' +
+              conversation().courseId +
+              '/chats/' +
+              conversationId +
+              '/' +
+              messageId +
+              '/.*'
+            ) &&
+            data.attachmentMimeType is string &&
+            (
+              data.attachmentMimeType.matches('image/.*')
+              ||
+              data.attachmentMimeType in [
+                'application/pdf',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'application/vnd.ms-powerpoint',
+                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                'application/vnd.ms-excel',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                'text/plain'
+              ]
+            ) &&
+            data.attachmentSizeBytes is int &&
+            data.attachmentSizeBytes > 0 &&
+            data.attachmentSizeBytes <= 15728640 &&
+            data.storageProvider == 'supabase' &&
+            data.storageBucket == 'caslms-learning-materials';
+        }
+
         allow read: if
           isAdmin() ||
           isConversationParticipant(
@@ -1549,12 +1968,18 @@ service cloud.firestore {
           isConversationParticipant(
             conversation()
           ) &&
-          request.resource.data.senderId ==
-            request.auth.uid &&
-          request.resource.data.receiverId in
-            conversation().participantIds &&
-          request.resource.data.receiverId !=
-            request.auth.uid;
+          validMessageParticipants(
+            request.resource.data
+          ) &&
+          (
+            validTextMessage(
+              request.resource.data
+            )
+            ||
+            validAttachmentMessage(
+              request.resource.data
+            )
+          );
 
         allow update: if isAdmin() || (
           isConversationParticipant(

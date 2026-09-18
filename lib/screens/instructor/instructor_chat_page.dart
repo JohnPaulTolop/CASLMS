@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../shared/chat_message_content.dart';
 import 'instructor_ui.dart';
 
 import '../../services/chat_service.dart';
@@ -219,6 +221,81 @@ class _InstructorChatScreenState extends State<InstructorChatScreen> {
         });
       }
     }
+  }
+
+  Future<void> _pickAndSendAttachment() async {
+    if (_isSending) return;
+
+    try {
+      final PlatformFile? file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: const [
+          'pdf',
+          'doc',
+          'docx',
+          'ppt',
+          'pptx',
+          'xls',
+          'xlsx',
+          'txt',
+          'jpg',
+          'jpeg',
+          'png',
+          'gif',
+          'webp',
+        ],
+      );
+
+      if (file == null || !mounted) return;
+
+      setState(() => _isSending = true);
+
+      final bytes = await file.readAsBytes();
+
+      if (bytes.isEmpty) {
+        throw ChatServiceException('The selected attachment is empty.');
+      }
+
+      if (bytes.length > ChatService.maximumAttachmentBytes) {
+        throw ChatServiceException(
+          'Chat attachments must be 15 MB or smaller.',
+        );
+      }
+
+      await _chatService.sendAttachment(
+        courseId: widget.courseId,
+        studentId: widget.studentId,
+        studentName: widget.studentName,
+        instructorId: widget.instructorId,
+        instructorName: widget.instructorName,
+        receiverId: widget.studentId,
+        fileName: file.name,
+        fileBytes: bytes,
+        caption: _messageController.text,
+      );
+
+      _messageController.clear();
+      _scrollToBottom();
+    } on ChatServiceException catch (error) {
+      _showSendError(error.message);
+    } catch (_) {
+      _showSendError('Unable to read or send the selected attachment.');
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  void _showSendError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   // ============================================================
@@ -531,8 +608,6 @@ class _InstructorChatScreenState extends State<InstructorChatScreen> {
 
     final bool isRead = message['isRead'] == true;
 
-    final String text = (message['text'] ?? '').toString();
-
     final DateTime? sentAt = _toDate(message['sentAt']);
 
     return Align(
@@ -566,13 +641,11 @@ class _InstructorChatScreenState extends State<InstructorChatScreen> {
               : CrossAxisAlignment.start,
 
           children: [
-            Text(
-              text,
-              style: TextStyle(
-                color: isMe ? Colors.white : textDark,
-                fontSize: 13.5,
-                height: 1.4,
-              ),
+            ChatMessageContent(
+              message: message,
+              isMine: isMe,
+              accentColor: primaryTeal,
+              textColor: isMe ? Colors.white : textDark,
             ),
 
             const SizedBox(height: 5),
@@ -623,16 +696,7 @@ class _InstructorChatScreenState extends State<InstructorChatScreen> {
         children: [
           IconButton(
             tooltip: 'Attach file',
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Chat attachments will be connected to storage later.',
-                  ),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
+            onPressed: _isSending ? null : _pickAndSendAttachment,
             icon: const Icon(Icons.attach_file_rounded, color: textGrey),
           ),
 
@@ -713,7 +777,10 @@ class _InstructorChatScreenState extends State<InstructorChatScreen> {
 
                 _buildInfoRow('Email', widget.studentEmail),
 
-                _buildInfoRow('Course ID', widget.courseId),
+                _buildInfoRow(
+                  'Conversation type',
+                  'Direct student-instructor conversation',
+                ),
 
                 _buildInfoRow('Conversation ID', _conversationId),
               ],

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../shared/learner_assistant_page.dart';
+import '../shared/role_navigation_bar.dart';
+import 'instructor_messages_page.dart';
+
 import 'instructor_ui.dart';
 
 import 'instructor_dashboard_page.dart';
@@ -17,10 +21,12 @@ class InstructorMainScreen extends StatefulWidget {
 
 class _InstructorMainScreenState extends State<InstructorMainScreen> {
   int _selectedIndex = 0;
+  final Set<int> _openedTabs = <int>{};
 
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
+      _openedTabs.add(index);
     });
   }
 
@@ -32,6 +38,12 @@ class _InstructorMainScreenState extends State<InstructorMainScreen> {
       const InstructorGradingScreen(),
       const InstructorAnalyticsScreen(),
       const InstructorProfileScreen(),
+      _openedTabs.contains(5)
+          ? const InstructorMessagesScreen()
+          : const SizedBox.shrink(),
+      _openedTabs.contains(6)
+          ? const LearnerAssistantScreen(role: 'instructor')
+          : const SizedBox.shrink(),
     ];
 
     return instructorScaffold(
@@ -44,57 +56,10 @@ class _InstructorMainScreenState extends State<InstructorMainScreen> {
           child: IndexedStack(index: _selectedIndex, children: pages),
         ),
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          border: const Border(top: BorderSide(color: InstructorUi.border)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.045),
-              blurRadius: 18,
-              offset: const Offset(0, -6),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: Center(
-            heightFactor: 1,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1200),
-              child: NavigationBar(
-                selectedIndex: _selectedIndex,
-                onDestinationSelected: _onItemTapped,
-                destinations: const [
-                  NavigationDestination(
-                    icon: Icon(Icons.dashboard_outlined),
-                    selectedIcon: Icon(Icons.dashboard_rounded),
-                    label: 'Home',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.class_outlined),
-                    selectedIcon: Icon(Icons.class_rounded),
-                    label: 'Classes',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.fact_check_outlined),
-                    selectedIcon: Icon(Icons.fact_check_rounded),
-                    label: 'Grading',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.insights_outlined),
-                    selectedIcon: Icon(Icons.insights_rounded),
-                    label: 'Analytics',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.person_outline_rounded),
-                    selectedIcon: Icon(Icons.person_rounded),
-                    label: 'Profile',
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+      bottomNavigationBar: RoleNavigationBar(
+        selectedIndex: _selectedIndex,
+        onSelected: _onItemTapped,
+        instructor: true,
       ),
     );
   }

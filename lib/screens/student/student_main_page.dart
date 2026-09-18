@@ -4,6 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../shared/learner_assistant_page.dart';
+import '../shared/role_navigation_bar.dart';
+import 'student_messages_page.dart';
+
 import 'modules_page.dart';
 import 'progress_page.dart';
 import 'student_assignments_page.dart';
@@ -18,13 +22,12 @@ class StudentMainScreen extends StatefulWidget {
 }
 
 class _StudentMainScreenState extends State<StudentMainScreen> {
-  static const primaryBlue = Color(0xFF1769FF);
-
   int _selectedIndex = 0;
+  final Set<int> _openedTabs = <int>{};
   late final List<Widget> _pages;
 
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
-      _notificationSubscription;
+  _notificationSubscription;
 
   final Set<String> _knownNotificationIds = {};
   bool _notificationBaselineLoaded = false;
@@ -39,6 +42,8 @@ class _StudentMainScreenState extends State<StudentMainScreen> {
       const StudentAssignmentsScreen(),
       const ProgressScreen(),
       const StudentProfileScreen(),
+      const StudentMessagesScreen(),
+      const LearnerAssistantScreen(role: 'student'),
     ];
 
     _startNotificationPopups();
@@ -58,7 +63,10 @@ class _StudentMainScreenState extends State<StudentMainScreen> {
       return;
     }
 
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      _openedTabs.add(index);
+    });
   }
 
   void _startNotificationPopups() {
@@ -98,8 +106,7 @@ class _StudentMainScreenState extends State<StudentMainScreen> {
               final type = data['type'];
               if (type != 'grade' && type != 'feedback') continue;
 
-              final title =
-                  (data['title'] ?? 'New notification').toString();
+              final title = (data['title'] ?? 'New notification').toString();
               final message = (data['message'] ?? '').toString();
 
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -134,71 +141,19 @@ class _StudentMainScreenState extends State<StudentMainScreen> {
           constraints: const BoxConstraints(maxWidth: 1200),
           child: IndexedStack(
             index: _selectedIndex,
-            children: _pages,
+            children: List.generate(
+              _pages.length,
+              (index) => index < 5 || _openedTabs.contains(index)
+                  ? _pages[index]
+                  : const SizedBox.shrink(),
+            ),
           ),
         ),
       ),
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -4),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: Center(
-            heightFactor: 1,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1200),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  splashColor: Colors.transparent,
-                  highlightColor: Colors.transparent,
-                ),
-                child: BottomNavigationBar(
-                  backgroundColor: Colors.white,
-                  elevation: 0,
-                  currentIndex: _selectedIndex,
-                  onTap: _onItemTapped,
-                  selectedItemColor: primaryBlue,
-                  unselectedItemColor: Colors.grey[400],
-                  showSelectedLabels: true,
-                  showUnselectedLabels: true,
-                  selectedFontSize: 10,
-                  unselectedFontSize: 10,
-                  type: BottomNavigationBarType.fixed,
-                  iconSize: 24,
-                  items: const [
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.home_rounded),
-                      label: 'Home',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.folder_rounded),
-                      label: 'Modules',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.assignment_rounded),
-                      label: 'Tasks',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.timeline_rounded),
-                      label: 'Progress',
-                    ),
-                    BottomNavigationBarItem(
-                      icon: Icon(Icons.person_outline_rounded),
-                      label: 'Profile',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
+      bottomNavigationBar: RoleNavigationBar(
+        selectedIndex: _selectedIndex,
+        onSelected: _onItemTapped,
+        instructor: false,
       ),
     );
   }

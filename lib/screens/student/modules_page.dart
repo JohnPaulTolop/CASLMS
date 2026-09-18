@@ -535,7 +535,7 @@ class _ModulesScreenState extends State<ModulesScreen> {
           ),
           SizedBox(height: 6),
           Text(
-            'Use Join Class on the Home page to enroll in a course.',
+            'Open Course Invitations on the Home page and accept an invitation from your instructor.',
             textAlign: TextAlign.center,
             style: TextStyle(color: greyText, fontSize: 12),
           ),

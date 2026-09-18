@@ -179,7 +179,7 @@ class _InstructorMessagesScreenState extends State<InstructorMessagesScreen> {
 
   Widget _buildConversationList() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _chatService.watchMyConversations(),
+      stream: _chatService.watchInstructorConversations(),
 
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting &&
@@ -209,54 +209,58 @@ class _InstructorMessagesScreenState extends State<InstructorMessagesScreen> {
 
         final String query = _searchQuery.trim().toLowerCase();
 
-        final List<Map<String, dynamic>>
-        conversations = (snapshot.data ?? []).where((conversation) {
-          // --------------------------------------------
-          // Must belong to current instructor
-          // --------------------------------------------
+        final Map<String, Map<String, dynamic>> latestByStudent =
+            <String, Map<String, dynamic>>{};
 
+        for (final Map<String, dynamic> conversation in snapshot.data ?? []) {
           if ((conversation['instructorId'] ?? '').toString() != instructorId) {
-            return false;
+            continue;
           }
-
-          final String courseId = (conversation['courseId'] ?? '').toString();
 
           final String studentId = (conversation['studentId'] ?? '').toString();
+          final String courseId = (conversation['courseId'] ?? '').toString();
 
-          if (courseId.isEmpty || studentId.isEmpty) {
-            return false;
+          if (studentId.isEmpty || courseId.isEmpty) {
+            continue;
           }
 
-          // --------------------------------------------
-          // Ignore old pair-only test conversations.
-          // --------------------------------------------
+          final Map<String, dynamic>? current = latestByStudent[studentId];
 
-          final String expectedId = _chatService.buildConversationId(
-            courseId: courseId,
+          if (current == null || _isConversationNewer(conversation, current)) {
+            latestByStudent[studentId] = conversation;
+          }
+        }
 
-            instructorId: instructorId,
+        final List<Map<String, dynamic>> conversations = latestByStudent.values
+            .where((conversation) {
+              if (query.isEmpty) {
+                return true;
+              }
 
-            studentId: studentId,
-          );
+              final String studentName = (conversation['studentName'] ?? '')
+                  .toString()
+                  .toLowerCase();
 
-          if ((conversation['id'] ?? '').toString() != expectedId) {
-            return false;
+              return studentName.contains(query);
+            })
+            .toList();
+
+        conversations.sort((a, b) {
+          final DateTime? aTime = _toDate(a['lastMessageAt']);
+          final DateTime? bTime = _toDate(b['lastMessageAt']);
+
+          if (aTime == null && bTime == null) {
+            return 0;
+          }
+          if (aTime == null) {
+            return 1;
+          }
+          if (bTime == null) {
+            return -1;
           }
 
-          // --------------------------------------------
-          // SEARCH
-          // --------------------------------------------
-
-          if (query.isEmpty) {
-            return true;
-          }
-
-          final String studentName = (conversation['studentName'] ?? '')
-              .toString()
-              .toLowerCase();
-
-          return studentName.contains(query);
-        }).toList();
+          return bTime.compareTo(aTime);
+        });
 
         if (conversations.isEmpty) {
           return _buildEmptyState(query.isEmpty);
@@ -369,17 +373,8 @@ class _InstructorMessagesScreenState extends State<InstructorMessagesScreen> {
     return FutureBuilder<Map<String, dynamic>?>(
       future: _getCourseFuture(courseId),
 
-      builder: (context, courseSnapshot) {
-        final Map<String, dynamic>? course = courseSnapshot.data;
-
-        final String courseCode = (course?['code'] ?? '').toString();
-
-        final String courseTitle = (course?['title'] ?? '').toString();
-
-        final String courseLabel = [
-          courseCode,
-          courseTitle,
-        ].where((value) => value.trim().isNotEmpty).join(' • ');
+      builder: (context, _) {
+        const String courseLabel = 'Direct conversation';
 
         return InkWell(
           borderRadius: BorderRadius.circular(18),
@@ -663,6 +658,23 @@ class _InstructorMessagesScreenState extends State<InstructorMessagesScreen> {
     }
 
     return null;
+  }
+
+  bool _isConversationNewer(
+    Map<String, dynamic> candidate,
+    Map<String, dynamic> current,
+  ) {
+    final DateTime? candidateTime = _toDate(candidate['lastMessageAt']);
+    final DateTime? currentTime = _toDate(current['lastMessageAt']);
+
+    if (candidateTime == null) {
+      return false;
+    }
+    if (currentTime == null) {
+      return true;
+    }
+
+    return candidateTime.isAfter(currentTime);
   }
 
   String _formatTime(DateTime date) {

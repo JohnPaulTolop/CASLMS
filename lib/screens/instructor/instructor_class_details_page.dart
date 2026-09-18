@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/course_invitation_service.dart';
 import 'instructor_ui.dart';
 
 import 'instructor_chat_page.dart';
@@ -78,6 +79,7 @@ class _InstructorClassDetailsScreenState
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final CourseInvitationService _invitationService = CourseInvitationService();
 
   // ============================================================
   // STATE
@@ -94,6 +96,12 @@ class _InstructorClassDetailsScreenState
   List<Map<String, dynamic>> _modules = [];
 
   List<Map<String, dynamic>> _students = [];
+
+  List<Map<String, dynamic>> _courseInvitations = [];
+
+  final Set<String> _busyInvitationIds = {};
+
+  bool _isSendingInvitation = false;
 
   List<Map<String, dynamic>> _assessments = [];
 
@@ -309,6 +317,13 @@ class _InstructorClassDetailsScreenState
       });
 
       // ========================================================
+      // COURSE INVITATIONS
+      // ========================================================
+
+      final List<Map<String, dynamic>> courseInvitations =
+          await _invitationService.getCourseInvitations(courseId: courseId);
+
+      // ========================================================
       // EXTERNAL ASSESSMENTS
       // ========================================================
 
@@ -363,6 +378,8 @@ class _InstructorClassDetailsScreenState
         _modules = modules;
 
         _students = students;
+
+        _courseInvitations = courseInvitations;
 
         _assessments = assessments;
 
@@ -560,6 +577,108 @@ class _InstructorClassDetailsScreenState
         ),
       ),
     );
+  }
+
+  // ============================================================
+  // VERIFIED COURSE INVITATIONS
+  // ============================================================
+
+  Future<void> _inviteStudent() async {
+    if (_isSendingInvitation || _courseId.isEmpty) return;
+
+    final String? campusId = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => const _InviteStudentDialog(),
+    );
+
+    if (!mounted || campusId == null || campusId.trim().isEmpty) return;
+
+    setState(() => _isSendingInvitation = true);
+
+    try {
+      final invitation = await _invitationService.inviteStudentByCampusId(
+        courseId: _courseId,
+        campusId: campusId,
+      );
+
+      if (!mounted) return;
+
+      final String studentName =
+          (invitation['studentName'] ?? invitation['studentCampusId'] ?? '')
+              .toString()
+              .trim();
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              studentName.isEmpty
+                  ? 'Course invitation sent.'
+                  : 'Invitation sent to $studentName.',
+            ),
+            backgroundColor: green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+      await _loadCourseData();
+    } on CourseInvitationException catch (error) {
+      _showError(error.message);
+    } catch (_) {
+      _showError('Unable to send the course invitation.');
+    } finally {
+      if (mounted) setState(() => _isSendingInvitation = false);
+    }
+  }
+
+  Future<void> _cancelInvitation(Map<String, dynamic> invitation) async {
+    final String invitationId =
+        (invitation['invitationId'] ?? invitation['id'] ?? '')
+            .toString()
+            .trim();
+    if (invitationId.isEmpty || _busyInvitationIds.contains(invitationId)) {
+      return;
+    }
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel invitation?'),
+        content: Text(
+          'Cancel the invitation for '
+          '${(invitation['studentName'] ?? invitation['studentCampusId'] ?? 'this student').toString()}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep Invitation'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: red),
+            child: const Text('Cancel Invitation'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted || confirmed != true) return;
+    setState(() => _busyInvitationIds.add(invitationId));
+
+    try {
+      await _invitationService.cancelInvitation(invitationId);
+      if (!mounted) return;
+      await _loadCourseData();
+    } on CourseInvitationException catch (error) {
+      _showError(error.message);
+    } catch (_) {
+      _showError('Unable to cancel the invitation.');
+    } finally {
+      if (mounted) {
+        setState(() => _busyInvitationIds.remove(invitationId));
+      }
+    }
   }
 
   // ============================================================
@@ -918,6 +1037,14 @@ class _InstructorClassDetailsScreenState
   // ============================================================
 
   Widget _buildRosterContent() {
+    final List<Map<String, dynamic>> pendingInvitations = _courseInvitations
+        .where(
+          (invitation) =>
+              (invitation['status'] ?? '').toString().toLowerCase() ==
+              'pending',
+        )
+        .toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -944,6 +1071,38 @@ class _InstructorClassDetailsScreenState
               ),
             ),
 
+            ElevatedButton.icon(
+              onPressed: _isSendingInvitation ? null : _inviteStudent,
+              icon: _isSendingInvitation
+                  ? const SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Icon(
+                      Icons.person_add_alt_1_rounded,
+                      color: Colors.white,
+                      size: 17,
+                    ),
+              label: Text(
+                _isSendingInvitation ? 'Sending...' : 'Invite',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryTeal,
+                elevation: 0,
+              ),
+            ),
+
+            const SizedBox(width: 9),
+
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
@@ -963,15 +1122,111 @@ class _InstructorClassDetailsScreenState
 
         const SizedBox(height: 16),
 
+        if (pendingInvitations.isNotEmpty) ...[
+          _buildPendingInvitations(pendingInvitations),
+          const SizedBox(height: 22),
+        ],
+
         if (_students.isEmpty)
           _buildEmptyState(
             icon: Icons.group_outlined,
             title: 'No students enrolled',
-            message: 'Students who join this class will appear here.',
+            message: 'Invite students using their registered Campus ID. They will appear here after accepting.',
           )
         else
           ..._students.map(_buildStudentCard),
       ],
+    );
+  }
+
+  Widget _buildPendingInvitations(List<Map<String, dynamic>> invitations) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: orange.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: orange.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.outgoing_mail, color: orange, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                '${invitations.length} pending '
+                '${invitations.length == 1 ? 'invitation' : 'invitations'}',
+                style: const TextStyle(
+                  color: textDark,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...invitations.map(_buildPendingInvitationRow),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingInvitationRow(Map<String, dynamic> invitation) {
+    final String invitationId =
+        (invitation['invitationId'] ?? invitation['id'] ?? '')
+            .toString()
+            .trim();
+    final String studentName = (invitation['studentName'] ?? 'Student')
+        .toString()
+        .trim();
+    final String campusId = (invitation['studentCampusId'] ?? '')
+        .toString()
+        .trim();
+    final bool busy = _busyInvitationIds.contains(invitationId);
+
+    return Container(
+      margin: const EdgeInsets.only(top: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          const CircleAvatar(
+            radius: 16,
+            backgroundColor: Color(0xFFFFF2DF),
+            child: Icon(Icons.schedule_rounded, color: orange, size: 17),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  studentName.isEmpty ? campusId : studentName,
+                  style: const TextStyle(
+                    color: textDark,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                  ),
+                ),
+                if (campusId.isNotEmpty)
+                  Text(
+                    'Campus ID: $campusId',
+                    style: const TextStyle(color: textGrey, fontSize: 10),
+                  ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: busy ? null : () => _cancelInvitation(invitation),
+            child: Text(busy ? 'Cancelling...' : 'Cancel'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1692,6 +1947,101 @@ class _InstructorClassDetailsScreenState
           ),
         ],
       ),
+    );
+  }
+}
+
+class _InviteStudentDialog extends StatefulWidget {
+  const _InviteStudentDialog();
+
+  @override
+  State<_InviteStudentDialog> createState() => _InviteStudentDialogState();
+}
+
+class _InviteStudentDialogState extends State<_InviteStudentDialog> {
+  static const Color primaryTeal = Color(0xFF00897B);
+
+  final TextEditingController _campusIdController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _campusIdController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_formKey.currentState?.validate() != true) return;
+    Navigator.of(context)
+        .pop(_campusIdController.text.trim().replaceAll(RegExp(r'\s+'), ''));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.person_add_alt_1_rounded, color: primaryTeal),
+          SizedBox(width: 10),
+          Expanded(child: Text('Invite Student')),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter the Campus ID registered to the student’s CASLMS account.',
+              ),
+              const SizedBox(height: 17),
+              TextFormField(
+                controller: _campusIdController,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _submit(),
+                decoration: const InputDecoration(
+                  labelText: 'Student Campus ID',
+                  hintText: 'Enter 5–12 digits',
+                  prefixIcon: Icon(Icons.badge_outlined),
+                ),
+                validator: (value) {
+                  final campusId = (value ?? '').trim().replaceAll(
+                    RegExp(r'\s+'),
+                    '',
+                  );
+                  if (campusId.isEmpty) return 'Enter the student Campus ID.';
+                  if (!RegExp(r'^\d{5,12}$').hasMatch(campusId)) {
+                    return 'Campus ID must contain 5–12 numeric digits.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'The student must accept the invitation before enrollment becomes active.',
+                style: TextStyle(color: Color(0xFF68738A), fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.send_rounded),
+          label: const Text('Send Invitation'),
+          style: FilledButton.styleFrom(backgroundColor: primaryTeal),
+        ),
+      ],
     );
   }
 }

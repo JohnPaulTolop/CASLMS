@@ -1,92 +1,77 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
+
+import '../config/supabase_config.dart';
 
 class ChatService {
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  final FirebaseAuth _auth =
-      FirebaseAuth.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  final sb.SupabaseClient _supabase = sb.Supabase.instance.client;
+
+  static const int maximumAttachmentBytes = 15 * 1024 * 1024;
 
   // ============================================================
   // CURRENT USER
   // ============================================================
 
-  String? get currentUserId =>
-      _auth.currentUser?.uid;
+  String? get currentUserId => _auth.currentUser?.uid;
 
   // ============================================================
-  // CONVERSATION ID
+  // DIRECT CONVERSATION ID
   //
-  // Format:
-  // courseId_instructorId_studentId
-  //
-  // This prevents the same instructor/student pair from mixing
-  // conversations when they share multiple courses.
+  // A conversation belongs to exactly one instructor/student pair. The
+  // optional courseId remains in the signature for compatibility with older
+  // screens, but it never participates in the document identity.
   // ============================================================
 
   String buildConversationId({
-    required String courseId,
+    String? courseId,
     required String instructorId,
     required String studentId,
   }) {
-    final String cleanCourseId =
-        courseId.trim();
+    final String cleanInstructorId = instructorId.trim();
 
-    final String cleanInstructorId =
-        instructorId.trim();
+    final String cleanStudentId = studentId.trim();
 
-    final String cleanStudentId =
-        studentId.trim();
-
-    if (cleanCourseId.isEmpty ||
-        cleanInstructorId.isEmpty ||
-        cleanStudentId.isEmpty) {
+    if (cleanInstructorId.isEmpty || cleanStudentId.isEmpty) {
       return '';
     }
 
-    return '${cleanCourseId}_${cleanInstructorId}_$cleanStudentId';
+    return 'direct_${cleanInstructorId}_$cleanStudentId';
   }
 
   // ============================================================
   // CURRENT USER PROFILE
   // ============================================================
 
-  Future<Map<String, dynamic>?>
-      getCurrentUserProfile() async {
+  Future<Map<String, dynamic>?> getCurrentUserProfile() async {
     try {
-      final User? user =
-          _auth.currentUser;
+      final User? user = _auth.currentUser;
 
       if (user == null) {
         return null;
       }
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          document =
-          await _firestore
-              .collection('users')
-              .doc(user.uid)
-              .get();
+      final DocumentSnapshot<Map<String, dynamic>> document = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get();
 
-      if (!document.exists ||
-          document.data() == null) {
+      if (!document.exists || document.data() == null) {
         return null;
       }
 
-      return {
-        ...document.data()!,
-        'id': document.id,
-      };
+      return {...document.data()!, 'id': document.id};
     } on FirebaseException catch (e) {
-      throw ChatServiceException(
-        e.message ??
-            'Unable to load user profile.',
-      );
+      throw ChatServiceException(e.message ?? 'Unable to load user profile.');
     } catch (_) {
-      throw ChatServiceException(
-        'Unable to load user profile.',
-      );
+      throw ChatServiceException('Unable to load user profile.');
     }
   }
 
@@ -94,42 +79,30 @@ class ChatService {
   // GET USER BY ID
   // ============================================================
 
-  Future<Map<String, dynamic>?> getUserById(
-    String userId,
-  ) async {
+  Future<Map<String, dynamic>?> getUserById(String userId) async {
     try {
-      final String cleanUserId =
-          userId.trim();
+      final String cleanUserId = userId.trim();
 
       if (cleanUserId.isEmpty) {
         return null;
       }
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          document =
-          await _firestore
-              .collection('users')
-              .doc(cleanUserId)
-              .get();
+      final DocumentSnapshot<Map<String, dynamic>> document = await _firestore
+          .collection('users')
+          .doc(cleanUserId)
+          .get();
 
-      if (!document.exists ||
-          document.data() == null) {
+      if (!document.exists || document.data() == null) {
         return null;
       }
 
-      return {
-        ...document.data()!,
-        'id': document.id,
-      };
+      return {...document.data()!, 'id': document.id};
     } on FirebaseException catch (e) {
       throw ChatServiceException(
-        e.message ??
-            'Unable to load user information.',
+        e.message ?? 'Unable to load user information.',
       );
     } catch (_) {
-      throw ChatServiceException(
-        'Unable to load user information.',
-      );
+      throw ChatServiceException('Unable to load user information.');
     }
   }
 
@@ -137,135 +110,92 @@ class ChatService {
   // GET COURSE BY ID
   // ============================================================
 
-  Future<Map<String, dynamic>?> getCourseById(
-    String courseId,
-  ) async {
+  Future<Map<String, dynamic>?> getCourseById(String courseId) async {
     try {
-      final String cleanCourseId =
-          courseId.trim();
+      final String cleanCourseId = courseId.trim();
 
       if (cleanCourseId.isEmpty) {
         return null;
       }
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          document =
-          await _firestore
-              .collection('courses')
-              .doc(cleanCourseId)
-              .get();
+      final DocumentSnapshot<Map<String, dynamic>> document = await _firestore
+          .collection('courses')
+          .doc(cleanCourseId)
+          .get();
 
-      if (!document.exists ||
-          document.data() == null) {
+      if (!document.exists || document.data() == null) {
         return null;
       }
 
-      return {
-        ...document.data()!,
-        'id': document.id,
-      };
+      return {...document.data()!, 'id': document.id};
     } on FirebaseException catch (e) {
       throw ChatServiceException(
-        e.message ??
-            'Unable to load course information.',
+        e.message ?? 'Unable to load course information.',
       );
     } catch (_) {
-      throw ChatServiceException(
-        'Unable to load course information.',
-      );
+      throw ChatServiceException('Unable to load course information.');
     }
   }
 
   // ============================================================
   // GET STUDENT CHAT CONTACTS
   //
-  // Each active enrollment becomes one possible course chat.
-  //
-  // Example:
-  //
-  // IT301 -> Instructor A
-  // IT401 -> Instructor A
-  //
-  // These remain separate conversations.
+  // Active enrollments are grouped by instructor. A student sees one contact
+  // per instructor even when they share several courses.
   // ============================================================
 
-  Future<List<Map<String, dynamic>>>
-      getStudentChatContacts() async {
+  Future<List<Map<String, dynamic>>> getStudentChatContacts() async {
     try {
-      final User? studentUser =
-          _auth.currentUser;
+      final User? studentUser = _auth.currentUser;
 
       if (studentUser == null) {
-        throw ChatServiceException(
-          'No student is currently logged in.',
-        );
+        throw ChatServiceException('No student is currently logged in.');
       }
 
       // ----------------------------------------------------------
       // STUDENT PROFILE
       // ----------------------------------------------------------
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          studentDocument =
-          await _firestore
-              .collection('users')
-              .doc(studentUser.uid)
-              .get();
+      final DocumentSnapshot<Map<String, dynamic>> studentDocument =
+          await _firestore.collection('users').doc(studentUser.uid).get();
 
-      final Map<String, dynamic>? studentData =
-          studentDocument.data();
+      final Map<String, dynamic>? studentData = studentDocument.data();
 
-      final String studentName =
-          (studentData?['name'] ??
-                  'Student')
-              .toString();
+      final String studentName = (studentData?['name'] ?? 'Student').toString();
 
       // ----------------------------------------------------------
       // STUDENT ENROLLMENTS
       // ----------------------------------------------------------
 
-      final QuerySnapshot<Map<String, dynamic>>
-          enrollmentSnapshot =
+      final QuerySnapshot<Map<String, dynamic>> enrollmentSnapshot =
           await _firestore
               .collection('enrollments')
-              .where(
-                'studentId',
-                isEqualTo: studentUser.uid,
-              )
+              .where('studentId', isEqualTo: studentUser.uid)
               .get();
 
-      final List<Map<String, dynamic>>
-          contacts =
-          [];
+      final List<Map<String, dynamic>> contacts = [];
 
-      final Set<String>
-          addedContactKeys =
-          {};
+      final Map<String, int> contactIndexByInstructor = <String, int>{};
 
-      for (final enrollmentDocument
-          in enrollmentSnapshot.docs) {
-        final Map<String, dynamic>
-            enrollment =
-            enrollmentDocument.data();
+      for (final enrollmentDocument in enrollmentSnapshot.docs) {
+        final Map<String, dynamic> enrollment = enrollmentDocument.data();
 
         // --------------------------------------------------------
         // ACTIVE ENROLLMENTS ONLY
         // --------------------------------------------------------
 
-        final String enrollmentStatus =
-            (enrollment['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String enrollmentStatus = (enrollment['status'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (enrollmentStatus != 'active') {
           continue;
         }
 
-        final String courseId =
-            (enrollment['courseId'] ?? '')
-                .toString()
-                .trim();
+        final String courseId = (enrollment['courseId'] ?? '')
+            .toString()
+            .trim();
 
         if (courseId.isEmpty) {
           continue;
@@ -275,49 +205,76 @@ class ChatService {
         // COURSE
         // --------------------------------------------------------
 
-        final DocumentSnapshot<Map<String, dynamic>>
-            courseDocument =
-            await _firestore
-                .collection('courses')
-                .doc(courseId)
-                .get();
+        final DocumentSnapshot<Map<String, dynamic>> courseDocument =
+            await _firestore.collection('courses').doc(courseId).get();
 
-        if (!courseDocument.exists ||
-            courseDocument.data() == null) {
+        if (!courseDocument.exists || courseDocument.data() == null) {
           continue;
         }
 
-        final Map<String, dynamic> course =
-            courseDocument.data()!;
+        final Map<String, dynamic> course = courseDocument.data()!;
 
-        final String courseStatus =
-            (course['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String courseStatus = (course['status'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (courseStatus != 'active') {
           continue;
         }
 
-        final String instructorId =
-            (course['instructorId'] ?? '')
-                .toString()
-                .trim();
+        final String instructorId = (course['instructorId'] ?? '')
+            .toString()
+            .trim();
 
         if (instructorId.isEmpty) {
           continue;
         }
 
         // --------------------------------------------------------
-        // PREVENT DUPLICATE COURSE/INSTRUCTOR CONTACTS
+        // MERGE COURSES THAT SHARE THE SAME INSTRUCTOR
         // --------------------------------------------------------
 
-        final String contactKey =
-            '${courseId}_$instructorId';
+        final int? existingContactIndex =
+            contactIndexByInstructor[instructorId];
 
-        if (addedContactKeys
-            .contains(contactKey)) {
+        if (existingContactIndex != null) {
+          final Map<String, dynamic> existingContact =
+              contacts[existingContactIndex];
+
+          final List<String> courseIds = List<String>.from(
+            existingContact['courseIds'] as List<dynamic>? ?? const <dynamic>[],
+          );
+          final List<String> courseCodes = List<String>.from(
+            existingContact['courseCodes'] as List<dynamic>? ??
+                const <dynamic>[],
+          );
+          final List<String> courseTitles = List<String>.from(
+            existingContact['courseTitles'] as List<dynamic>? ??
+                const <dynamic>[],
+          );
+
+          if (!courseIds.contains(courseId)) {
+            courseIds.add(courseId);
+          }
+
+          final String courseCode = (course['code'] ?? '').toString().trim();
+          final String courseTitle = (course['title'] ?? '').toString().trim();
+
+          if (courseCode.isNotEmpty && !courseCodes.contains(courseCode)) {
+            courseCodes.add(courseCode);
+          }
+          if (courseTitle.isNotEmpty && !courseTitles.contains(courseTitle)) {
+            courseTitles.add(courseTitle);
+          }
+
+          existingContact
+            ..['courseIds'] = courseIds
+            ..['courseCodes'] = courseCodes
+            ..['courseTitles'] = courseTitles
+            ..['courseCode'] = courseCodes.join(', ')
+            ..['courseTitle'] = courseTitles.join(', ');
+
           continue;
         }
 
@@ -325,100 +282,78 @@ class ChatService {
         // INSTRUCTOR
         // --------------------------------------------------------
 
-        final DocumentSnapshot<Map<String, dynamic>>
-            instructorDocument =
-            await _firestore
-                .collection('users')
-                .doc(instructorId)
-                .get();
+        final DocumentSnapshot<Map<String, dynamic>> instructorDocument =
+            await _firestore.collection('users').doc(instructorId).get();
 
-        if (!instructorDocument.exists ||
-            instructorDocument.data() ==
-                null) {
+        if (!instructorDocument.exists || instructorDocument.data() == null) {
           continue;
         }
 
-        final Map<String, dynamic>
-            instructor =
-            instructorDocument.data()!;
+        final Map<String, dynamic> instructor = instructorDocument.data()!;
 
-        final String instructorRole =
-            (instructor['role'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String instructorRole = (instructor['role'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
-        if (instructorRole !=
-            'instructor') {
+        if (instructorRole != 'instructor') {
           continue;
         }
 
-        final String instructorStatus =
-            (instructor['status'] ??
-                    'active')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String instructorStatus = (instructor['status'] ?? 'active')
+            .toString()
+            .trim()
+            .toLowerCase();
 
-        if (instructorStatus !=
-            'active') {
+        if (instructorStatus != 'active') {
           continue;
         }
 
-        addedContactKeys.add(
-          contactKey,
-        );
+        contactIndexByInstructor[instructorId] = contacts.length;
+
+        final String courseCode = (course['code'] ?? '').toString().trim();
+        final String courseTitle = (course['title'] ?? 'Course')
+            .toString()
+            .trim();
 
         contacts.add({
           // ------------------------------------------------------
           // COURSE
           // ------------------------------------------------------
 
-          'courseId':
-              courseId,
+          'courseId': courseId,
 
-          'courseCode':
-              (course['code'] ?? '')
-                  .toString(),
+          'courseCode': courseCode,
 
-          'courseTitle':
-              (course['title'] ??
-                      'Course')
-                  .toString(),
+          'courseTitle': courseTitle,
+
+          'courseIds': <String>[courseId],
+
+          'courseCodes': courseCode.isEmpty ? <String>[] : <String>[courseCode],
+
+          'courseTitles': courseTitle.isEmpty
+              ? <String>[]
+              : <String>[courseTitle],
 
           // ------------------------------------------------------
           // STUDENT
           // ------------------------------------------------------
+          'studentId': studentUser.uid,
 
-          'studentId':
-              studentUser.uid,
-
-          'studentName':
-              studentName,
+          'studentName': studentName,
 
           // ------------------------------------------------------
           // INSTRUCTOR
           // ------------------------------------------------------
-
-          'instructorId':
-              instructorId,
+          'instructorId': instructorId,
 
           'instructorName':
-              (instructor['name'] ??
-                      course[
-                          'instructorName'] ??
-                      'Instructor')
+              (instructor['name'] ?? course['instructorName'] ?? 'Instructor')
                   .toString(),
 
-          'instructorEmail':
-              (instructor['email'] ?? '')
-                  .toString(),
+          'instructorEmail': (instructor['email'] ?? '').toString(),
 
-          'profileImageUrl':
-              (instructor[
-                          'profileImageUrl'] ??
-                      '')
-                  .toString(),
+          'profileImageUrl': (instructor['profileImageUrl'] ?? '').toString(),
         });
       }
 
@@ -426,65 +361,115 @@ class ChatService {
       // SORT CONTACTS
       // ----------------------------------------------------------
 
-      contacts.sort(
-        (
-          a,
-          b,
-        ) {
-          final String courseA =
-              (a['courseCode'] ?? '')
-                  .toString()
-                  .toLowerCase();
+      contacts.sort((a, b) {
+        final String instructorA = (a['instructorName'] ?? '')
+            .toString()
+            .toLowerCase();
 
-          final String courseB =
-              (b['courseCode'] ?? '')
-                  .toString()
-                  .toLowerCase();
+        final String instructorB = (b['instructorName'] ?? '')
+            .toString()
+            .toLowerCase();
 
-          final int courseCompare =
-              courseA.compareTo(
-            courseB,
-          );
-
-          if (courseCompare != 0) {
-            return courseCompare;
-          }
-
-          final String instructorA =
-              (a['instructorName'] ??
-                      '')
-                  .toString()
-                  .toLowerCase();
-
-          final String instructorB =
-              (b['instructorName'] ??
-                      '')
-                  .toString()
-                  .toLowerCase();
-
-          return instructorA.compareTo(
-            instructorB,
-          );
-        },
-      );
+        return instructorA.compareTo(instructorB);
+      });
 
       return contacts;
     } on ChatServiceException {
       rethrow;
     } on FirebaseException catch (e) {
-      throw ChatServiceException(
-        e.message ??
-            'Unable to load instructors.',
-      );
+      throw ChatServiceException(e.message ?? 'Unable to load instructors.');
     } catch (_) {
-      throw ChatServiceException(
-        'Unable to load instructors.',
-      );
+      throw ChatServiceException('Unable to load instructors.');
     }
   }
 
   // ============================================================
-  // ENSURE CONVERSATION EXISTS
+  // DIRECT CONVERSATION LOOKUP
+  // ============================================================
+
+  Query<Map<String, dynamic>> _conversationQueryForPair({
+    required String instructorId,
+    required String studentId,
+  }) {
+    final User? user = _auth.currentUser;
+
+    if (user == null) {
+      throw ChatServiceException('You must be logged in to open a chat.');
+    }
+
+    if (user.uid != instructorId && user.uid != studentId) {
+      throw ChatServiceException('You are not part of this conversation.');
+    }
+
+    return _firestore
+        .collection('conversations')
+        .where('instructorId', isEqualTo: instructorId)
+        .where('studentId', isEqualTo: studentId);
+  }
+
+  Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
+  _getPairConversationDocuments({
+    required String instructorId,
+    required String studentId,
+  }) async {
+    final QuerySnapshot<Map<String, dynamic>> snapshot =
+        await _conversationQueryForPair(
+          instructorId: instructorId,
+          studentId: studentId,
+        ).get();
+
+    return snapshot.docs.where((document) {
+      final Map<String, dynamic> data = document.data();
+      return (data['instructorId'] ?? '').toString() == instructorId &&
+          (data['studentId'] ?? '').toString() == studentId;
+    }).toList();
+  }
+
+  QueryDocumentSnapshot<Map<String, dynamic>>? _selectPrimaryConversation(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> documents, {
+    required String canonicalId,
+  }) {
+    if (documents.isEmpty) {
+      return null;
+    }
+
+    final List<QueryDocumentSnapshot<Map<String, dynamic>>> sorted =
+        List<QueryDocumentSnapshot<Map<String, dynamic>>>.from(documents);
+
+    sorted.sort((a, b) {
+      if (a.id == canonicalId && b.id != canonicalId) {
+        return -1;
+      }
+      if (b.id == canonicalId && a.id != canonicalId) {
+        return 1;
+      }
+
+      final dynamic aCreatedAt = a.data()['createdAt'];
+      final dynamic bCreatedAt = b.data()['createdAt'];
+
+      if (aCreatedAt is Timestamp && bCreatedAt is Timestamp) {
+        final int timeComparison = aCreatedAt.compareTo(bCreatedAt);
+        if (timeComparison != 0) {
+          return timeComparison;
+        }
+      } else if (aCreatedAt is Timestamp) {
+        return -1;
+      } else if (bCreatedAt is Timestamp) {
+        return 1;
+      }
+
+      return a.id.compareTo(b.id);
+    });
+
+    return sorted.first;
+  }
+
+  // ============================================================
+  // ENSURE ONE CONVERSATION EXISTS FOR THE USER PAIR
+  //
+  // Legacy course-based documents are recognized and reused. If several
+  // legacy documents already exist, a deterministic primary is selected and
+  // all new messages are written only to it.
   // ============================================================
 
   Future<String> ensureConversation({
@@ -495,107 +480,78 @@ class ChatService {
     required String instructorName,
   }) async {
     try {
-      final String cleanCourseId =
-          courseId.trim();
+      final String cleanCourseId = courseId.trim();
 
-      final String cleanStudentId =
-          studentId.trim();
+      final String cleanStudentId = studentId.trim();
 
-      final String cleanInstructorId =
-          instructorId.trim();
+      final String cleanInstructorId = instructorId.trim();
 
       if (cleanCourseId.isEmpty) {
-        throw ChatServiceException(
-          'Course ID is missing.',
-        );
+        throw ChatServiceException('Course ID is missing.');
       }
 
       if (cleanStudentId.isEmpty) {
-        throw ChatServiceException(
-          'Student ID is missing.',
-        );
+        throw ChatServiceException('Student ID is missing.');
       }
 
       if (cleanInstructorId.isEmpty) {
-        throw ChatServiceException(
-          'Instructor ID is missing.',
-        );
+        throw ChatServiceException('Instructor ID is missing.');
       }
 
-      final String conversationId =
-          buildConversationId(
-        courseId:
-            cleanCourseId,
-        instructorId:
-            cleanInstructorId,
-        studentId:
-            cleanStudentId,
+      final String canonicalId = buildConversationId(
+        instructorId: cleanInstructorId,
+        studentId: cleanStudentId,
       );
 
-      final DocumentReference<Map<String, dynamic>>
-          conversationReference =
-          _firestore
-              .collection('conversations')
-              .doc(conversationId);
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>> pairDocuments =
+          await _getPairConversationDocuments(
+            instructorId: cleanInstructorId,
+            studentId: cleanStudentId,
+          );
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          existing =
-          await conversationReference
-              .get();
+      final QueryDocumentSnapshot<Map<String, dynamic>>? primaryDocument =
+          _selectPrimaryConversation(pairDocuments, canonicalId: canonicalId);
+
+      final DocumentReference<Map<String, dynamic>> conversationReference =
+          primaryDocument?.reference ??
+          _firestore.collection('conversations').doc(canonicalId);
 
       // ----------------------------------------------------------
       // NEW CONVERSATION
       // ----------------------------------------------------------
 
-      if (!existing.exists) {
-        await conversationReference
-            .set({
-          'courseId':
-              cleanCourseId,
+      if (primaryDocument == null) {
+        await conversationReference.set({
+          'courseId': cleanCourseId,
 
-          'participantIds': [
-            cleanInstructorId,
-            cleanStudentId,
-          ],
+          'courseIds': <String>[cleanCourseId],
 
-          'instructorId':
-              cleanInstructorId,
+          'conversationType': 'direct',
 
-          'instructorName':
-              instructorName
-                      .trim()
-                      .isEmpty
-                  ? 'Instructor'
-                  : instructorName
-                      .trim(),
+          'participantIds': [cleanInstructorId, cleanStudentId],
 
-          'studentId':
-              cleanStudentId,
+          'instructorId': cleanInstructorId,
 
-          'studentName':
-              studentName
-                      .trim()
-                      .isEmpty
-                  ? 'Student'
-                  : studentName
-                      .trim(),
+          'instructorName': instructorName.trim().isEmpty
+              ? 'Instructor'
+              : instructorName.trim(),
 
-          'lastMessage':
-              '',
+          'studentId': cleanStudentId,
 
-          'lastMessageAt':
-              null,
+          'studentName': studentName.trim().isEmpty
+              ? 'Student'
+              : studentName.trim(),
 
-          'createdAt':
-              FieldValue
-                  .serverTimestamp(),
+          'lastMessage': '',
 
-          'updatedAt':
-              FieldValue
-                  .serverTimestamp(),
+          'lastMessageAt': null,
+
+          'createdAt': FieldValue.serverTimestamp(),
+
+          'updatedAt': FieldValue.serverTimestamp(),
         });
 
-        return conversationId;
+        return conversationReference.id;
       }
 
       // ----------------------------------------------------------
@@ -605,59 +561,35 @@ class ChatService {
       // lastMessage, lastMessageAt, createdAt, etc.
       // ----------------------------------------------------------
 
-      await conversationReference.set(
-        {
-          'courseId':
-              cleanCourseId,
+      await conversationReference.set({
+        'participantIds': [cleanInstructorId, cleanStudentId],
 
-          'participantIds': [
-            cleanInstructorId,
-            cleanStudentId,
-          ],
+        'courseIds': FieldValue.arrayUnion(<String>[cleanCourseId]),
 
-          'instructorId':
-              cleanInstructorId,
+        'conversationType': 'direct',
 
-          'instructorName':
-              instructorName
-                      .trim()
-                      .isEmpty
-                  ? 'Instructor'
-                  : instructorName
-                      .trim(),
+        'instructorId': cleanInstructorId,
 
-          'studentId':
-              cleanStudentId,
+        'instructorName': instructorName.trim().isEmpty
+            ? 'Instructor'
+            : instructorName.trim(),
 
-          'studentName':
-              studentName
-                      .trim()
-                      .isEmpty
-                  ? 'Student'
-                  : studentName
-                      .trim(),
+        'studentId': cleanStudentId,
 
-          'updatedAt':
-              FieldValue
-                  .serverTimestamp(),
-        },
-        SetOptions(
-          merge: true,
-        ),
-      );
+        'studentName': studentName.trim().isEmpty
+            ? 'Student'
+            : studentName.trim(),
 
-      return conversationId;
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      return conversationReference.id;
     } on ChatServiceException {
       rethrow;
     } on FirebaseException catch (e) {
-      throw ChatServiceException(
-        e.message ??
-            'Unable to open conversation.',
-      );
+      throw ChatServiceException(e.message ?? 'Unable to open conversation.');
     } catch (_) {
-      throw ChatServiceException(
-        'Unable to open conversation.',
-      );
+      throw ChatServiceException('Unable to open conversation.');
     }
   }
 
@@ -675,29 +607,21 @@ class ChatService {
     required String text,
   }) async {
     try {
-      final User? user =
-          _auth.currentUser;
+      final User? user = _auth.currentUser;
 
       if (user == null) {
-        throw ChatServiceException(
-          'You must be logged in to send a message.',
-        );
+        throw ChatServiceException('You must be logged in to send a message.');
       }
 
-      final String cleanCourseId =
-          courseId.trim();
+      final String cleanCourseId = courseId.trim();
 
-      final String cleanStudentId =
-          studentId.trim();
+      final String cleanStudentId = studentId.trim();
 
-      final String cleanInstructorId =
-          instructorId.trim();
+      final String cleanInstructorId = instructorId.trim();
 
-      final String cleanReceiverId =
-          receiverId.trim();
+      final String cleanReceiverId = receiverId.trim();
 
-      final String cleanText =
-          text.trim();
+      final String cleanText = text.trim();
 
       if (cleanText.isEmpty) {
         return;
@@ -706,125 +630,310 @@ class ChatService {
       if (cleanCourseId.isEmpty ||
           cleanStudentId.isEmpty ||
           cleanInstructorId.isEmpty) {
-        throw ChatServiceException(
-          'Conversation information is incomplete.',
-        );
+        throw ChatServiceException('Conversation information is incomplete.');
       }
 
       // ----------------------------------------------------------
       // CURRENT USER MUST BE A PARTICIPANT
       // ----------------------------------------------------------
 
-      if (user.uid != cleanStudentId &&
-          user.uid !=
-              cleanInstructorId) {
-        throw ChatServiceException(
-          'You are not part of this conversation.',
-        );
+      if (user.uid != cleanStudentId && user.uid != cleanInstructorId) {
+        throw ChatServiceException('You are not part of this conversation.');
       }
 
       // ----------------------------------------------------------
       // DETERMINE CORRECT RECEIVER
       // ----------------------------------------------------------
 
-      final String expectedReceiverId =
-          user.uid == cleanInstructorId
-              ? cleanStudentId
-              : cleanInstructorId;
+      final String expectedReceiverId = user.uid == cleanInstructorId
+          ? cleanStudentId
+          : cleanInstructorId;
 
-      if (cleanReceiverId !=
-          expectedReceiverId) {
-        throw ChatServiceException(
-          'Invalid message receiver.',
-        );
+      if (cleanReceiverId != expectedReceiverId) {
+        throw ChatServiceException('Invalid message receiver.');
       }
 
       // ----------------------------------------------------------
       // ENSURE CONVERSATION
       // ----------------------------------------------------------
 
-      final String conversationId =
-          await ensureConversation(
-        courseId:
-            cleanCourseId,
-        studentId:
-            cleanStudentId,
-        studentName:
-            studentName,
-        instructorId:
-            cleanInstructorId,
-        instructorName:
-            instructorName,
+      final String conversationId = await ensureConversation(
+        courseId: cleanCourseId,
+        studentId: cleanStudentId,
+        studentName: studentName,
+        instructorId: cleanInstructorId,
+        instructorName: instructorName,
       );
 
-      final DocumentReference<Map<String, dynamic>>
-          conversationReference =
-          _firestore
-              .collection('conversations')
-              .doc(conversationId);
+      final DocumentReference<Map<String, dynamic>> conversationReference =
+          _firestore.collection('conversations').doc(conversationId);
 
-      final DocumentReference<Map<String, dynamic>>
-          messageReference =
-          conversationReference
-              .collection('messages')
-              .doc();
+      final DocumentReference<Map<String, dynamic>> messageReference =
+          conversationReference.collection('messages').doc();
 
       // ----------------------------------------------------------
       // ATOMIC MESSAGE + CONVERSATION UPDATE
       // ----------------------------------------------------------
 
-      final WriteBatch batch =
-          _firestore.batch();
+      final WriteBatch batch = _firestore.batch();
 
-      batch.set(
-        messageReference,
-        {
-          'senderId':
-              user.uid,
+      batch.set(messageReference, {
+        'senderId': user.uid,
 
-          'receiverId':
-              cleanReceiverId,
+        'receiverId': cleanReceiverId,
 
-          'text':
-              cleanText,
+        'text': cleanText,
 
-          'sentAt':
-              FieldValue
-                  .serverTimestamp(),
+        'sentAt': FieldValue.serverTimestamp(),
 
-          'isRead':
-              false,
-        },
-      );
+        'isRead': false,
+      });
 
-      batch.update(
-        conversationReference,
-        {
-          'lastMessage':
-              cleanText,
+      batch.update(conversationReference, {
+        'lastMessage': cleanText,
 
-          'lastMessageAt':
-              FieldValue
-                  .serverTimestamp(),
+        'lastMessageAt': FieldValue.serverTimestamp(),
 
-          'updatedAt':
-              FieldValue
-                  .serverTimestamp(),
-        },
-      );
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
       await batch.commit();
     } on ChatServiceException {
       rethrow;
     } on FirebaseException catch (e) {
-      throw ChatServiceException(
-        e.message ??
-            'Unable to send message.',
-      );
+      throw ChatServiceException(e.message ?? 'Unable to send message.');
     } catch (_) {
+      throw ChatServiceException('Unable to send message.');
+    }
+  }
+
+  // ============================================================
+  // SEND ATTACHMENT
+  // ============================================================
+
+  Future<void> sendAttachment({
+    required String courseId,
+    required String studentId,
+    required String studentName,
+    required String instructorId,
+    required String instructorName,
+    required String receiverId,
+    required String fileName,
+    required Uint8List fileBytes,
+    String caption = '',
+  }) async {
+    final User? user = _auth.currentUser;
+
+    if (user == null) {
       throw ChatServiceException(
-        'Unable to send message.',
+        'You must be logged in to send an attachment.',
       );
+    }
+
+    final String cleanCourseId = courseId.trim();
+    final String cleanStudentId = studentId.trim();
+    final String cleanInstructorId = instructorId.trim();
+    final String cleanReceiverId = receiverId.trim();
+    final String cleanFileName = fileName.trim();
+    final String cleanCaption = caption.trim();
+
+    if (cleanCourseId.isEmpty ||
+        cleanStudentId.isEmpty ||
+        cleanInstructorId.isEmpty) {
+      throw ChatServiceException('Conversation information is incomplete.');
+    }
+    if (user.uid != cleanStudentId && user.uid != cleanInstructorId) {
+      throw ChatServiceException('You are not part of this conversation.');
+    }
+
+    final String expectedReceiverId = user.uid == cleanInstructorId
+        ? cleanStudentId
+        : cleanInstructorId;
+
+    if (cleanReceiverId != expectedReceiverId) {
+      throw ChatServiceException('Invalid message receiver.');
+    }
+    if (cleanFileName.isEmpty || fileBytes.isEmpty) {
+      throw ChatServiceException('The selected attachment is empty.');
+    }
+    if (fileBytes.length > maximumAttachmentBytes) {
+      throw ChatServiceException('Chat attachments must be 15 MB or smaller.');
+    }
+
+    final String extension = _extensionFromFileName(cleanFileName);
+    const Set<String> allowedExtensions = {
+      'pdf',
+      'doc',
+      'docx',
+      'ppt',
+      'pptx',
+      'xls',
+      'xlsx',
+      'txt',
+      'jpg',
+      'jpeg',
+      'png',
+      'gif',
+      'webp',
+    };
+
+    if (!allowedExtensions.contains(extension)) {
+      throw ChatServiceException(
+        'Choose a PDF, document, presentation, spreadsheet, text file, or image.',
+      );
+    }
+
+    final String conversationId = await ensureConversation(
+      courseId: cleanCourseId,
+      studentId: cleanStudentId,
+      studentName: studentName,
+      instructorId: cleanInstructorId,
+      instructorName: instructorName,
+    );
+
+    final DocumentReference<Map<String, dynamic>> conversationReference =
+        _firestore.collection('conversations').doc(conversationId);
+    final DocumentReference<Map<String, dynamic>> messageReference =
+        conversationReference.collection('messages').doc();
+
+    final DocumentSnapshot<Map<String, dynamic>> conversationSnapshot =
+        await conversationReference.get();
+    final String storageCourseId =
+        (conversationSnapshot.data()?['courseId'] ?? cleanCourseId)
+            .toString()
+            .trim();
+
+    final String safeName = _safeFileName(cleanFileName);
+    final String storagePath =
+        'courses/$storageCourseId/chats/$conversationId/${messageReference.id}/$safeName';
+    final String mimeType = _mimeTypeForExtension(extension);
+    final String attachmentKind = _isImageExtension(extension)
+        ? 'image'
+        : 'file';
+    final bucket = _supabase.storage.from(
+      SupabaseConfig.learningMaterialsBucket,
+    );
+
+    bool uploaded = false;
+
+    try {
+      await bucket.uploadBinary(
+        storagePath,
+        fileBytes,
+        fileOptions: sb.FileOptions(
+          contentType: mimeType,
+          cacheControl: '3600',
+          upsert: false,
+        ),
+      );
+      uploaded = true;
+
+      final String attachmentUrl = bucket.getPublicUrl(storagePath);
+      final String preview = attachmentKind == 'image'
+          ? 'Photo: $cleanFileName'
+          : 'File: $cleanFileName';
+      final WriteBatch batch = _firestore.batch();
+
+      batch.set(messageReference, {
+        'senderId': user.uid,
+        'receiverId': cleanReceiverId,
+        'text': cleanCaption,
+        'messageType': 'attachment',
+        'attachmentKind': attachmentKind,
+        'attachmentName': cleanFileName,
+        'attachmentUrl': attachmentUrl,
+        'attachmentPath': storagePath,
+        'attachmentMimeType': mimeType,
+        'attachmentSizeBytes': fileBytes.length,
+        'storageProvider': 'supabase',
+        'storageBucket': SupabaseConfig.learningMaterialsBucket,
+        'sentAt': FieldValue.serverTimestamp(),
+        'isRead': false,
+      });
+
+      batch.update(conversationReference, {
+        'lastMessage': cleanCaption.isEmpty
+            ? preview
+            : '$preview — $cleanCaption',
+        'lastMessageAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      await batch.commit();
+    } on sb.StorageException catch (error) {
+      throw ChatServiceException(
+        error.message.isEmpty
+            ? 'Unable to upload the attachment.'
+            : error.message,
+      );
+    } on FirebaseException catch (error) {
+      if (uploaded) {
+        try {
+          await bucket.remove([storagePath]);
+        } catch (_) {}
+      }
+      throw ChatServiceException(
+        error.message ??
+            'The file uploaded, but the message could not be sent.',
+      );
+    } catch (error) {
+      if (uploaded) {
+        try {
+          await bucket.remove([storagePath]);
+        } catch (_) {}
+      }
+      if (error is ChatServiceException) rethrow;
+      throw ChatServiceException('Unable to send the attachment.');
+    }
+  }
+
+  String _extensionFromFileName(String fileName) {
+    final int dot = fileName.lastIndexOf('.');
+    if (dot < 0 || dot == fileName.length - 1) return '';
+    return fileName.substring(dot + 1).toLowerCase();
+  }
+
+  String _safeFileName(String fileName) {
+    final String normalized = fileName
+        .split(RegExp(r'[/\\]'))
+        .last
+        .replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    return normalized.isEmpty ? 'attachment' : normalized;
+  }
+
+  bool _isImageExtension(String extension) {
+    return const {'jpg', 'jpeg', 'png', 'gif', 'webp'}.contains(extension);
+  }
+
+  String _mimeTypeForExtension(String extension) {
+    switch (extension) {
+      case 'pdf':
+        return 'application/pdf';
+      case 'doc':
+        return 'application/msword';
+      case 'docx':
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      case 'ppt':
+        return 'application/vnd.ms-powerpoint';
+      case 'pptx':
+        return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      case 'xls':
+        return 'application/vnd.ms-excel';
+      case 'xlsx':
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      case 'txt':
+        return 'text/plain';
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      default:
+        return 'application/octet-stream';
     }
   }
 
@@ -837,48 +946,126 @@ class ChatService {
     required String instructorId,
     required String studentId,
   }) {
-    final String conversationId =
-        buildConversationId(
-      courseId:
-          courseId,
-      instructorId:
-          instructorId,
-      studentId:
-          studentId,
-    );
-
-    if (conversationId.isEmpty) {
-      return Stream.value(
-        <Map<String, dynamic>>[],
-      );
+    if (courseId.trim().isEmpty ||
+        instructorId.trim().isEmpty ||
+        studentId.trim().isEmpty) {
+      return Stream.value(<Map<String, dynamic>>[]);
     }
 
-    return _firestore
-        .collection('conversations')
-        .doc(conversationId)
-        .collection('messages')
-        .orderBy(
-          'sentAt',
-          descending: false,
-        )
-        .snapshots()
-        .map(
-      (
-        snapshot,
-      ) {
-        return snapshot.docs
-            .map(
-          (
-            document,
-          ) {
-            return {
-              ...document.data(),
-              'id': document.id,
-            };
-          },
-        ).toList();
+    final Query<Map<String, dynamic>> conversationQuery;
+
+    try {
+      conversationQuery = _conversationQueryForPair(
+        instructorId: instructorId,
+        studentId: studentId,
+      );
+    } on ChatServiceException catch (error) {
+      return Stream.error(error);
+    }
+
+    late final StreamController<List<Map<String, dynamic>>> controller;
+    StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+    conversationSubscription;
+    final Map<String, StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>
+    messageSubscriptions =
+        <String, StreamSubscription<QuerySnapshot<Map<String, dynamic>>>>{};
+    final Map<String, List<Map<String, dynamic>>> messagesByConversation =
+        <String, List<Map<String, dynamic>>>{};
+
+    void emitMessages() {
+      if (controller.isClosed) {
+        return;
+      }
+
+      final List<Map<String, dynamic>> messages = messagesByConversation.values
+          .expand((items) => items)
+          .toList();
+
+      messages.sort((a, b) {
+        final dynamic aSentAt = a['sentAt'];
+        final dynamic bSentAt = b['sentAt'];
+
+        if (aSentAt is Timestamp && bSentAt is Timestamp) {
+          final int timeComparison = aSentAt.compareTo(bSentAt);
+          if (timeComparison != 0) {
+            return timeComparison;
+          }
+        } else if (aSentAt is Timestamp) {
+          return -1;
+        } else if (bSentAt is Timestamp) {
+          return 1;
+        }
+
+        final String aKey = '${a['conversationId'] ?? ''}_${a['id'] ?? ''}';
+        final String bKey = '${b['conversationId'] ?? ''}_${b['id'] ?? ''}';
+        return aKey.compareTo(bKey);
+      });
+
+      controller.add(messages);
+    }
+
+    controller = StreamController<List<Map<String, dynamic>>>(
+      onListen: () {
+        conversationSubscription = conversationQuery.snapshots().listen((
+          conversationSnapshot,
+        ) {
+          final List<QueryDocumentSnapshot<Map<String, dynamic>>>
+          pairDocuments = conversationSnapshot.docs.where((document) {
+            final Map<String, dynamic> data = document.data();
+            return (data['instructorId'] ?? '').toString() == instructorId &&
+                (data['studentId'] ?? '').toString() == studentId;
+          }).toList();
+
+          final Set<String> activeIds = pairDocuments
+              .map((document) => document.id)
+              .toSet();
+
+          final List<String> removedIds = messageSubscriptions.keys
+              .where((id) => !activeIds.contains(id))
+              .toList();
+
+          for (final String removedId in removedIds) {
+            messageSubscriptions.remove(removedId)?.cancel();
+            messagesByConversation.remove(removedId);
+          }
+
+          for (final document in pairDocuments) {
+            if (messageSubscriptions.containsKey(document.id)) {
+              continue;
+            }
+
+            messageSubscriptions[document.id] = document.reference
+                .collection('messages')
+                .orderBy('sentAt', descending: false)
+                .snapshots()
+                .listen((messageSnapshot) {
+                  messagesByConversation[document.id] = messageSnapshot.docs
+                      .map(
+                        (messageDocument) => <String, dynamic>{
+                          ...messageDocument.data(),
+                          'id': messageDocument.id,
+                          'conversationId': document.id,
+                        },
+                      )
+                      .toList();
+                  emitMessages();
+                }, onError: controller.addError);
+          }
+
+          emitMessages();
+        }, onError: controller.addError);
+      },
+      onCancel: () async {
+        await conversationSubscription?.cancel();
+        for (final subscription in messageSubscriptions.values) {
+          await subscription.cancel();
+        }
+        messageSubscriptions.clear();
+        messagesByConversation.clear();
       },
     );
+
+    return controller.stream;
   }
 
   // ============================================================
@@ -891,8 +1078,7 @@ class ChatService {
     required String studentId,
   }) async {
     try {
-      final User? user =
-          _auth.currentUser;
+      final User? user = _auth.currentUser;
 
       if (user == null) {
         return;
@@ -902,53 +1088,38 @@ class ChatService {
       // USER MUST BELONG TO CONVERSATION
       // ----------------------------------------------------------
 
-      if (user.uid != instructorId &&
-          user.uid != studentId) {
-        throw ChatServiceException(
-          'You are not part of this conversation.',
-        );
+      if (user.uid != instructorId && user.uid != studentId) {
+        throw ChatServiceException('You are not part of this conversation.');
       }
 
-      final String conversationId =
-          buildConversationId(
-        courseId:
-            courseId,
-        instructorId:
-            instructorId,
-        studentId:
-            studentId,
-      );
-
-      if (conversationId.isEmpty) {
+      if (courseId.trim().isEmpty ||
+          instructorId.trim().isEmpty ||
+          studentId.trim().isEmpty) {
         return;
       }
 
-      final QuerySnapshot<Map<String, dynamic>>
-          snapshot =
-          await _firestore
-              .collection('conversations')
-              .doc(conversationId)
-              .collection('messages')
-              .where(
-                'receiverId',
-                isEqualTo:
-                    user.uid,
-              )
-              .get();
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>>
+      conversationDocuments = await _getPairConversationDocuments(
+        instructorId: instructorId,
+        studentId: studentId,
+      );
 
-      final List<
-              QueryDocumentSnapshot<
-                  Map<String, dynamic>>>
-          unreadMessages =
-          snapshot.docs.where(
-        (
-          document,
-        ) {
-          return document
-                  .data()['isRead'] !=
-              true;
-        },
-      ).toList();
+      final List<QueryDocumentSnapshot<Map<String, dynamic>>> unreadMessages =
+          <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
+      for (final conversationDocument in conversationDocuments) {
+        final QuerySnapshot<Map<String, dynamic>> snapshot =
+            await conversationDocument.reference
+                .collection('messages')
+                .where('receiverId', isEqualTo: user.uid)
+                .get();
+
+        unreadMessages.addAll(
+          snapshot.docs.where((document) {
+            return document.data()['isRead'] != true;
+          }),
+        );
+      }
 
       if (unreadMessages.isEmpty) {
         return;
@@ -959,38 +1130,20 @@ class ChatService {
       // Keep safe margin using 400.
       // ----------------------------------------------------------
 
-      const int chunkSize =
-          400;
+      const int chunkSize = 400;
 
-      for (
-        int start = 0;
-        start <
-            unreadMessages.length;
-        start += chunkSize
-      ) {
-        final int end =
-            start + chunkSize >
-                    unreadMessages.length
-                ? unreadMessages.length
-                : start +
-                    chunkSize;
+      for (int start = 0; start < unreadMessages.length; start += chunkSize) {
+        final int end = start + chunkSize > unreadMessages.length
+            ? unreadMessages.length
+            : start + chunkSize;
 
-        final WriteBatch batch =
-            _firestore.batch();
+        final WriteBatch batch = _firestore.batch();
 
-        for (
-          int index = start;
-          index < end;
-          index++
-        ) {
-          batch.update(
-            unreadMessages[index]
-                .reference,
-            {
-              'isRead': true,
-              'readAt': FieldValue.serverTimestamp(),
-            },
-          );
+        for (int index = start; index < end; index++) {
+          batch.update(unreadMessages[index].reference, {
+            'isRead': true,
+            'readAt': FieldValue.serverTimestamp(),
+          });
         }
 
         await batch.commit();
@@ -999,13 +1152,10 @@ class ChatService {
       rethrow;
     } on FirebaseException catch (e) {
       throw ChatServiceException(
-        e.message ??
-            'Unable to update message status.',
+        e.message ?? 'Unable to update message status.',
       );
     } catch (_) {
-      throw ChatServiceException(
-        'Unable to update message status.',
-      );
+      throw ChatServiceException('Unable to update message status.');
     }
   }
 
@@ -1015,82 +1165,74 @@ class ChatService {
   // Works for both instructor and student.
   // ============================================================
 
-  Stream<List<Map<String, dynamic>>>
-      watchMyConversations() {
-    final User? user =
-        _auth.currentUser;
+  Stream<List<Map<String, dynamic>>> watchMyConversations() {
+    return _watchMyConversations();
+  }
+
+  /// Watches only conversations where the signed-in user is the student.
+  ///
+  /// Using the explicit participant field keeps this query aligned with the
+  /// Firestore list rule. It is more reliable than asking Firestore to prove
+  /// access through membership of the `participantIds` array.
+  Stream<List<Map<String, dynamic>>> watchStudentConversations() {
+    return _watchMyConversations(participantField: 'studentId');
+  }
+
+  /// Watches only conversations where the signed-in user is the instructor.
+  Stream<List<Map<String, dynamic>>> watchInstructorConversations() {
+    return _watchMyConversations(participantField: 'instructorId');
+  }
+
+  Stream<List<Map<String, dynamic>>> _watchMyConversations({
+    String? participantField,
+  }) {
+    final User? user = _auth.currentUser;
 
     if (user == null) {
-      return Stream.value(
-        <Map<String, dynamic>>[],
-      );
+      return Stream.value(<Map<String, dynamic>>[]);
     }
 
-    return _firestore
-        .collection('conversations')
-        .where(
-          'participantIds',
-          arrayContains:
-              user.uid,
-        )
-        .snapshots()
-        .map(
-      (
-        snapshot,
+    Query<Map<String, dynamic>> query = _firestore.collection('conversations');
+
+    if (participantField == null) {
+      query = query.where('participantIds', arrayContains: user.uid);
+    } else {
+      query = query.where(participantField, isEqualTo: user.uid);
+    }
+
+    return query.snapshots().map((snapshot) {
+      final List<Map<String, dynamic>> conversations = snapshot.docs.map((
+        document,
       ) {
-        final List<Map<String, dynamic>>
-            conversations =
-            snapshot.docs
-                .map(
-          (
-            document,
-          ) {
-            return {
-              ...document.data(),
-              'id': document.id,
-            };
-          },
-        ).toList();
+        return {...document.data(), 'id': document.id};
+      }).toList();
 
-        // --------------------------------------------------------
-        // LATEST CONVERSATION FIRST
-        // --------------------------------------------------------
+      // --------------------------------------------------------
+      // LATEST CONVERSATION FIRST
+      // --------------------------------------------------------
 
-        conversations.sort(
-          (
-            a,
-            b,
-          ) {
-            final dynamic aTime =
-                a['lastMessageAt'];
+      conversations.sort((a, b) {
+        final dynamic aTime = a['lastMessageAt'];
 
-            final dynamic bTime =
-                b['lastMessageAt'];
+        final dynamic bTime = b['lastMessageAt'];
 
-            if (aTime is Timestamp &&
-                bTime is Timestamp) {
-              return bTime
-                  .toDate()
-                  .compareTo(
-                    aTime.toDate(),
-                  );
-            }
+        if (aTime is Timestamp && bTime is Timestamp) {
+          return bTime.toDate().compareTo(aTime.toDate());
+        }
 
-            if (aTime is Timestamp) {
-              return -1;
-            }
+        if (aTime is Timestamp) {
+          return -1;
+        }
 
-            if (bTime is Timestamp) {
-              return 1;
-            }
+        if (bTime is Timestamp) {
+          return 1;
+        }
 
-            return 0;
-          },
-        );
+        return 0;
+      });
 
-        return conversations;
-      },
-    );
+      return conversations;
+    });
   }
 
   // ============================================================
@@ -1104,71 +1246,36 @@ class ChatService {
     required String instructorId,
     required String studentId,
   }) {
-    final User? user =
-        _auth.currentUser;
+    final User? user = _auth.currentUser;
 
     if (user == null) {
-      return Stream.value(
-        0,
-      );
+      return Stream.value(0);
     }
 
     // ----------------------------------------------------------
     // ONLY PARTICIPANTS SHOULD READ THIS COUNT
     // ----------------------------------------------------------
 
-    if (user.uid != instructorId &&
-        user.uid != studentId) {
-      return Stream.value(
-        0,
-      );
+    if (user.uid != instructorId && user.uid != studentId) {
+      return Stream.value(0);
     }
 
-    final String conversationId =
-        buildConversationId(
-      courseId:
-          courseId,
-      instructorId:
-          instructorId,
-      studentId:
-          studentId,
-    );
+    return watchMessages(
+      courseId: courseId,
+      instructorId: instructorId,
+      studentId: studentId,
+    ).map((messages) {
+      int count = 0;
 
-    if (conversationId.isEmpty) {
-      return Stream.value(
-        0,
-      );
-    }
-
-    return _firestore
-        .collection('conversations')
-        .doc(conversationId)
-        .collection('messages')
-        .where(
-          'receiverId',
-          isEqualTo:
-              user.uid,
-        )
-        .snapshots()
-        .map(
-      (
-        snapshot,
-      ) {
-        int count =
-            0;
-
-        for (final document
-            in snapshot.docs) {
-          if (document
-                  .data()['isRead'] !=
-              true) {
-            count++;
-          }
+      for (final message in messages) {
+        if ((message['receiverId'] ?? '').toString() == user.uid &&
+            message['isRead'] != true) {
+          count++;
         }
+      }
 
-        return count;
-      },
-    );
+      return count;
+    });
   }
 
   // ============================================================
@@ -1180,44 +1287,27 @@ class ChatService {
   // ============================================================
 
   Stream<int> watchUnreadMessageCount() {
-    final User? user =
-        _auth.currentUser;
+    final User? user = _auth.currentUser;
 
     if (user == null) {
-      return Stream.value(
-        0,
-      );
+      return Stream.value(0);
     }
 
     return _firestore
-        .collectionGroup(
-          'messages',
-        )
-        .where(
-          'receiverId',
-          isEqualTo:
-              user.uid,
-        )
+        .collectionGroup('messages')
+        .where('receiverId', isEqualTo: user.uid)
         .snapshots()
-        .map(
-      (
-        snapshot,
-      ) {
-        int unreadCount =
-            0;
+        .map((snapshot) {
+          int unreadCount = 0;
 
-        for (final document
-            in snapshot.docs) {
-          if (document
-                  .data()['isRead'] !=
-              true) {
-            unreadCount++;
+          for (final document in snapshot.docs) {
+            if (document.data()['isRead'] != true) {
+              unreadCount++;
+            }
           }
-        }
 
-        return unreadCount;
-      },
-    );
+          return unreadCount;
+        });
   }
 }
 
@@ -1228,11 +1318,8 @@ class ChatService {
 class ChatServiceException implements Exception {
   final String message;
 
-  ChatServiceException(
-    this.message,
-  );
+  ChatServiceException(this.message);
 
   @override
-  String toString() =>
-      message;
+  String toString() => message;
 }
