@@ -237,7 +237,7 @@ class _InstructorCourseSectionsScreenState
         subtitle: Text(
           '${_text(section['identifier'])}\n'
           '${archived ? 'Archived' : 'Active'}'
-          '${legacy ? ' â€¢ Original Section' : ''}',
+          '${legacy ? ' \u2022 Original Section' : ''}',
         ),
         isThreeLine: true,
         onTap: () => _showSection(section),

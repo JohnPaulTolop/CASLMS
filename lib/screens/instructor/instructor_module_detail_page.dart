@@ -1305,7 +1305,7 @@ class _InstructorModuleDetailScreenState
     }
 
     await _showAiAnalysisDialog(
-      title: 'AI Analysis ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â $title',
+      title: 'AI Analysis \u2014 $title',
       analysis: analysis,
     );
   }
@@ -1854,8 +1854,8 @@ class _InstructorModuleDetailScreenState
                 const SizedBox(height: 8),
 
                 Text(
-                  '${draft.questions.length} questions ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ '
-                  '${_capitalize(draft.difficulty)} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ '
+                  '${draft.questions.length} questions \u2022 '
+                  '${_capitalize(draft.difficulty)} \u2022 '
                   '${draft.totalPoints} points',
 
                   style: const TextStyle(
@@ -2133,7 +2133,7 @@ class _InstructorModuleDetailScreenState
     final String minute = local.minute.toString().padLeft(2, '0');
 
     return '${months[local.month - 1]} '
-        '${local.day}, ${local.year} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ '
+        '${local.day}, ${local.year} \u2022 '
         '$hour:$minute $period';
   }
 
@@ -2660,7 +2660,7 @@ class _InstructorModuleDetailScreenState
                   widget.courseCode.isEmpty
                       ? (_moduleOrder > 0 ? 'MODULE $_moduleOrder' : 'MODULE')
                       : '${widget.courseCode}'
-                            '${_moduleOrder > 0 ? ' ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ MODULE $_moduleOrder' : ''}',
+                            '${_moduleOrder > 0 ? ' \u2022 MODULE $_moduleOrder' : ''}',
 
                   style: const TextStyle(
                     color: Colors.white70,
@@ -2950,7 +2950,7 @@ class _InstructorModuleDetailScreenState
                 const SizedBox(height: 6),
 
                 Text(
-                  details.join(' ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ '),
+                  details.join(' \u2022 '),
 
                   style: const TextStyle(
                     color: textGrey,
@@ -3480,7 +3480,7 @@ class _InstructorModuleDetailScreenState
                     const SizedBox(height: 6),
 
                     Text(
-                      '${_capitalize(type)} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ '
+                      '${_capitalize(type)} \u2022 '
                       '$points points',
 
                       style: const TextStyle(
@@ -3842,8 +3842,8 @@ class _InstructorModuleDetailScreenState
                 const SizedBox(height: 5),
 
                 Text(
-                  '$eligibleCount AI-eligible material${eligibleCount == 1 ? '' : 's'} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ '
-                  '$pendingCount pending ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ $readyCount ready',
+                  '$eligibleCount AI-eligible material${eligibleCount == 1 ? '' : 's'} \u2022 '
+                  '$pendingCount pending \u2022 $readyCount ready',
 
                   style: const TextStyle(
                     color: textDark,
@@ -3856,7 +3856,7 @@ class _InstructorModuleDetailScreenState
 
                 const Text(
                   'AI analysis and quiz drafting support PDF, TXT, DOCX, PPTX, XLSX, '
-                  'JPG/JPEG, PNG, WEBP, MP4, and WEBM. Open a material menu (ÃƒÂ¢Ã¢â‚¬Â¹Ã‚Â®), '
+                  'JPG/JPEG, PNG, WEBP, MP4, and WEBM. Open a material menu (\u22EE), '
                   'analyze it once, then reuse the saved analysis or generate a quiz. '
                   'Use Re-analyze only when you really need a fresh result because it '
                   'uses another Gemini request.',
