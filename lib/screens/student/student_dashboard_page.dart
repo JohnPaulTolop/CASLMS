@@ -170,9 +170,8 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           continue;
         }
 
-        final assessmentDocuments = await _assessmentQuery.getVisibleAssessments(
-          courseId: courseId,
-        );
+        final assessmentDocuments = await _assessmentQuery
+            .getVisibleAssessments(courseId: courseId);
 
         for (final document in assessmentDocuments) {
           final Map<String, dynamic> assessment = document.data();
@@ -1276,7 +1275,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     courseTitle,
 
                     if (instructor.trim().isNotEmpty) instructor,
-                  ].where((value) => value.trim().isNotEmpty).join(' â€¢ '),
+                  ].where((value) => value.trim().isNotEmpty).join(' \u2022 '),
 
                   maxLines: 2,
 
@@ -1400,10 +1399,10 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                             (assessment['courseCode'] ?? '').toString(),
 
                             if (dueAt != null)
-                              '${_formatDate(dueAt)} â€¢ ${_formatTime(dueAt)}',
+                              '${_formatDate(dueAt)} \u2022 ${_formatTime(dueAt)}',
                           ]
                           .where((value) => value.trim().isNotEmpty)
-                          .join('  â€¢  '),
+                          .join('  \u2022  '),
 
                       style: const TextStyle(color: textGrey, fontSize: 10.5),
                     ),

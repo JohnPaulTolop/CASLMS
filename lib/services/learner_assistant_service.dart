@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_ai/firebase_ai.dart';
 
 import 'learner_assistant_report.dart';
+import 'student_assessment_query_service.dart';
 
 class LearnerAssistantException implements Exception {
   const LearnerAssistantException(this.message);
@@ -89,6 +90,24 @@ class LearnerAssistantService {
       if (page.docs.length < 250) return rows;
       cursor = page.docs.last;
     }
+  }
+
+  // Student queries must include section and publication filters. Instructor
+  // reports retain their existing owned-course queries.
+  Future<List<AssistantRow>> _studentAssessments(String courseId) async {
+    final documents = await StudentAssessmentQueryService(
+      firestore: _db,
+      auth: _auth,
+    ).getVisibleAssessments(courseId: courseId);
+    return documents.map((document) {
+      return <String, dynamic>{
+        ...document.data().map(
+          (key, value) =>
+              MapEntry(key, value is Timestamp ? value.toDate() : value),
+        ),
+        'id': document.id,
+      };
+    }).toList();
   }
 
   Future<List<AssistantRow>> _ownedCourses(String uid) async => (await _read(
@@ -222,9 +241,13 @@ class LearnerAssistantService {
             ? 'submissions'
             : 'quiz_attempts';
         final loaded = await Future.wait([
-          _read(
-            _db.collection(taskCollection).where('courseId', isEqualTo: id),
-          ),
+          source == 'assessment' && role == 'student'
+              ? _studentAssessments(id)
+              : _read(
+                  _db
+                      .collection(taskCollection)
+                      .where('courseId', isEqualTo: id),
+                ),
           _read(
             _db
                 .collection(resultCollection)
@@ -365,7 +388,7 @@ class LearnerAssistantService {
     } on FirebaseException catch (error) {
       throw LearnerAssistantException(
         error.code == 'permission-denied'
-            ? 'You no longer have access to these records. Refresh and sign in again.'
+            ? 'Some records could not be accessed. Check your course enrollment or contact your instructor.'
             : error.code == 'failed-precondition'
             ? 'A database query needs an index. Ask the administrator to check the Flutter console.'
             : 'Unable to read current records. Check your connection and try again.',

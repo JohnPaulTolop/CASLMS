@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/course_section_service.dart';
 import 'instructor_class_details_page.dart';
+import 'instructor_section_details_page.dart';
 
 class InstructorCourseSectionsScreen extends StatefulWidget {
   const InstructorCourseSectionsScreen({super.key, required this.courseId});
@@ -56,7 +57,10 @@ class _InstructorCourseSectionsScreenState
   }
 
   Future<void> _refresh() async {
-    setState(() => _sectionsFuture = _load());
+    final nextLoad = _load();
+    setState(() {
+      _sectionsFuture = nextLoad;
+    });
     try {
       await _sectionsFuture;
     } catch (_) {
@@ -180,41 +184,22 @@ class _InstructorCourseSectionsScreenState
     }
   }
 
-  void _showSection(Map<String, dynamic> section) {
-    showDialog<void>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text(_text(section['name'])),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Identifier: ${_text(section['identifier'])}'),
-            const SizedBox(height: 12),
-            const Text('Class Code'),
-            SelectableText(
-              _text(section['classCode']),
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: teal,
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Section-specific students, assessments, '
-              'and grades will be connected next.',
-            ),
-          ],
+  Future<void> _openSection(Map<String, dynamic> section) async {
+    final sectionId = _text(section['id']);
+    if (sectionId.isEmpty) {
+      _notice('Section ID is missing.');
+      return;
+    }
+
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => InstructorSectionDetailsScreen(
+          courseId: widget.courseId,
+          sectionId: sectionId,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialog),
-            child: const Text('Close'),
-          ),
-        ],
       ),
     );
+    if (mounted) await _refresh();
   }
 
   Widget _sectionCard(Map<String, dynamic> section) {
@@ -240,7 +225,7 @@ class _InstructorCourseSectionsScreenState
           '${legacy ? ' \u2022 Original Section' : ''}',
         ),
         isThreeLine: true,
-        onTap: () => _showSection(section),
+        onTap: () => _openSection(section),
         trailing: PopupMenuButton<String>(
           tooltip: 'Section options',
           onSelected: (action) {

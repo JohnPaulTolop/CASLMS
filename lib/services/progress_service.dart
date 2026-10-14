@@ -58,26 +58,58 @@ class ProgressService {
           .where('studentId', isEqualTo: user.uid),
     );
 
-    final courseIds = enrollmentStream
+    // Keep the section in the stream key so transfers update visible work.
+    final courseSections = enrollmentStream
         .map((rows) {
-          final result = rows
-              .where(
-                (row) => _ProgressCalculator.lower(row['status']) == 'active',
-              )
-              .map((row) => _ProgressCalculator.text(row['courseId']))
-              .where((id) => id.isNotEmpty)
-              .toSet()
-              .toList();
-
-          result.sort();
-          return result;
+          final sections = <String, String>{};
+          for (final row in rows) {
+            if (_ProgressCalculator.lower(row['status']) != 'active') {
+              continue;
+            }
+            final courseId = _ProgressCalculator.text(row['courseId']);
+            if (courseId.isEmpty) continue;
+            sections[courseId] = _ProgressCalculator.text(row['sectionId']);
+          }
+          return sections;
         })
-        .distinct((previous, next) => previous.join('|') == next.join('|'));
+        .distinct((previous, next) {
+          if (previous.length != next.length) return false;
+          for (final entry in previous.entries) {
+            if (next[entry.key] != entry.value) return false;
+          }
+          return true;
+        });
 
-    yield* _switchLatest(courseIds.map((ids) => _watchCourses(user.uid, ids)));
+    yield* _switchLatest(
+      courseSections.map((sections) => _watchCourses(user.uid, sections)),
+    );
   }
 
-  Stream<ProgressRow> _watchCourses(String studentId, List<String> courseIds) {
+  // A student can stream course-wide legacy work and their own section only.
+  // These constraints match StudentAssessmentQueryService and Firestore rules.
+  Stream<List<ProgressRow>> _watchVisibleAssessments({
+    required String courseId,
+    required String sectionId,
+  }) {
+    Stream<List<ProgressRow>> watchScope(String scope) => _rows(
+      _firestore
+          .collection('assessments')
+          .where('courseId', isEqualTo: courseId)
+          .where('status', whereIn: const ['published', 'closed'])
+          .where('sectionId', isEqualTo: scope),
+    );
+
+    if (sectionId.isEmpty) return watchScope('');
+
+    return _combineLatest([watchScope(''), watchScope(sectionId)])
+        .map((scopes) => [...scopes[0], ...scopes[1]]);
+  }
+
+  Stream<ProgressRow> _watchCourses(
+    String studentId,
+    Map<String, String> sectionsByCourse,
+  ) {
+    final courseIds = sectionsByCourse.keys.toList()..sort();
     if (courseIds.isEmpty) {
       return Stream.value(_ProgressCalculator.overall([]));
     }
@@ -115,12 +147,20 @@ class ProgressService {
         }),
       );
 
-      for (final collection in [
-        'modules',
-        'assessments',
-        'assignments',
-        'quizzes',
-      ]) {
+      streams.add(
+        _rows(
+          _firestore
+              .collection('modules')
+              .where('courseId', isEqualTo: courseId),
+        ),
+      );
+      streams.add(
+        _watchVisibleAssessments(
+          courseId: courseId,
+          sectionId: sectionsByCourse[courseId] ?? '',
+        ),
+      );
+      for (final collection in ['assignments', 'quizzes']) {
         streams.add(
           _rows(
             _firestore
