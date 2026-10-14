@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter/material.dart';
 
 import 'instructor_ui.dart';
 
 import '../../services/assessment_service.dart';
+import '../../services/course_section_service.dart';
 import '../../services/firebase_ai_service.dart';
 import '../../services/learning_material_service.dart';
 import '../../services/notification_service.dart';
@@ -787,6 +789,99 @@ class _InstructorModuleDetailScreenState
         return;
       }
 
+      // Load the course's existing active sections.
+      final List<Map<String, dynamic>> activeSections =
+          (await CourseSectionService().getSections(widget.courseId))
+              .where((Map<String, dynamic> section) {
+                final String id = (section['id'] ?? '').toString().trim();
+                final String status = (section['status'] ?? 'active')
+                    .toString()
+                    .trim()
+                    .toLowerCase();
+
+                return id.isNotEmpty && status == 'active';
+              })
+              .toList();
+
+      if (activeSections.isEmpty) {
+        throw AssessmentServiceException(
+          'This course has no active sections. '
+          'Create a section before publishing the quiz.',
+        );
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      // Require the instructor to select the target section.
+      final String? selectedSectionId = await showDialog<String>(
+        context: context,
+        builder: (BuildContext dialogContext) {
+          return AlertDialog(
+            icon: const Icon(Icons.groups_rounded, color: primaryTeal),
+            title: const Text('Select Quiz Section'),
+            content: SizedBox(
+              width: 430,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360),
+                child: ListView(
+                  shrinkWrap: true,
+                  children: activeSections.map((section) {
+                    final String id = (section['id'] ?? '').toString().trim();
+                    final String name = (section['name'] ?? 'Unnamed section')
+                        .toString()
+                        .trim();
+                    final String identifier = (section['identifier'] ?? '')
+                        .toString()
+                        .trim();
+
+                    return ListTile(
+                      leading: const Icon(
+                        Icons.class_outlined,
+                        color: primaryTeal,
+                      ),
+                      title: Text(name),
+                      subtitle: identifier.isEmpty ? null : Text(identifier),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () {
+                        Navigator.of(dialogContext).pop(id);
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                },
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (!mounted || selectedSectionId == null) {
+        return;
+      }
+
+      final Map<String, dynamic> selectedSection = activeSections.firstWhere(
+        (section) => section['id'] == selectedSectionId,
+      );
+
+      final String selectedSectionName = (selectedSection['name'] ?? 'Section')
+          .toString()
+          .trim();
+
+      final String selectedSectionIdentifier =
+          (selectedSection['identifier'] ?? '').toString().trim();
+
+      final String selectedSectionLabel = selectedSectionIdentifier.isEmpty
+          ? selectedSectionName
+          : '$selectedSectionName ($selectedSectionIdentifier)';
       final bool? confirmed = await showDialog<bool>(
         context: context,
 
@@ -816,6 +911,8 @@ class _InstructorModuleDetailScreenState
                   const SizedBox(height: 18),
 
                   _publishSummaryRow('Quiz', title),
+
+                  _publishSummaryRow('Section', selectedSectionLabel),
 
                   _publishSummaryRow('Questions', '${rawQuestions.length}'),
 
@@ -881,16 +978,65 @@ class _InstructorModuleDetailScreenState
         return;
       }
 
-      await _assessmentService.updateAssessmentStatus(
-        assessmentId: assessmentId,
-        status: 'published',
+      // Publish through the trusted backend.
+      // The backend stores answer keys privately and publishes
+      // sanitized questions in one Firestore transaction.
+      final User? publishingUser = FirebaseAuth.instance.currentUser;
+
+      if (publishingUser == null) {
+        throw AssessmentServiceException(
+          'Please sign in again before publishing.',
+        );
+      }
+
+      final String? idToken = await publishingUser.getIdToken(true);
+
+      if (idToken == null || idToken.isEmpty) {
+        throw AssessmentServiceException(
+          'Unable to verify your instructor account.',
+        );
+      }
+
+      final response = await sb.Supabase.instance.client.functions.invoke(
+        'assessment-submission',
+        headers: <String, String>{'Authorization': 'Bearer $idToken'},
+        body: <String, dynamic>{
+          'action': 'publish_ai_quiz',
+          'sectionId': selectedSectionId,
+          'assessmentId': assessmentId,
+        },
       );
 
-      // Store a dedicated publish timestamp for the AI quiz.
-      await _firestore.collection('assessments').doc(assessmentId).update({
-        'publishedAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      final dynamic rawResponse = response.data;
+
+      if (rawResponse is! Map) {
+        throw AssessmentServiceException(
+          'The publishing server returned an invalid response.',
+        );
+      }
+
+      final Map<String, dynamic> result = Map<String, dynamic>.from(
+        rawResponse,
+      );
+
+      if (result['success'] != true) {
+        throw AssessmentServiceException(
+          (result['error'] ?? 'Unable to publish this quiz.').toString(),
+        );
+      }
+
+      // Preserve existing best-effort student notifications.
+      // A notification error must not undo a successful publish.
+      try {
+        await NotificationService().createAssessmentNotifications(
+          assessmentId: assessmentId,
+        );
+      } catch (notificationError) {
+        debugPrint(
+          'AI quiz published, but notifications require retry: '
+          '$notificationError',
+        );
+      }
 
       if (!mounted) {
         return;
@@ -1159,7 +1305,7 @@ class _InstructorModuleDetailScreenState
     }
 
     await _showAiAnalysisDialog(
-      title: 'AI Analysis — $title',
+      title: 'AI Analysis ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â $title',
       analysis: analysis,
     );
   }
@@ -1708,8 +1854,8 @@ class _InstructorModuleDetailScreenState
                 const SizedBox(height: 8),
 
                 Text(
-                  '${draft.questions.length} questions • '
-                  '${_capitalize(draft.difficulty)} • '
+                  '${draft.questions.length} questions ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ '
+                  '${_capitalize(draft.difficulty)} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ '
                   '${draft.totalPoints} points',
 
                   style: const TextStyle(
@@ -1846,7 +1992,7 @@ class _InstructorModuleDetailScreenState
                   final String assessmentId =
                       await _saveAiQuizDraftAsAssessment(draft);
 
-                  if (!mounted) {
+                  if (!mounted || !dialogContext.mounted) {
                     return;
                   }
 
@@ -1987,7 +2133,7 @@ class _InstructorModuleDetailScreenState
     final String minute = local.minute.toString().padLeft(2, '0');
 
     return '${months[local.month - 1]} '
-        '${local.day}, ${local.year} • '
+        '${local.day}, ${local.year} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ '
         '$hour:$minute $period';
   }
 
@@ -2514,7 +2660,7 @@ class _InstructorModuleDetailScreenState
                   widget.courseCode.isEmpty
                       ? (_moduleOrder > 0 ? 'MODULE $_moduleOrder' : 'MODULE')
                       : '${widget.courseCode}'
-                            '${_moduleOrder > 0 ? ' • MODULE $_moduleOrder' : ''}',
+                            '${_moduleOrder > 0 ? ' ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ MODULE $_moduleOrder' : ''}',
 
                   style: const TextStyle(
                     color: Colors.white70,
@@ -2804,7 +2950,7 @@ class _InstructorModuleDetailScreenState
                 const SizedBox(height: 6),
 
                 Text(
-                  details.join(' • '),
+                  details.join(' ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ '),
 
                   style: const TextStyle(
                     color: textGrey,
@@ -3334,7 +3480,7 @@ class _InstructorModuleDetailScreenState
                     const SizedBox(height: 6),
 
                     Text(
-                      '${_capitalize(type)} • '
+                      '${_capitalize(type)} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ '
                       '$points points',
 
                       style: const TextStyle(
@@ -3696,8 +3842,8 @@ class _InstructorModuleDetailScreenState
                 const SizedBox(height: 5),
 
                 Text(
-                  '$eligibleCount AI-eligible material${eligibleCount == 1 ? '' : 's'} • '
-                  '$pendingCount pending • $readyCount ready',
+                  '$eligibleCount AI-eligible material${eligibleCount == 1 ? '' : 's'} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ '
+                  '$pendingCount pending ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ $readyCount ready',
 
                   style: const TextStyle(
                     color: textDark,
@@ -3710,7 +3856,7 @@ class _InstructorModuleDetailScreenState
 
                 const Text(
                   'AI analysis and quiz drafting support PDF, TXT, DOCX, PPTX, XLSX, '
-                  'JPG/JPEG, PNG, WEBP, MP4, and WEBM. Open a material menu (⋮), '
+                  'JPG/JPEG, PNG, WEBP, MP4, and WEBM. Open a material menu (ÃƒÂ¢Ã¢â‚¬Â¹Ã‚Â®), '
                   'analyze it once, then reuse the saved analysis or generate a quiz. '
                   'Use Re-analyze only when you really need a fresh result because it '
                   'uses another Gemini request.',

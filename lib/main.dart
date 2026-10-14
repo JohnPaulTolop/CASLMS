@@ -1,5 +1,7 @@
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,6 +12,10 @@ import 'screens/auth_page.dart';
 import 'screens/session_gate.dart';
 import 'screens/student/student_main_page.dart';
 
+const bool _caslmsLocalIntegration = bool.fromEnvironment(
+  'CASLMS_LOCAL_INTEGRATION',
+);
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -17,15 +23,47 @@ Future<void> main() async {
   // FIREBASE
   // ============================================================
 
+  if (_caslmsLocalIntegration && (kReleaseMode || !kIsWeb)) {
+    throw StateError(
+      'Local integration mode supports debug web builds only.',
+    );
+  }
+
   await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
+    options: _caslmsLocalIntegration
+        ? const FirebaseOptions(
+            apiKey: 'local-emulator-only',
+            appId: '1:1234567890:web:caslmslocal',
+            messagingSenderId: '1234567890',
+            projectId: 'demo-caslms-ai-integration',
+            authDomain: 'demo-caslms-ai-integration.firebaseapp.com',
+          )
+        : DefaultFirebaseOptions.currentPlatform,
   );
+
+  if (_caslmsLocalIntegration) {
+    await FirebaseAuth.instance.useAuthEmulator(
+      '127.0.0.1',
+      9099,
+    );
+
+    FirebaseFirestore.instance.useFirestoreEmulator(
+      '127.0.0.1',
+      8080,
+    );
+
+    debugPrint(
+      'CASLMS LOCAL INTEGRATION: Firebase emulators enabled.',
+    );
+  }
 
   // ============================================================
   // FIREBASE APP CHECK
   // ============================================================
 
-  await _activateFirebaseAppCheck();
+  if (!_caslmsLocalIntegration) {
+    await _activateFirebaseAppCheck();
+  }
 
   // ============================================================
   // SUPABASE
@@ -43,8 +81,12 @@ Future<void> main() async {
   // ============================================================
 
   await Supabase.initialize(
-    url: SupabaseConfig.projectUrl,
-    publishableKey: SupabaseConfig.publishableKey,
+    url: _caslmsLocalIntegration
+        ? 'http://127.0.0.1:8787'
+        : SupabaseConfig.projectUrl,
+    publishableKey: _caslmsLocalIntegration
+        ? 'local-test-anon-key'
+        : SupabaseConfig.publishableKey,
   );
 
   // ============================================================

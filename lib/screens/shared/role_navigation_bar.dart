@@ -23,15 +23,15 @@ class RoleNavigationBar extends StatelessWidget {
       instructor ? const Color(0xFF00897B) : const Color(0xFF1769FF);
 
   List<_RoleDestination> get _destinations => <_RoleDestination>[
-    const _RoleDestination(
+    _RoleDestination(
       index: 0,
-      label: 'Home',
+      label: instructor ? 'Dashboard' : 'Home',
       icon: Icons.home_outlined,
       activeIcon: Icons.home_rounded,
     ),
     _RoleDestination(
       index: 1,
-      label: instructor ? 'Classes' : 'Modules',
+      label: instructor ? 'My Courses' : 'Modules',
       icon: instructor ? Icons.class_outlined : Icons.folder_outlined,
       activeIcon: instructor ? Icons.class_rounded : Icons.folder_rounded,
     ),
@@ -118,10 +118,12 @@ class RoleNavigationBar extends StatelessWidget {
       allDestinations[0],
       allDestinations[1],
       allDestinations[2],
-      allDestinations[5],
+      allDestinations[instructor ? 6 : 5],
     ];
     final bool secondaryDestinationSelected =
-        selectedIndex == 3 || selectedIndex == 4 || selectedIndex == 6;
+        (selectedIndex == 3 ||
+        selectedIndex == 4 ||
+        selectedIndex == (instructor ? 5 : 6));
 
     return Row(
       children: <Widget>[
@@ -157,7 +159,7 @@ class RoleNavigationBar extends StatelessWidget {
     final List<_RoleDestination> secondaryDestinations = <_RoleDestination>[
       allDestinations[3],
       allDestinations[4],
-      allDestinations[6],
+      allDestinations[instructor ? 5 : 6],
     ];
 
     final int? destinationIndex = await showModalBottomSheet<int>(

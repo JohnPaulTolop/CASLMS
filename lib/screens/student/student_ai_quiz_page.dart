@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter/material.dart';
 
 class StudentAiQuizScreen extends StatefulWidget {
@@ -58,7 +59,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
       (_assessment?['instructions'] ?? '').toString().trim();
 
   int get _totalPoints =>
-    _questions.fold<int>(0, (total, question) => total + question.points);
+      _questions.fold<int>(0, (total, question) => total + question.points);
 
   bool get _allAnswered =>
       _questions.isNotEmpty && _answers.length == _questions.length;
@@ -93,7 +94,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
     final period = date.hour >= 12 ? 'PM' : 'AM';
 
     return '${months[date.month - 1]} ${date.day}, ${date.year}'
-        ' • $hour:$minute $period';
+        ' Ã¢â‚¬Â¢ $hour:$minute $period';
   }
 
   void _validateStudent(Map<String, dynamic>? profile) {
@@ -125,6 +126,14 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
       throw Exception('This quiz does not belong to the selected module.');
     }
 
+    final version = assessment['quizVersion'];
+
+    if (version is! String || version.trim().isEmpty) {
+      throw Exception(
+        'This quiz is not yet ready for secure grading. '
+        'Please contact your instructor.',
+      );
+    }
     if (assessment['status'] != 'published') {
       throw Exception('This quiz is not currently published.');
     }
@@ -137,6 +146,36 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
     final dueAt = _dateFrom(assessment['dueAt']);
     if (dueAt != null && DateTime.now().isAfter(dueAt)) {
       throw Exception('The deadline for this quiz has already passed.');
+    }
+  }
+
+  // Verify that this quiz is assigned to the student's section.
+  // Firestore rules and the backend independently enforce access.
+  void _validateQuizSection({
+    required Map<String, dynamic>? enrollment,
+    required Map<String, dynamic>? assessment,
+  }) {
+    if (enrollment == null || assessment == null) {
+      throw Exception('Quiz section information is unavailable.');
+    }
+
+    final String quizSectionId = (assessment['sectionId'] ?? '')
+        .toString()
+        .trim();
+
+    final String studentSectionId = (enrollment['sectionId'] ?? '')
+        .toString()
+        .trim();
+
+    if (quizSectionId.isEmpty) {
+      throw Exception(
+        'This quiz has no section assignment. '
+        'Please contact your instructor.',
+      );
+    }
+
+    if (studentSectionId.isEmpty || studentSectionId != quizSectionId) {
+      throw Exception('This quiz is not available to your section.');
     }
   }
 
@@ -188,6 +227,12 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
       final assessment = assessmentDocument.data();
       _validateAssessment(assessment);
 
+      // Check section membership before loading the questions.
+      _validateQuizSection(
+        enrollment: enrollment.data(),
+        assessment: assessment,
+      );
+
       final questions = _parseQuestions(assessment!['questions']);
 
       final draftDocument = await _firestore
@@ -231,11 +276,21 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
   }
 
   List<_QuizQuestion> _parseQuestions(dynamic rawQuestions) {
-    if (rawQuestions is! List || rawQuestions.isEmpty) {
-      throw Exception('This quiz does not contain any questions.');
+    if (rawQuestions is! List ||
+        rawQuestions.isEmpty ||
+        rawQuestions.length > 100) {
+      throw Exception('This quiz has an invalid question list.');
     }
 
     final result = <_QuizQuestion>[];
+
+    const allowedFields = <String>{
+      'order',
+      'questionType',
+      'question',
+      'options',
+      'points',
+    };
 
     for (var index = 0; index < rawQuestions.length; index++) {
       final raw = rawQuestions[index];
@@ -245,37 +300,41 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
       }
 
       final data = Map<String, dynamic>.from(raw);
-      final question = (data['question'] ?? '').toString().trim();
-      final rawOptions = data['options'];
 
-      if (question.isEmpty || rawOptions is! List || rawOptions.length != 4) {
-        throw Exception('Question ${index + 1} is incomplete.');
+      if (data.keys.any((key) => !allowedFields.contains(key))) {
+        throw Exception('This quiz has not been prepared for secure grading.');
+      }
+
+      final question = data['question'];
+      final rawOptions = data['options'];
+      final points = data['points'];
+
+      if (data['order'] != index + 1 ||
+          data['questionType'] != 'multiple_choice' ||
+          question is! String ||
+          question.trim().isEmpty ||
+          rawOptions is! List ||
+          rawOptions.length != 4 ||
+          points is! int ||
+          points < 1 ||
+          points > 100) {
+        throw Exception('Question ${index + 1} has invalid quiz data.');
       }
 
       final options = rawOptions
-          .map((option) => option.toString().trim())
+          .map((option) => option is String ? option.trim() : '')
           .toList();
 
-      final answerValue = data['correctAnswerIndex'];
-      final pointsValue = data['points'];
-
-      final correctIndex = answerValue is num ? answerValue.toInt() : -1;
-      final points = pointsValue is num ? pointsValue.toInt() : 1;
-
       if (options.any((option) => option.isEmpty) ||
-          correctIndex < 0 ||
-          correctIndex >= options.length ||
-          points <= 0) {
-        throw Exception('Question ${index + 1} has invalid quiz data.');
+          options.toSet().length != options.length) {
+        throw Exception('Question ${index + 1} has invalid choices.');
       }
 
       result.add(
         _QuizQuestion(
-          question: question,
+          question: question.trim(),
           options: options,
           points: points,
-          correctAnswerIndex: correctIndex,
-          explanation: (data['explanation'] ?? '').toString().trim(),
         ),
       );
     }
@@ -529,163 +588,102 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
         throw Exception('You must be logged in to submit this quiz.');
       }
 
-      final submissionId = '${widget.assessmentId}_${user.uid}';
+      final String? token = await user.getIdToken(true);
 
-      final profileReference = _firestore.collection('users').doc(user.uid);
+      if (token == null || token.isEmpty) {
+        throw Exception('Unable to verify your student account.');
+      }
 
-      final enrollmentReference = _firestore
-          .collection('enrollments')
-          .doc('${widget.courseId}_${user.uid}');
+      // Submit answer selections only. Never calculate or send a grade.
+      final selectedAnswers = <int>[];
 
-      final assessmentReference = _firestore
-          .collection('assessments')
-          .doc(widget.assessmentId);
+      for (var index = 0; index < _questions.length; index++) {
+        final selected = _answers[index];
 
-      final submissionReference = _firestore
-          .collection('assessmentSubmissions')
-          .doc(submissionId);
-
-      final notificationReference = _firestore
-          .collection('notifications')
-          .doc('assessmentGrade_$submissionId');
-
-      final draftReference = _firestore
-          .collection('aiQuizDrafts')
-          .doc(submissionId);
-
-      final result = await _firestore.runTransaction<_QuizResult>((
-        transaction,
-      ) async {
-        // All reads happen before any writes.
-        final profileDocument = await transaction.get(profileReference);
-        final enrollmentDocument = await transaction.get(enrollmentReference);
-        final assessmentDocument = await transaction.get(assessmentReference);
-        final existingSubmission = await transaction.get(submissionReference);
-
-        final profile = profileDocument.data();
-        final assessment = assessmentDocument.data();
-
-        _validateStudent(profile);
-        _validateEnrollment(enrollmentDocument.data(), user.uid);
-        _validateAssessment(assessment);
-        _checkExistingSubmission(existingSubmission.data());
-
-        final latestQuestions = _parseQuestions(assessment!['questions']);
-
-        if (_answers.length != latestQuestions.length) {
-          throw Exception('The quiz has changed. Reopen it before submitting.');
-        }
-
-        var score = 0;
-        var totalPoints = 0;
-
-        final storedAnswers = <Map<String, dynamic>>[];
-        final items = <_QuizResultItem>[];
-
-        for (var index = 0; index < latestQuestions.length; index++) {
-          final question = latestQuestions[index];
-          final selectedIndex = _answers[index];
-
-          if (selectedIndex == null ||
-              selectedIndex < 0 ||
-              selectedIndex >= question.options.length) {
-            throw Exception(
-              'Question ${index + 1} does not have a valid answer.',
-            );
-          }
-
-          final correct = selectedIndex == question.correctAnswerIndex;
-          final earned = correct ? question.points : 0;
-
-          score += earned;
-          totalPoints += question.points;
-
-          storedAnswers.add({
-            'order': index + 1,
-            'selectedAnswerIndex': selectedIndex,
-            'selectedAnswerText': question.options[selectedIndex],
-            'isCorrect': correct,
-            'earnedPoints': earned,
-            'possiblePoints': question.points,
-          });
-
-          items.add(
-            _QuizResultItem(
-              order: index + 1,
-              question: question.question,
-              selectedAnswer: question.options[selectedIndex],
-              correctAnswer: question.options[question.correctAnswerIndex],
-              correct: correct,
-              earned: earned,
-              possible: question.points,
-              explanation: question.explanation,
-            ),
+        if (selected == null ||
+            selected < 0 ||
+            selected >= _questions[index].options.length) {
+          throw Exception(
+            'Question ${index + 1} does not have a valid answer.',
           );
         }
 
-        final percentage = totalPoints > 0 ? score / totalPoints * 100 : 0.0;
+        selectedAnswers.add(selected);
+      }
 
-        final submissionData = <String, dynamic>{
+      final response = await sb.Supabase.instance.client.functions.invoke(
+        'assessment-submission',
+        headers: <String, String>{'Authorization': 'Bearer $token'},
+        body: <String, dynamic>{
+          'action': 'submit_ai_quiz',
           'assessmentId': widget.assessmentId,
-          'courseId': widget.courseId,
-          'moduleId': widget.moduleId,
-          'studentId': user.uid,
-          'studentName':
-              (profile!['name'] ?? profile['universityId'] ?? 'Student')
-                  .toString(),
-          'status': 'graded',
-          'submissionType': 'ai_quiz',
-          'gradingMode': 'automatic',
-          'answers': storedAnswers,
-          'score': score,
-          'totalPoints': totalPoints,
-          'percentage': percentage,
-          'feedback': 'Automatically scored by CASLMS.',
-          'submittedAt': FieldValue.serverTimestamp(),
-          'gradedAt': FieldValue.serverTimestamp(),
-          'gradedBy': 'system:auto-score',
-          'updatedAt': FieldValue.serverTimestamp(),
-        };
+          'answers': selectedAnswers,
+        },
+      );
 
-        if (!existingSubmission.exists) {
-          submissionData['createdAt'] = FieldValue.serverTimestamp();
+      final dynamic rawResponse = response.data;
+
+      if (rawResponse is! Map) {
+        throw Exception('The grading server returned an invalid response.');
+      }
+
+      final data = Map<String, dynamic>.from(rawResponse);
+
+      if (data['success'] != true) {
+        throw Exception(
+          (data['error'] ?? 'Unable to submit this quiz.').toString(),
+        );
+      }
+
+      if (data['score'] is! num ||
+          data['totalPoints'] is! num ||
+          data['percentage'] is! num ||
+          data['items'] is! List) {
+        throw Exception('The grading result is incomplete.');
+      }
+
+      final rawItems = data['items'] as List;
+
+      if (rawItems.length != _questions.length) {
+        throw Exception('The grading result has an unexpected question count.');
+      }
+
+      final items = <_QuizResultItem>[];
+
+      for (final rawItem in rawItems) {
+        if (rawItem is! Map) {
+          throw Exception('Invalid grading feedback received.');
         }
 
-        transaction.set(
-          submissionReference,
-          submissionData,
-          SetOptions(merge: true),
+        final item = Map<String, dynamic>.from(rawItem);
+
+        if (item['order'] is! num ||
+            item['correct'] is! bool ||
+            item['earned'] is! num ||
+            item['possible'] is! num) {
+          throw Exception('Incomplete grading feedback received.');
+        }
+
+        items.add(
+          _QuizResultItem(
+            order: (item['order'] as num).toInt(),
+            question: (item['question'] ?? '').toString(),
+            selectedAnswer: (item['selectedAnswer'] ?? '').toString(),
+            correctAnswer: (item['correctAnswer'] ?? '').toString(),
+            correct: item['correct'] as bool,
+            earned: (item['earned'] as num).toInt(),
+            possible: (item['possible'] as num).toInt(),
+            explanation: (item['explanation'] ?? '').toString(),
+          ),
         );
+      }
 
-        // Grade and notification are committed together.
-        transaction.set(notificationReference, {
-          'userId': user.uid,
-          'type': 'grade',
-          'sourceType': 'automaticAssessmentGrade',
-          'sourceId': submissionId,
-          'actorId': user.uid,
-          'actorName': 'CASLMS',
-          'title': 'Graded: ${assessment['title']}',
-          'message':
-              'Your score is $score / $totalPoints. '
-              'Rating: ${percentage.toStringAsFixed(1)}%.',
-          'courseId': widget.courseId,
-          'moduleId': widget.moduleId,
-          'isRead': false,
-          'readAt': null,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-
-        transaction.delete(draftReference);
-
-        return _QuizResult(
-          score: score,
-          totalPoints: totalPoints,
-          percentage: percentage,
-          items: items,
-        );
-      });
-
+      final result = _QuizResult(
+        score: (data['score'] as num).toInt(),
+        totalPoints: (data['totalPoints'] as num).toInt(),
+        percentage: (data['percentage'] as num).toDouble(),
+        items: items,
+      );
       if (!mounted) return;
 
       setState(() {
@@ -1000,11 +998,11 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                       ),
                       SizedBox(height: 12),
                       Text(
-                        '• Starting creates an active quiz attempt.\n'
-                        '• Every answer is saved automatically.\n'
-                        '• Back cannot close an active attempt.\n'
-                        '• Reopening the quiz returns to your latest answered item.\n'
-                        '• Submit only after reviewing all answers.',
+                        'Ã¢â‚¬Â¢ Starting creates an active quiz attempt.\n'
+                        'Ã¢â‚¬Â¢ Every answer is saved automatically.\n'
+                        'Ã¢â‚¬Â¢ Back cannot close an active attempt.\n'
+                        'Ã¢â‚¬Â¢ Reopening the quiz returns to your latest answered item.\n'
+                        'Ã¢â‚¬Â¢ Submit only after reviewing all answers.',
                         style: TextStyle(
                           color: textGrey,
                           fontSize: 12.5,
@@ -1381,15 +1379,11 @@ class _QuizQuestion {
     required this.question,
     required this.options,
     required this.points,
-    required this.correctAnswerIndex,
-    required this.explanation,
   });
 
   final String question;
   final List<String> options;
   final int points;
-  final int correctAnswerIndex;
-  final String explanation;
 }
 
 class _QuizResult {

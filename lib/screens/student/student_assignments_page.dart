@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/student_assessment_query_service.dart';
+
 import 'student_module_detail_page.dart';
 
 class StudentAssignmentsScreen extends StatefulWidget {
@@ -37,6 +39,9 @@ class _StudentAssignmentsScreenState
 
   final FirebaseFirestore _firestore =
       FirebaseFirestore.instance;
+
+  final StudentAssessmentQueryService _assessmentQuery =
+      StudentAssessmentQueryService();
 
   final FirebaseAuth _auth =
       FirebaseAuth.instance;
@@ -306,18 +311,12 @@ class _StudentAssignmentsScreenState
         // ASSESSMENTS
         // --------------------------------------------------------
 
-        final QuerySnapshot<Map<String, dynamic>>
-            assessmentSnapshot =
-            await _firestore
-                .collection('assessments')
-                .where(
-                  'courseId',
-                  isEqualTo: courseId,
-                )
-                .get();
+        final assessmentDocuments = await _assessmentQuery.getVisibleAssessments(
+          courseId: courseId,
+        );
 
         for (final assessmentDocument
-            in assessmentSnapshot.docs) {
+            in assessmentDocuments) {
           final Map<String, dynamic> assessment =
               assessmentDocument.data();
 

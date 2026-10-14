@@ -2,11 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class NotificationService {
-  NotificationService({
-    FirebaseFirestore? firestore,
-    FirebaseAuth? auth,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance,
-       _auth = auth ?? FirebaseAuth.instance;
+  NotificationService({FirebaseFirestore? firestore, FirebaseAuth? auth})
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
@@ -27,20 +25,12 @@ class NotificationService {
     return (value ?? '').toString().trim();
   }
 
-  Future<Map<String, dynamic>> _document(
-    String collection,
-    String id,
-  ) async {
+  Future<Map<String, dynamic>> _document(String collection, String id) async {
     if (id.isEmpty || id.contains('/')) {
-      throw NotificationServiceException(
-        'Missing or invalid $collection ID.',
-      );
+      throw NotificationServiceException('Missing or invalid $collection ID.');
     }
 
-    final snapshot = await _firestore
-        .collection(collection)
-        .doc(id)
-        .get();
+    final snapshot = await _firestore.collection(collection).doc(id).get();
 
     final data = snapshot.data();
 
@@ -54,13 +44,8 @@ class NotificationService {
   }
 
   // New published module.
-  Future<void> createModuleNotifications({
-    required String moduleId,
-  }) {
-    return createSourceNotifications(
-      sourceType: 'module',
-      sourceId: moduleId,
-    );
+  Future<void> createModuleNotifications({required String moduleId}) {
+    return createSourceNotifications(sourceType: 'module', sourceId: moduleId);
   }
 
   // New published file, link, or video.
@@ -74,9 +59,7 @@ class NotificationService {
   }
 
   // Published quiz, assignment, activity, exam, or summative assessment.
-  Future<void> createAssessmentNotifications({
-    required String assessmentId,
-  }) {
+  Future<void> createAssessmentNotifications({required String assessmentId}) {
     return createSourceNotifications(
       sourceType: 'assessment',
       sourceId: assessmentId,
@@ -123,18 +106,12 @@ class NotificationService {
   }
 
   // Retry missing notifications without duplicating existing ones.
-  Future<void> retryModuleNotifications({
-    required String moduleId,
-  }) async {
+  Future<void> retryModuleNotifications({required String moduleId}) async {
     final module = await _document('modules', moduleId);
 
-    final course = await _document(
-      'courses',
-      _text(module['courseId']),
-    );
+    final course = await _document('courses', _text(module['courseId']));
 
-    if (currentUserId == null ||
-        course['instructorId'] != currentUserId) {
+    if (currentUserId == null || course['instructorId'] != currentUserId) {
       throw NotificationServiceException(
         'Only the course instructor can retry delivery.',
       );
@@ -174,23 +151,18 @@ class NotificationService {
     final user = _auth.currentUser;
 
     if (user == null) {
-      throw NotificationServiceException(
-        'Sign in to send notifications.',
-      );
+      throw NotificationServiceException('Sign in to send notifications.');
     }
 
     final collection = _collections[sourceType];
 
     if (collection == null) {
-      throw NotificationServiceException(
-        'Invalid notification source.',
-      );
+      throw NotificationServiceException('Invalid notification source.');
     }
 
     final profile = await _document('users', user.uid);
 
-    if (profile['role'] != 'instructor' ||
-        profile['status'] != 'active') {
+    if (profile['role'] != 'instructor' || profile['status'] != 'active') {
       throw NotificationServiceException(
         'An active instructor account is required.',
       );
@@ -199,8 +171,7 @@ class NotificationService {
     final source = await _document(collection, sourceId);
 
     final isGrade =
-        sourceType == 'assessmentSubmission' ||
-        sourceType == 'submission';
+        sourceType == 'assessmentSubmission' || sourceType == 'submission';
 
     final isAnnouncement = sourceType == 'announcement';
 
@@ -218,12 +189,7 @@ class NotificationService {
 
       item = await _document(
         isLegacySubmission ? 'assignments' : 'assessments',
-        _text(
-          source[
-              isLegacySubmission
-                  ? 'assignmentId'
-                  : 'assessmentId'],
-        ),
+        _text(source[isLegacySubmission ? 'assignmentId' : 'assessmentId']),
       );
 
       if (source['courseId'] != item['courseId']) {
@@ -244,6 +210,24 @@ class NotificationService {
 
     final courseId = _text(item['courseId']);
 
+    // Only students in the published AI quiz's section
+    // should receive its assessment notification.
+    final bool isSectionScopedAiQuiz =
+        sourceType == 'assessment' &&
+        _text(item['assessmentType']).toLowerCase() == 'quiz' &&
+        _text(item['deliveryType']).toLowerCase() == 'ai_generated';
+
+    final String targetSectionId = isSectionScopedAiQuiz
+        ? _text(item['sectionId'])
+        : '';
+
+    if (isSectionScopedAiQuiz && targetSectionId.isEmpty) {
+      throw NotificationServiceException(
+        'This AI quiz has no section assignment. '
+        'Notifications were not sent.',
+      );
+    }
+
     final allClasses =
         isAnnouncement &&
         source['targetType'] == 'all_classes' &&
@@ -263,10 +247,7 @@ class NotificationService {
         }
       }
     } else {
-      courses[courseId] = await _document(
-        'courses',
-        courseId,
-      );
+      courses[courseId] = await _document('courses', courseId);
     }
 
     // studentId -> courseId proving the instructor's audience.
@@ -287,9 +268,7 @@ class NotificationService {
         final studentId = _text(source['studentId']);
 
         if (studentId.isEmpty) {
-          throw NotificationServiceException(
-            'Submission student is missing.',
-          );
+          throw NotificationServiceException('Submission student is missing.');
         }
 
         // A grade belongs only to this submission's student.
@@ -306,7 +285,9 @@ class NotificationService {
 
           if (data['status'] == 'active' &&
               studentId.isNotEmpty &&
-              enrollment.id == '${id}_$studentId') {
+              enrollment.id == '${id}_$studentId' &&
+              (!isSectionScopedAiQuiz ||
+                  _text(data['sectionId']) == targetSectionId)) {
             recipients.putIfAbsent(studentId, () => id);
           }
         }
@@ -315,9 +296,7 @@ class NotificationService {
 
     final profileName = _text(profile['name']);
 
-    final actorName = profileName.isEmpty
-        ? 'Your instructor'
-        : profileName;
+    final actorName = profileName.isEmpty ? 'Your instructor' : profileName;
 
     final itemTitle = _text(item['title']);
 
@@ -332,9 +311,7 @@ class NotificationService {
       final courseCode = _text(course['code']);
       final courseTitle = _text(course['title']);
 
-      final courseLabel = courseCode.isEmpty
-          ? courseTitle
-          : courseCode;
+      final courseLabel = courseCode.isEmpty ? courseTitle : courseCode;
 
       final activityType = _text(item['assessmentType']);
 
@@ -345,25 +322,22 @@ class NotificationService {
       } else if (isAnnouncement) {
         title = itemTitle;
       } else {
-        final activityLabel =
-            type == 'assessment' && activityType.isNotEmpty
+        final activityLabel = type == 'assessment' && activityType.isNotEmpty
             ? activityType
             : type;
 
         title = 'New $activityLabel: $itemTitle';
       }
 
-      final totalPoints = item[
-          sourceType == 'submission' ? 'points' : 'totalPoints'];
+      final totalPoints =
+          item[sourceType == 'submission' ? 'points' : 'totalPoints'];
 
       final score = _text(source['score']);
 
       final String message;
 
       if (isGrade) {
-        final totalLabel = totalPoints == null
-            ? ''
-            : '/$totalPoints';
+        final totalLabel = totalPoints == null ? '' : '/$totalPoints';
 
         message =
             '$actorName graded your work. '
@@ -376,15 +350,13 @@ class NotificationService {
             'in $courseLabel.';
       }
 
-      final notificationId =
-          '${sourceType}_${sourceId}_${recipient.key}';
+      final notificationId = '${sourceType}_${sourceId}_${recipient.key}';
 
       final reference = _firestore
           .collection('notifications')
           .doc(notificationId);
 
-      final isUrgent =
-          isAnnouncement && source['isUrgent'] == true;
+      final isUrgent = isAnnouncement && source['isUrgent'] == true;
 
       // Stable IDs prevent duplicate notifications.
       // Retrying never resets an existing notification's read status.
@@ -435,10 +407,7 @@ class NotificationService {
         .snapshots()
         .map((snapshot) {
           final notifications = snapshot.docs.map((document) {
-            return <String, dynamic>{
-              ...document.data(),
-              'id': document.id,
-            };
+            return <String, dynamic>{...document.data(), 'id': document.id};
           }).toList();
 
           notifications.sort((a, b) {
@@ -471,9 +440,7 @@ class NotificationService {
     final user = _auth.currentUser;
 
     if (user == null) {
-      throw NotificationServiceException(
-        'No user is currently logged in.',
-      );
+      throw NotificationServiceException('No user is currently logged in.');
     }
 
     if (notificationId.trim().isEmpty) {
@@ -511,9 +478,7 @@ class NotificationService {
     final user = _auth.currentUser;
 
     if (user == null) {
-      throw NotificationServiceException(
-        'No user is currently logged in.',
-      );
+      throw NotificationServiceException('No user is currently logged in.');
     }
 
     final snapshot = await _firestore

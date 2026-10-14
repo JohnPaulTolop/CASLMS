@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/enrollment_service.dart';
+import '../../services/student_assessment_query_service.dart';
 
 import 'notifications_page.dart';
 import 'student_course_invitations_page.dart';
@@ -46,6 +47,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   // ============================================================
 
   final EnrollmentService _enrollmentService = EnrollmentService();
+
+  final StudentAssessmentQueryService _assessmentQuery =
+      StudentAssessmentQueryService();
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -166,13 +170,11 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           continue;
         }
 
-        final QuerySnapshot<Map<String, dynamic>> assessmentSnapshot =
-            await _firestore
-                .collection('assessments')
-                .where('courseId', isEqualTo: courseId)
-                .get();
+        final assessmentDocuments = await _assessmentQuery.getVisibleAssessments(
+          courseId: courseId,
+        );
 
-        for (final document in assessmentSnapshot.docs) {
+        for (final document in assessmentDocuments) {
           final Map<String, dynamic> assessment = document.data();
 
           final String status = (assessment['status'] ?? '')
@@ -453,6 +455,25 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   }
 
   // ============================================================
+  // JOIN SECTION BY CODE
+  // ============================================================
+
+  Future<void> _openJoinSection() async {
+    final joined = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _JoinClassSheet(enrollmentService: _enrollmentService),
+    );
+
+    if (!mounted || joined == null) {
+      return;
+    }
+
+    await _loadDashboard(showLoading: false);
+  }
+  // ============================================================
   // NOTIFICATIONS
   // ============================================================
 
@@ -605,6 +626,27 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         _buildClasses(),
 
         const SizedBox(height: 18),
+
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: FilledButton.icon(
+            onPressed: _openJoinSection,
+            icon: const Icon(Icons.vpn_key_outlined),
+            label: const Text(
+              'Join Section with Code',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: primaryBlue,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
 
         SizedBox(
           width: double.infinity,
@@ -1234,7 +1276,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     courseTitle,
 
                     if (instructor.trim().isNotEmpty) instructor,
-                  ].where((value) => value.trim().isNotEmpty).join(' • '),
+                  ].where((value) => value.trim().isNotEmpty).join(' â€¢ '),
 
                   maxLines: 2,
 
@@ -1355,11 +1397,13 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
                     Text(
                       [
-                        (assessment['courseCode'] ?? '').toString(),
+                            (assessment['courseCode'] ?? '').toString(),
 
-                        if (dueAt != null)
-                          '${_formatDate(dueAt)} • ${_formatTime(dueAt)}',
-                      ].where((value) => value.trim().isNotEmpty).join('  •  '),
+                            if (dueAt != null)
+                              '${_formatDate(dueAt)} â€¢ ${_formatTime(dueAt)}',
+                          ]
+                          .where((value) => value.trim().isNotEmpty)
+                          .join('  â€¢  '),
 
                       style: const TextStyle(color: textGrey, fontSize: 10.5),
                     ),
@@ -1426,9 +1470,8 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   }
 }
 
-/*
 // ============================================================
-// LEGACY CLASS-CODE ENROLLMENT (DISABLED)
+// SECTION-CODE ENROLLMENT
 //
 // This is deliberately its OWN StatefulWidget.
 //
@@ -1763,4 +1806,3 @@ class _JoinClassSheetState extends State<_JoinClassSheet> {
     );
   }
 }
-*/

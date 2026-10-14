@@ -398,6 +398,133 @@ service cloud.firestore {
     // ENROLLMENTS
     // ============================================================
 
+    // ============================================================
+    // COURSE SECTIONS
+    // ============================================================
+
+    match /courseSections/{sectionId} {
+
+      function validSectionText(data) {
+        return
+          data.name is string &&
+          data.name.size() > 0 &&
+          data.name.size() <= 80 &&
+          data.identifier is string &&
+          data.identifier.matches(
+            '^[A-Z0-9][A-Z0-9 -]{0,29}$'
+          );
+      }
+
+      // An enrolled student may need to resolve a class code
+      // before joining. Only section metadata is stored here.
+      // Students cannot list all section documents.
+
+      allow get: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          (
+            !exists(
+              /databases/$(database)/documents/courseSections/$(sectionId)
+            )
+            ||
+            ownsCourse(resource.data.courseId)
+          )
+        )
+        ||
+        (
+          isStudent() &&
+          (
+            !exists(
+              /databases/$(database)/documents/courseSections/$(sectionId)
+            )
+            ||
+            resource.data.status == 'active'
+          )
+        );
+
+      allow list: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(resource.data.courseId)
+        );
+
+      allow create: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          request.resource.data.keys().hasOnly([
+            'courseId',
+            'instructorId',
+            'name',
+            'identifier',
+            'classCode',
+            'legacy',
+            'status',
+            'createdAt',
+            'updatedAt'
+          ]) &&
+          request.resource.data.keys().hasAll([
+            'courseId',
+            'instructorId',
+            'name',
+            'identifier',
+            'classCode',
+            'legacy',
+            'status',
+            'createdAt',
+            'updatedAt'
+          ]) &&
+          request.resource.data.courseId is string &&
+          ownsCourse(request.resource.data.courseId) &&
+          request.resource.data.instructorId ==
+            request.auth.uid &&
+          request.resource.data.classCode == sectionId &&
+          request.resource.data.legacy is bool &&
+          request.resource.data.legacy == (
+            sectionId == get(
+              /databases/$(database)/documents/courses/$(request.resource.data.courseId)
+            ).data.classCode
+          ) &&
+          request.resource.data.status == 'active' &&
+          validSectionText(request.resource.data) &&
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.updatedAt == request.time
+        );
+
+      allow update: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(resource.data.courseId) &&
+          resource.data.status == 'active' &&
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly([
+              'name',
+              'identifier',
+              'status',
+              'updatedAt'
+            ]) &&
+          validSectionText(request.resource.data) &&
+          request.resource.data.status in [
+            'active',
+            'archived'
+          ] &&
+          (
+            resource.data.legacy != true ||
+            request.resource.data.status == 'active'
+          ) &&
+          request.resource.data.updatedAt == request.time
+        );
+
+      allow delete: if isAdmin();
+    }
+
     match /enrollments/{enrollmentId} {
       function acceptedInvitation(data) {
         let invitationPath =
@@ -441,6 +568,54 @@ service cloud.firestore {
           acceptedInvitation(data);
       }
 
+      // New section-code enrollment.
+      // Legacy sections retain their invitation workflow.
+      function validSectionCodeEnrollment(data) {
+        let coursePath =
+          /databases/$(database)/documents/courses/$(data.courseId);
+
+        let sectionPath =
+          /databases/$(database)/documents/courseSections/$(data.sectionId);
+
+        return
+          data.keys().hasOnly([
+            'courseId',
+            'studentId',
+            'studentName',
+            'studentCampusId',
+            'sectionId',
+            'status',
+            'enrollmentSource',
+            'enrolledAt'
+          ]) &&
+          data.keys().hasAll([
+            'courseId',
+            'studentId',
+            'studentName',
+            'studentCampusId',
+            'sectionId',
+            'status',
+            'enrollmentSource',
+            'enrolledAt'
+          ]) &&
+          data.courseId is string &&
+          data.sectionId is string &&
+          data.studentId == request.auth.uid &&
+          data.studentName is string &&
+          data.studentName.size() > 0 &&
+          data.studentCampusId == currentUser().universityId &&
+          data.status == 'active' &&
+          data.enrollmentSource == 'section_code' &&
+          data.enrolledAt == request.time &&
+          enrollmentId == data.courseId + "_" + request.auth.uid &&
+          exists(coursePath) &&
+          get(coursePath).data.status == 'active' &&
+          exists(sectionPath) &&
+          get(sectionPath).data.courseId == data.courseId &&
+          get(sectionPath).data.classCode == data.sectionId &&
+          get(sectionPath).data.status == 'active' &&
+          get(sectionPath).data.legacy == false;
+      }
       allow get: if
         isAdmin()
         ||
@@ -478,7 +653,11 @@ service cloud.firestore {
         ||
         (
           isStudent() &&
-          validAcceptedEnrollment(request.resource.data)
+          (
+            validAcceptedEnrollment(request.resource.data)
+            ||
+            validSectionCodeEnrollment(request.resource.data)
+          )
         );
 
       allow update: if
@@ -655,24 +834,137 @@ service cloud.firestore {
     // ============================================================
 
     match /assessments/{assessmentId} {
-      allow read: if isActive();
+      function isAiQuizData(data) {
+        return
+          data.get('assessmentType', '') == 'quiz' &&
+          data.get('deliveryType', '') == 'ai_generated';
+      }
 
-      allow create: if isAdmin() || (
+      function safeAiQuizClientCreate() {
+        return
+          !isAiQuizData(request.resource.data) ||
+          (
+            request.resource.data.get('status', '') == 'draft' &&
+            !request.resource.data.keys().hasAny([
+              'quizVersion',
+              'publishedAt'
+            ])
+          );
+      }
+
+      function safeAiQuizClientUpdate() {
+        let oldAi = isAiQuizData(resource.data);
+        let newAi = isAiQuizData(request.resource.data);
+
+        return
+          (!oldAi && !newAi) ||
+
+          // Instructors can continue editing unprotected drafts.
+          (
+            oldAi && newAi &&
+            resource.data.get('status', '') == 'draft' &&
+            request.resource.data.get('status', '') == 'draft' &&
+            !resource.data.keys().hasAny([
+              'quizVersion',
+              'publishedAt'
+            ]) &&
+            !request.resource.data.keys().hasAny([
+              'quizVersion',
+              'publishedAt'
+            ]) &&
+            request.resource.data.get('createdBy', '') ==
+              resource.data.get('createdBy', '') &&
+            request.resource.data.get('courseId', '') ==
+              resource.data.get('courseId', '') &&
+            request.resource.data.get('moduleId', '') ==
+              resource.data.get('moduleId', '')
+          ) ||
+
+          // Published quizzes can only be closed by a client.
+          // Public questions, scores, and answer keys stay unchanged.
+          (
+            oldAi && newAi &&
+            resource.data.get('status', '') == 'published' &&
+            request.resource.data.get('status', '') == 'closed' &&
+            request.resource.data.diff(resource.data)
+              .affectedKeys().hasOnly([
+                'status',
+                'updatedAt'
+              ])
+          );
+      }
+
+      // Legacy assessments with sectionId == '' are course-wide.
+      // New assessments with nonempty sectionId are section-restricted.
+      // Student list queries must constrain status and sectionId.
+      function studentCanReadAssessment(data) {
+        let enrollmentPath =
+          /databases/$(database)/documents/enrollments/$(data.courseId + "_" + request.auth.uid);
+
+        return
+          isStudent() &&
+          data.courseId is string &&
+          data.get('status', '') in ['published', 'closed'] &&
+          exists(enrollmentPath) &&
+          get(enrollmentPath).data.get('studentId', '') == request.auth.uid &&
+          get(enrollmentPath).data.get('courseId', '') == data.courseId &&
+          get(enrollmentPath).data.get('status', '') == 'active' &&
+          (
+            data.get('sectionId', '') == '' ||
+            (
+              data.get('sectionId', '') is string &&
+              get(enrollmentPath).data.get('sectionId', '') ==
+                data.get('sectionId', '')
+            )
+          );
+      }
+
+      function studentCanListAssessment(data) {
+        return studentCanReadAssessment(data) &&
+          data.keys().hasAll(['sectionId']) &&
+          data.sectionId is string;
+      }
+
+      allow get: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(resource.data.courseId)
+        )
+        ||
+        studentCanReadAssessment(resource.data);
+
+      allow list: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          ownsCourse(resource.data.courseId)
+        )
+        ||
+        studentCanListAssessment(resource.data);
+
+      allow create: if safeAiQuizClientCreate() && (
+        isAdmin() || (
         isInstructor() &&
         ownsCourse(
           request.resource.data.courseId
         ) &&
         request.resource.data.createdBy ==
           request.auth.uid
+      )
       );
 
-      allow update: if isAdmin() || (
+      allow update: if safeAiQuizClientUpdate() && (
+        isAdmin() || (
         isInstructor() &&
         ownsCourse(
           resource.data.courseId
         ) &&
         request.resource.data.courseId ==
           resource.data.courseId
+      )
       );
 
       allow delete: if isAdmin() || (
@@ -727,8 +1019,23 @@ service cloud.firestore {
           /databases/$(database)/documents/assessments/$(assessmentId)
         ).data;
 
+        let enrollmentId =
+          assessment.courseId + "_" + request.auth.uid;
+
+        let enrollmentPath =
+          /databases/$(database)/documents/enrollments/$(enrollmentId);
+
         return
           isStudent() &&
+          exists(enrollmentPath) &&
+          get(enrollmentPath).data.get('studentId', '') ==
+            request.auth.uid &&
+          get(enrollmentPath).data.get('courseId', '') ==
+            assessment.courseId &&
+          get(enrollmentPath).data.get('status', '') ==
+            'active' &&
+          get(enrollmentPath).data.get('sectionId', '') ==
+            assessment.get('sectionId', '') &&
           request.resource.data.studentId ==
             request.auth.uid &&
           submissionId ==
@@ -753,6 +1060,13 @@ service cloud.firestore {
             'graded' &&
           request.resource.data.score is number &&
           request.resource.data.totalPoints is number &&
+          assessment.get('totalPoints', 0) is number &&
+          request.resource.data.totalPoints ==
+            assessment.totalPoints &&
+          request.resource.data.totalPoints > 0 &&
+          request.resource.data.score >= 0 &&
+          request.resource.data.score <=
+            request.resource.data.totalPoints &&
           request.resource.data.answers is list &&
           request.resource.data.submittedAt ==
             request.time &&
@@ -941,7 +1255,9 @@ service cloud.firestore {
             ]);
       }
 
-      allow get: if isStaff() || (
+      allow get: if isAdmin() ||
+        (isInstructor() && ownsCourse(resource.data.courseId)) ||
+        (
         isStudent() &&
         (
           (
@@ -959,7 +1275,9 @@ service cloud.firestore {
         )
       );
 
-      allow list: if isStaff() || (
+      allow list: if isAdmin() ||
+        (isInstructor() && ownsCourse(resource.data.courseId)) ||
+        (
         isStudent() &&
         resource.data.studentId ==
           request.auth.uid
@@ -967,11 +1285,15 @@ service cloud.firestore {
 
       // File and Google Form submissions are written only by the verified
       // Supabase Edge Function through the Firebase Admin SDK. The client may
-      // directly create only its automatically scored in-app quiz result.
+      // not directly create automatically scored in-app quiz results.
+      // AI quiz grades are created only by the trusted Admin SDK.
+      // Preserve narrowly scoped Google Form compliance creation.
       allow create: if
-        validAiQuizSubmissionCreate()
-        ||
-        validGoogleFormComplianceCreate();
+        validGoogleFormComplianceCreate() &&
+        request.resource.data.get('submissionType', '') != 'ai_quiz' &&
+        request.resource.data.get('gradingMode', '') != 'automatic' &&
+        request.resource.data.get('status', '') != 'graded' &&
+        request.resource.data.get('score', null) == null;
 
       // Instructors can modify feedback or a Google Form compliance decision.
       allow update: if
@@ -993,6 +1315,11 @@ service cloud.firestore {
     // PRIVATE AI QUIZ DRAFTS
     // ============================================================
 
+    // Private answer keys. Only trusted Admin SDK code may access them.
+    // No mobile/web client can read or modify these documents.
+    match /aiQuizAnswerKeys/{assessmentId} {
+      allow read, write: if false;
+    }
     match /aiQuizDrafts/{draftId} {
       function validDraftData(data) {
         let assessment = get(
@@ -1255,7 +1582,22 @@ service cloud.firestore {
                     ''
                   )
           ) &&
-          activeEnrollee(data);
+          activeEnrollee(data) &&
+          (
+            // AI quiz notification section isolation.
+            // Ordinary course notifications retain their existing access.
+            sourceType != 'assessment' ||
+            source.get('deliveryType', '') != 'ai_generated' ||
+            source.get('assessmentType', '') != 'quiz' ||
+            (
+              source.get('sectionId', '') is string &&
+              source.get('sectionId', '') != '' &&
+              get(
+                /databases/$(database)/documents/enrollments/$(data.authorizationCourseId + '_' + data.userId)
+              ).data.get('sectionId', '') ==
+                source.get('sectionId', '')
+            )
+          );
       }
 
       function announcementSource(data) {

@@ -1,12 +1,14 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../shared/caslms_help_page.dart';
 import 'instructor_ui.dart';
 
 import '../../services/assignment_service.dart';
 import '../../services/instructor_course_service.dart';
 
 import 'instructor_announcements_page.dart';
-import 'instructor_class_details_page.dart';
+import 'instructor_course_sections_page.dart';
 import 'instructor_create_course_page.dart';
 
 class InstructorDashboardScreen extends StatefulWidget {
@@ -224,8 +226,34 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   // DASHBOARD PREVIEW COURSES
   // ============================================================
 
+  int _courseCreatedAt(Map<String, dynamic> course) {
+    final value = course['createdAt'] ?? course['updatedAt'];
+
+    if (value is Timestamp) {
+      return value.millisecondsSinceEpoch;
+    }
+
+    if (value is DateTime) {
+      return value.millisecondsSinceEpoch;
+    }
+
+    return 0;
+  }
+
   List<Map<String, dynamic>> get _dashboardCourses {
-    return _filteredCourses.take(3).toList();
+    final courses = List<Map<String, dynamic>>.from(_filteredCourses);
+
+    courses.sort((a, b) {
+      final byDate = _courseCreatedAt(b).compareTo(_courseCreatedAt(a));
+
+      if (byDate != 0) return byDate;
+
+      return (a['code'] ?? '').toString().compareTo(
+        (b['code'] ?? '').toString(),
+      );
+    });
+
+    return courses.take(4).toList();
   }
 
   // ============================================================
@@ -256,13 +284,6 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         .toString()
         .trim();
 
-    final String title = (course['title'] ?? 'Course').toString();
-
-    final String code = (course['code'] ?? '').toString();
-
-    final String instructorName = (course['instructorName'] ?? _instructorName)
-        .toString();
-
     if (courseId.isEmpty) {
       _showMessage(
         'This course does not have a valid Firestore ID.',
@@ -275,12 +296,8 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => InstructorClassDetailsScreen(
-          courseId: courseId,
-          title: title,
-          courseCode: code,
-          instructorName: instructorName,
-        ),
+        builder: (context) =>
+            InstructorCourseSectionsScreen(courseId: courseId),
       ),
     );
 
@@ -385,6 +402,17 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
             const SizedBox(height: 24),
 
             // ==================================================
+            // RECENT COURSES
+            // ==================================================
+            _buildActiveClassesHeader(),
+
+            const SizedBox(height: 14),
+
+            _buildActiveClasses(),
+
+            const SizedBox(height: 20),
+
+            // ==================================================
             // REAL STATISTICS
             // ==================================================
             _buildStatistics(),
@@ -402,7 +430,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
             // TOOLS
             // ==================================================
             const Text(
-              'Instructor Tools',
+              'Quick Actions',
 
               style: TextStyle(
                 fontSize: 18,
@@ -418,19 +446,21 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
             const SizedBox(height: 14),
 
             _buildQuickActions(),
+            const SizedBox(height: 8),
+
+            Align(
+              alignment: Alignment.centerRight,
+              child: Tooltip(
+                message: 'Open step-by-step CASLMS instructions',
+                child: TextButton.icon(
+                  onPressed: _openHelpGuide,
+                  icon: const Icon(Icons.help_outline),
+                  label: const Text('Help & User Guide'),
+                ),
+              ),
+            ),
 
             const SizedBox(height: 30),
-
-            // ==================================================
-            // ACTIVE CLASSES
-            // ==================================================
-            _buildActiveClassesHeader(),
-
-            const SizedBox(height: 14),
-
-            _buildActiveClasses(),
-
-            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -789,7 +819,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
       },
 
       decoration: InputDecoration(
-        hintText: 'Search your classes...',
+        hintText: 'Search your courses...',
 
         hintStyle: const TextStyle(
           color: Color(0xFF8A93A5),
@@ -1112,7 +1142,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                 children: [
                   Text(
                     _courses.isEmpty
-                        ? 'Create Your First Subject'
+                        ? 'Create Your First Course'
                         : 'Build Modules & Assessments',
 
                     style: const TextStyle(
@@ -1164,6 +1194,15 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   // QUICK ACTIONS
   // ============================================================
 
+  Future<void> _openHelpGuide() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CaslmsHelpPage(role: 'instructor'),
+      ),
+    );
+  }
+
   Widget _buildQuickActions() {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
@@ -1192,7 +1231,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
             child: _buildQuickActionItem(
               icon: Icons.add_box_rounded,
 
-              label: 'New Subject',
+              label: 'Create Course',
 
               onTap: _openCreateCourse,
             ),
@@ -1234,6 +1273,18 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
               onTap: () {
                 widget.onNavigateToTab?.call(2);
+              },
+            ),
+          ),
+
+          _buildDivider(),
+
+          Expanded(
+            child: _buildQuickActionItem(
+              icon: Icons.auto_awesome_outlined,
+              label: 'AI Help',
+              onTap: () {
+                widget.onNavigateToTab?.call(6);
               },
             ),
           ),
@@ -1295,7 +1346,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
       children: [
         const Expanded(
           child: Text(
-            'Active Classes',
+            'Recently Added Courses',
 
             style: TextStyle(
               fontSize: 18,
@@ -1361,7 +1412,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
             SizedBox(height: 10),
 
             Text(
-              'No matching classes found.',
+              'No matching courses found.',
 
               style: TextStyle(color: textGrey, fontWeight: FontWeight.w600),
             ),
@@ -1436,7 +1487,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
           const SizedBox(height: 6),
 
           const Text(
-            'Create your first subject to start adding modules, quizzes, assignments, and students.',
+            'Create your first course to organize sections, assessments, and learning materials.',
 
             textAlign: TextAlign.center,
 
@@ -1451,7 +1502,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
             icon: const Icon(Icons.add_rounded, color: Colors.white),
 
             label: const Text(
-              'Create Subject',
+              'Create Course',
 
               style: TextStyle(
                 color: Colors.white,
@@ -1503,7 +1554,9 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
       academicYear,
     ].where((value) => value.trim().isNotEmpty).toList();
 
-    final String period = periodParts.join(' • ');
+    final String period = periodParts.join(
+      ' ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ',
+    );
 
     return InkWell(
       onTap: () {

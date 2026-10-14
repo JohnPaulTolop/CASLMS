@@ -353,6 +353,8 @@ class AssessmentService {
 
     final Map<String, dynamic> data = {
       'courseId': cleanCourseId,
+      // Course-wide assessment: explicitly index legacy scope.
+      'sectionId': '',
       'moduleId': cleanModuleId,
 
       // Creator
@@ -445,6 +447,7 @@ class AssessmentService {
 
     final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
         .collection(assessmentsCollection)
+        .where('courseId', isEqualTo: courseId.trim())
         .where('moduleId', isEqualTo: moduleId.trim())
         .get();
 

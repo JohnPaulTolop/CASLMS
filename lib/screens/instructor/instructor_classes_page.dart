@@ -1,9 +1,11 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'instructor_ui.dart';
 
 import '../../services/roster_service.dart';
-import 'instructor_class_details_page.dart';
+import 'instructor_course_sections_page.dart';
+import 'instructor_create_course_page.dart';
 
 class InstructorClassesScreen extends StatefulWidget {
   const InstructorClassesScreen({super.key});
@@ -71,6 +73,22 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
       final List<Map<String, dynamic>> courses = await _rosterService
           .getInstructorCourses();
 
+      courses.sort((a, b) {
+        int created(Map<String, dynamic> course) {
+          final value = course['createdAt'] ?? course['updatedAt'];
+          if (value is Timestamp) return value.millisecondsSinceEpoch;
+          if (value is DateTime) return value.millisecondsSinceEpoch;
+          return 0;
+        }
+
+        final byDate = created(b).compareTo(created(a));
+        if (byDate != 0) return byDate;
+
+        return (a['code'] ?? '').toString().compareTo(
+          (b['code'] ?? '').toString(),
+        );
+      });
+
       if (!mounted) {
         return;
       }
@@ -100,6 +118,16 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
     }
   }
 
+  Future<void> _openCreateCourse() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const InstructorCreateCourseScreen()),
+    );
+
+    if (mounted) {
+      await _loadCourses();
+    }
+  }
   // ============================================================
   // FILTER
   // ============================================================
@@ -151,7 +179,7 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
         centerTitle: true,
 
         title: const Text(
-          'Manage Classes',
+          'My Courses',
 
           style: TextStyle(
             fontSize: 18,
@@ -163,6 +191,18 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
         ),
 
         actions: [
+          if (MediaQuery.sizeOf(context).width >= 560)
+            TextButton.icon(
+              onPressed: _openCreateCourse,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Create Course'),
+            )
+          else
+            IconButton(
+              tooltip: 'Create Course',
+              onPressed: _openCreateCourse,
+              icon: const Icon(Icons.add_circle_outline),
+            ),
           IconButton(
             tooltip: 'Refresh',
 
@@ -314,7 +354,7 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
             SizedBox(height: 12),
 
             Text(
-              'No active classes',
+              'No courses yet',
 
               style: TextStyle(
                 color: textDark,
@@ -328,7 +368,7 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
             SizedBox(height: 5),
 
             Text(
-              'Courses assigned to this instructor will appear here.',
+              'Create a course to organize your sections and learning materials.',
 
               textAlign: TextAlign.center,
 
@@ -342,7 +382,7 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
     if (_filteredCourses.isEmpty) {
       return const Center(
         child: Text(
-          'No matching classes.',
+          'No matching courses.',
 
           style: TextStyle(color: textGrey, fontWeight: FontWeight.w600),
         ),
@@ -366,7 +406,7 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
             children: [
               const Expanded(
                 child: Text(
-                  'Active Classes',
+                  'Recently Added Courses',
 
                   style: TextStyle(
                     color: textDark,
@@ -430,9 +470,6 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
 
     final String academicYear = (course['academicYear'] ?? '').toString();
 
-    final String instructorName = (course['instructorName'] ?? 'Instructor')
-        .toString();
-
     final int students = course['studentCount'] is num
         ? (course['studentCount'] as num).toInt()
         : 0;
@@ -440,7 +477,7 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
     final String period = [
       semester,
       academicYear,
-    ].where((value) => value.trim().isNotEmpty).join(' • ');
+    ].where((value) => value.trim().isNotEmpty).join(' \u2022 ');
 
     return GestureDetector(
       onTap: () {
@@ -452,17 +489,8 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
           context,
 
           MaterialPageRoute(
-            builder: (context) => InstructorClassDetailsScreen(
-              courseId: courseId,
-
-              title: title,
-
-              section: period,
-
-              courseCode: code,
-
-              instructorName: instructorName,
-            ),
+            builder: (context) =>
+                InstructorCourseSectionsScreen(courseId: courseId),
           ),
         );
       },

@@ -4,7 +4,7 @@ import 'instructor_ui.dart';
 
 import '../../services/instructor_course_service.dart';
 
-import 'instructor_class_details_page.dart';
+import 'instructor_course_sections_page.dart';
 
 class InstructorCreateCourseScreen extends StatefulWidget {
   const InstructorCreateCourseScreen({super.key});
@@ -108,26 +108,12 @@ class _InstructorCreateCourseScreenState
 
       final String courseId = (course['id'] ?? '').toString();
 
-      final String code = (course['code'] ?? '').toString();
-
-      final String title = (course['title'] ?? '').toString();
-
-      final String instructorName = (course['instructorName'] ?? 'Instructor')
-          .toString();
-
       Navigator.pushReplacement(
         context,
 
         MaterialPageRoute(
-          builder: (context) => InstructorClassDetailsScreen(
-            courseId: courseId,
-
-            title: title,
-
-            courseCode: code,
-
-            instructorName: instructorName,
-          ),
+          builder: (context) =>
+              InstructorCourseSectionsScreen(courseId: courseId),
         ),
       );
     } on InstructorCourseServiceException catch (e) {

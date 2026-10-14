@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../shared/learner_assistant_page.dart';
+import 'instructor_teaching_assistant_page.dart';
+import '../shared/caslms_help_page.dart';
 import '../shared/role_navigation_bar.dart';
 import 'instructor_messages_page.dart';
 
@@ -20,13 +21,25 @@ class InstructorMainScreen extends StatefulWidget {
 }
 
 class _InstructorMainScreenState extends State<InstructorMainScreen> {
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      CaslmsOnboarding.maybeShow(context, role: 'instructor');
+    });
+  }
+
   int _selectedIndex = 0;
+  int _coursesRefresh = 0;
   final Set<int> _openedTabs = <int>{};
 
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
       _openedTabs.add(index);
+      if (index == 1) _coursesRefresh++;
     });
   }
 
@@ -34,7 +47,7 @@ class _InstructorMainScreenState extends State<InstructorMainScreen> {
   Widget build(BuildContext context) {
     final List<Widget> pages = [
       InstructorDashboardScreen(onNavigateToTab: _onItemTapped),
-      const InstructorClassesScreen(),
+      InstructorClassesScreen(key: ValueKey(_coursesRefresh)),
       const InstructorGradingScreen(),
       const InstructorAnalyticsScreen(),
       const InstructorProfileScreen(),
@@ -42,7 +55,7 @@ class _InstructorMainScreenState extends State<InstructorMainScreen> {
           ? const InstructorMessagesScreen()
           : const SizedBox.shrink(),
       _openedTabs.contains(6)
-          ? const LearnerAssistantScreen(role: 'instructor')
+          ? const InstructorTeachingAssistantScreen()
           : const SizedBox.shrink(),
     ];
 

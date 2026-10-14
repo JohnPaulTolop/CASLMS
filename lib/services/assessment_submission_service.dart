@@ -21,10 +21,7 @@ class AssessmentSubmissionService {
       throw AssessmentSubmissionException('You must be logged in.');
     }
 
-    final document = await _firestore
-        .collection('users')
-        .doc(user.uid)
-        .get();
+    final document = await _firestore.collection('users').doc(user.uid).get();
 
     final data = document.data();
 
@@ -41,9 +38,7 @@ class AssessmentSubmissionService {
     return {...data, 'id': user.uid, 'uid': user.uid};
   }
 
-  Future<Map<String, dynamic>> _requireAssessment(
-    String assessmentId,
-  ) async {
+  Future<Map<String, dynamic>> _requireAssessment(String assessmentId) async {
     final id = assessmentId.trim();
 
     if (id.isEmpty) {
@@ -61,11 +56,7 @@ class AssessmentSubmissionService {
       throw AssessmentSubmissionException('Assessment could not be found.');
     }
 
-    return {
-      ...data,
-      'id': document.id,
-      'assessmentId': document.id,
-    };
+    return {...data, 'id': document.id, 'assessmentId': document.id};
   }
 
   Future<void> _requireEnrollment({
@@ -145,15 +136,11 @@ class AssessmentSubmissionService {
       );
     }
 
-    await _requireEnrollment(
-      courseId: courseId,
-      studentId: studentId,
-    );
+    await _requireEnrollment(courseId: courseId, studentId: studentId);
 
     final dueValue = assessment['dueAt'];
 
-    if (dueValue is Timestamp &&
-        DateTime.now().isAfter(dueValue.toDate())) {
+    if (dueValue is Timestamp && DateTime.now().isAfter(dueValue.toDate())) {
       throw AssessmentSubmissionException(
         'The deadline for this assessment has already passed.',
       );
@@ -164,9 +151,7 @@ class AssessmentSubmissionService {
       studentId: studentId,
     );
 
-    final reference = _firestore
-        .collection(submissionsCollection)
-        .doc(id);
+    final reference = _firestore.collection(submissionsCollection).doc(id);
 
     final existing = await reference.get();
     final existingStatus = existing.data()?['status'];
@@ -177,8 +162,9 @@ class AssessmentSubmissionService {
       );
     }
 
-    var studentName =
-        (student['name'] ?? student['displayName'] ?? '').toString().trim();
+    var studentName = (student['name'] ?? student['displayName'] ?? '')
+        .toString()
+        .trim();
 
     if (studentName.isEmpty) {
       studentName =
@@ -222,8 +208,7 @@ class AssessmentSubmissionService {
     return snapshot.docs
         .where((document) {
           final data = document.data();
-          return data['courseId'] == courseId &&
-              data['moduleId'] == moduleId;
+          return data['courseId'] == courseId && data['moduleId'] == moduleId;
         })
         .map((document) {
           return <String, dynamic>{
@@ -247,10 +232,7 @@ class AssessmentSubmissionService {
       throw AssessmentSubmissionException('Course information is missing.');
     }
 
-    final course = await _firestore
-        .collection('courses')
-        .doc(courseId)
-        .get();
+    final course = await _firestore.collection('courses').doc(courseId).get();
 
     if (course.data()?['instructorId'] != instructor['id']) {
       throw AssessmentSubmissionException(
@@ -261,6 +243,7 @@ class AssessmentSubmissionService {
     final snapshot = await _firestore
         .collection(submissionsCollection)
         .where('assessmentId', isEqualTo: assessmentId.trim())
+        .where('courseId', isEqualTo: courseId)
         .get();
 
     return snapshot.docs.map((document) {
@@ -340,12 +323,8 @@ class AssessmentSubmissionService {
         );
       }
 
-      final String courseId = (assessment['courseId'] ?? '')
-          .toString()
-          .trim();
-      final String moduleId = (assessment['moduleId'] ?? '')
-          .toString()
-          .trim();
+      final String courseId = (assessment['courseId'] ?? '').toString().trim();
+      final String moduleId = (assessment['moduleId'] ?? '').toString().trim();
 
       if (courseId.isEmpty || moduleId.isEmpty) {
         throw AssessmentSubmissionException(
@@ -353,8 +332,9 @@ class AssessmentSubmissionService {
         );
       }
 
-      final DocumentReference<Map<String, dynamic>> courseReference =
-          _firestore.collection('courses').doc(courseId);
+      final DocumentReference<Map<String, dynamic>> courseReference = _firestore
+          .collection('courses')
+          .doc(courseId);
       final DocumentReference<Map<String, dynamic>> studentReference =
           _firestore.collection('users').doc(cleanStudentId);
       final DocumentReference<Map<String, dynamic>> enrollmentReference =
@@ -507,25 +487,18 @@ class AssessmentSubmissionService {
         .doc(cleanId);
 
     // Allocate once; retries of this transaction reuse this ID.
-    final notificationReference = _firestore
-        .collection('notifications')
-        .doc();
+    final notificationReference = _firestore.collection('notifications').doc();
 
     await _firestore.runTransaction((transaction) async {
-      final submissionDocument = await transaction.get(
-        submissionReference,
-      );
+      final submissionDocument = await transaction.get(submissionReference);
 
       final submission = submissionDocument.data();
 
       if (submission == null) {
-        throw AssessmentSubmissionException(
-          'Submission could not be found.',
-        );
+        throw AssessmentSubmissionException('Submission could not be found.');
       }
 
-      final assessmentId =
-          (submission['assessmentId'] ?? '').toString();
+      final assessmentId = (submission['assessmentId'] ?? '').toString();
 
       if (assessmentId.isEmpty) {
         throw AssessmentSubmissionException(
@@ -540,9 +513,7 @@ class AssessmentSubmissionService {
       final assessment = assessmentDocument.data();
 
       if (assessment == null) {
-        throw AssessmentSubmissionException(
-          'Assessment could not be found.',
-        );
+        throw AssessmentSubmissionException('Assessment could not be found.');
       }
 
       final courseId = (assessment['courseId'] ?? '').toString();
@@ -586,8 +557,7 @@ class AssessmentSubmissionService {
         'sourceType': 'assessmentFeedback',
         'sourceId': cleanId,
         'actorId': instructorId,
-        'actorName':
-            (instructor['name'] ?? 'Your instructor').toString(),
+        'actorName': (instructor['name'] ?? 'Your instructor').toString(),
         'title': 'Feedback: ${assessment['title']}',
         'message': cleanFeedback,
         'courseId': courseId,

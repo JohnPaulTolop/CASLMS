@@ -611,6 +611,665 @@ async function requireStudentAssessment(
   };
 }
 
+async function publishAiQuiz(
+  request: Request,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  if (
+    Object.keys(body).some(
+      (field) => !["action", "assessmentId", "sectionId"].includes(field)
+    )
+  ) {
+    throw new RequestError("Unexpected publishing fields.");
+  }
+
+  const assessmentId = clean(body.assessmentId);
+  const sectionId = clean(body.sectionId);
+
+  if (
+    typeof body.sectionId !== "string" ||
+    !sectionId ||
+    sectionId.length > 128 ||
+    sectionId.includes("/")
+  ) {
+    throw new RequestError(
+      "Select a valid course section before publishing.",
+    );
+  }
+
+  if (!assessmentId) {
+    throw new RequestError("Assessment ID is required.");
+  }
+
+  const user = await requireActiveUser(request);
+
+  if (clean(user.profile.role).toLowerCase() !== "instructor") {
+    throw new RequestError(
+      "Only active instructors can publish AI quizzes.",
+      403,
+    );
+  }
+
+  const assessmentRef = firestore
+    .collection("assessments")
+    .doc(assessmentId);
+
+  const keyRef = firestore
+    .collection("aiQuizAnswerKeys")
+    .doc(assessmentId);
+
+  // The initial read only identifies the course reference.
+  // Ownership and assessment state are verified again
+  // inside the transaction.
+  const initialDoc = await assessmentRef.get();
+
+  if (!initialDoc.exists) {
+    throw new RequestError("Assessment not found.", 404);
+  }
+
+  const initialCourseId = clean(initialDoc.data()?.courseId);
+
+  if (!initialCourseId) {
+    throw new RequestError("Assessment course is missing.");
+  }
+
+  const courseRef = firestore
+    .collection("courses")
+    .doc(initialCourseId);
+
+  const sectionRef = firestore
+    .collection("courseSections")
+    .doc(sectionId);
+
+  const quizVersion = crypto.randomUUID();
+
+  const result = await firestore.runTransaction(async (transaction) => {
+    // Read everything before any transaction writes.
+    const assessmentDoc = await transaction.get(assessmentRef);
+    const courseDoc = await transaction.get(courseRef);
+    const existingKeyDoc = await transaction.get(keyRef);
+    const sectionDoc = await transaction.get(sectionRef);
+
+    const assessment = assessmentDoc.data();
+    const course = courseDoc.data();
+    const section = sectionDoc.data();
+
+    if (
+      !assessmentDoc.exists ||
+      !assessment ||
+      !courseDoc.exists ||
+      !course
+    ) {
+      throw new RequestError(
+        "Assessment or course could not be found.",
+        404,
+      );
+    }
+
+    if (
+      clean(assessment.courseId) !== initialCourseId ||
+      clean(course.instructorId) !== user.uid ||
+      clean(assessment.createdBy) !== user.uid
+    ) {
+      throw new RequestError(
+        "You are not authorized to publish this quiz.",
+        403,
+      );
+    }
+
+    if (
+      clean(assessment.status).toLowerCase() !== "draft" ||
+      clean(assessment.assessmentType).toLowerCase() !== "quiz" ||
+      clean(assessment.deliveryType).toLowerCase() !== "ai_generated"
+    ) {
+      throw new RequestError(
+        "Only draft AI quizzes can be securely published.",
+        409,
+      );
+    }
+
+    // Verify the requested section against trusted Firestore data.
+    const validStoredSection =
+      sectionDoc.exists &&
+      !!section &&
+      clean(section.courseId) === initialCourseId &&
+      clean(section.instructorId) === user.uid &&
+      clean(section.status).toLowerCase() === "active";
+
+    // Existing older courses may expose their original section
+    // virtually through courses/{courseId}.classCode.
+    const validLegacySection =
+      !sectionDoc.exists &&
+      clean(course.classCode) === sectionId;
+
+    if (!validStoredSection && !validLegacySection) {
+      throw new RequestError(
+        "The selected section is not active or does not belong to this course.",
+        403,
+      );
+    }
+    if (existingKeyDoc.exists || assessment.quizVersion) {
+      throw new RequestError(
+        "This quiz was already prepared for secure grading. " +
+        "It cannot be migrated again automatically.",
+        409,
+      );
+    }
+
+    if (
+      !clean(assessment.title) ||
+      !clean(assessment.instructions) ||
+      !clean(assessment.moduleId)
+    ) {
+      throw new RequestError(
+        "Quiz title, instructions, or module are incomplete.",
+      );
+    }
+
+    const dueAt = assessment.dueAt;
+
+    if (
+      !dueAt ||
+      typeof dueAt.toDate !== "function" ||
+      dueAt.toDate().getTime() <= Date.now()
+    ) {
+      throw new RequestError(
+        "Set a future quiz deadline before publishing.",
+      );
+    }
+
+    const rawQuestions = assessment.questions;
+
+    if (
+      !Array.isArray(rawQuestions) ||
+      rawQuestions.length === 0 ||
+      rawQuestions.length > 100
+    ) {
+      throw new RequestError(
+        "The quiz must contain 1 to 100 questions.",
+      );
+    }
+
+    const publicQuestions: Record<string, unknown>[] = [];
+    const privateQuestions: Record<string, unknown>[] = [];
+
+    let totalPoints = 0;
+
+    for (let index = 0; index < rawQuestions.length; index++) {
+      const raw = rawQuestions[index];
+
+      if (
+        !raw ||
+        typeof raw !== "object" ||
+        Array.isArray(raw)
+      ) {
+        throw new RequestError(
+          `Question ${index + 1} has invalid data.`,
+        );
+      }
+
+      const question = raw as Record<string, unknown>;
+      const options = question.options;
+      const correctIndex = question.correctAnswerIndex;
+      const points = question.points;
+
+      if (
+        question.order !== index + 1 ||
+        question.questionType !== "multiple_choice" ||
+        typeof question.question !== "string" ||
+        question.question.trim().length === 0 ||
+        !Array.isArray(options) ||
+        options.length !== 4 ||
+        options.some(
+          (option: unknown) =>
+            typeof option !== "string" ||
+            option.trim().length === 0
+        ) ||
+        typeof correctIndex !== "number" ||
+        !Number.isInteger(correctIndex) ||
+        correctIndex < 0 ||
+        correctIndex > 3 ||
+        typeof points !== "number" ||
+        !Number.isInteger(points) ||
+        points < 1 ||
+        points > 100
+      ) {
+        throw new RequestError(
+          `Question ${index + 1} is incomplete.`,
+        );
+      }
+
+      const safeOptions = options.map(
+        (option: unknown) => (option as string).trim()
+      );
+
+      if (new Set(safeOptions).size !== safeOptions.length) {
+        throw new RequestError(
+          `Question ${index + 1} contains duplicate choices.`,
+        );
+      }
+
+      publicQuestions.push({
+        order: index + 1,
+        questionType: "multiple_choice",
+        question: question.question.trim(),
+        options: safeOptions,
+        points,
+      });
+
+      privateQuestions.push({
+        correctAnswerIndex: correctIndex,
+        explanation: clean(question.explanation),
+        points,
+      });
+
+      totalPoints += points;
+    }
+
+    // Admin SDK writes are trusted. Clients cannot directly
+    // access aiQuizAnswerKeys under the new Firestore rules.
+    transaction.create(keyRef, {
+      quizVersion,
+      courseId: initialCourseId,
+      sectionId,
+      createdBy: user.uid,
+      questions: privateQuestions,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    // Publish only sanitized questions. Correct answers and
+    // explanations do not remain in the public document.
+    transaction.update(assessmentRef, {
+      sectionId,
+      questions: publicQuestions,
+      questionCount: publicQuestions.length,
+      totalPoints,
+      quizVersion,
+      status: "published",
+      publishedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return {
+      assessmentId,
+      quizVersion,
+      questionCount: publicQuestions.length,
+      totalPoints,
+    };
+  });
+
+  return json({
+    success: true,
+    ...result,
+  });
+}
+async function submitAiQuiz(
+  request: Request,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const allowedFields = [
+    "action",
+    "assessmentId",
+    "answers",
+  ];
+
+  if (
+    Object.keys(body).some(
+      (field) => !allowedFields.includes(field),
+    )
+  ) {
+    throw new RequestError(
+      "Unexpected AI quiz submission fields.",
+    );
+  }
+
+  const assessmentId = clean(body.assessmentId);
+  const submittedAnswers = body.answers;
+
+  if (
+    !assessmentId ||
+    !Array.isArray(submittedAnswers) ||
+    submittedAnswers.length === 0 ||
+    submittedAnswers.length > 100
+  ) {
+    throw new RequestError(
+      "Valid assessment ID and quiz answers are required.",
+    );
+  }
+
+  const user = await requireActiveUser(request);
+
+  if (
+    clean(user.profile.role).toLowerCase() !== "student"
+  ) {
+    throw new RequestError(
+      "An active student account is required.",
+      403,
+    );
+  }
+
+  const submissionId = `${assessmentId}_${user.uid}`;
+
+  const assessmentRef = firestore
+    .collection("assessments")
+    .doc(assessmentId);
+
+  const answerKeyRef = firestore
+    .collection("aiQuizAnswerKeys")
+    .doc(assessmentId);
+
+  const submissionRef = firestore
+    .collection("assessmentSubmissions")
+    .doc(submissionId);
+
+  const draftRef = firestore
+    .collection("aiQuizDrafts")
+    .doc(submissionId);
+
+  const notificationRef = firestore
+    .collection("notifications")
+    .doc(`assessmentGrade_${submissionId}`);
+
+  const result = await firestore.runTransaction(
+    async (transaction) => {
+      const assessmentDoc =
+        await transaction.get(assessmentRef);
+
+      const assessment = assessmentDoc.data();
+
+      if (!assessmentDoc.exists || !assessment) {
+        throw new RequestError(
+          "Assessment could not be found.",
+          404,
+        );
+      }
+
+      if (
+        clean(assessment.status).toLowerCase() !== "published" ||
+        clean(assessment.assessmentType).toLowerCase() !== "quiz" ||
+        clean(assessment.deliveryType).toLowerCase() !== "ai_generated"
+      ) {
+        throw new RequestError(
+          "This AI quiz is not available.",
+          403,
+        );
+      }
+
+      const courseId = clean(assessment.courseId);
+      const moduleId = clean(assessment.moduleId);
+
+      if (!courseId || !moduleId) {
+        throw new RequestError(
+          "Assessment course information is incomplete.",
+        );
+      }
+
+      const dueAt = assessment.dueAt;
+
+      if (
+        dueAt &&
+        typeof dueAt.toDate === "function" &&
+        dueAt.toDate().getTime() < Date.now()
+      ) {
+        throw new RequestError(
+          "The quiz deadline has passed.",
+          403,
+        );
+      }
+
+      const enrollmentRef = firestore
+        .collection("enrollments")
+        .doc(`${courseId}_${user.uid}`);
+
+      const enrollmentDoc =
+        await transaction.get(enrollmentRef);
+
+      const enrollment = enrollmentDoc.data();
+
+      if (
+        !enrollmentDoc.exists ||
+        !enrollment ||
+        enrollment.studentId !== user.uid ||
+        enrollment.courseId !== courseId ||
+        clean(enrollment.status).toLowerCase() !== "active" ||
+        clean(enrollment.sectionId) !==
+          clean(assessment.sectionId)
+      ) {
+        throw new RequestError(
+          "You are not enrolled in the required course section.",
+          403,
+        );
+      }
+
+      const answerKeyDoc =
+        await transaction.get(answerKeyRef);
+
+      const answerKey = answerKeyDoc.data();
+
+      const version = clean(assessment.quizVersion);
+
+      if (
+        !answerKeyDoc.exists ||
+        !answerKey ||
+        !version ||
+        clean(answerKey.quizVersion) !== version
+      ) {
+        throw new RequestError(
+          "This quiz is not yet ready for secure grading. Contact your instructor.",
+          409,
+        );
+      }
+
+      const existing =
+        await transaction.get(submissionRef);
+
+      if (existing.exists) {
+        throw new RequestError(
+          "This quiz has already been submitted.",
+          409,
+        );
+      }
+
+      const publicQuestions = assessment.questions;
+      const privateQuestions = answerKey.questions;
+
+      if (
+        !Array.isArray(publicQuestions) ||
+        !Array.isArray(privateQuestions) ||
+        publicQuestions.length === 0 ||
+        publicQuestions.length > 100 ||
+        publicQuestions.length !== privateQuestions.length ||
+        publicQuestions.length !== submittedAnswers.length
+      ) {
+        throw new RequestError(
+          "Quiz questions are incomplete or have changed.",
+          409,
+        );
+      }
+
+      const publicFields = [
+        "order",
+        "questionType",
+        "question",
+        "options",
+        "points",
+      ];
+
+      const storedAnswers: Record<string, unknown>[] = [];
+      const items: Record<string, unknown>[] = [];
+
+      let score = 0;
+      let totalPoints = 0;
+
+      for (let index = 0; index < publicQuestions.length; index++) {
+        const publicQuestion = publicQuestions[index];
+        const privateQuestion = privateQuestions[index];
+        const selected = submittedAnswers[index];
+
+        if (
+          !publicQuestion ||
+          typeof publicQuestion !== "object" ||
+          Array.isArray(publicQuestion) ||
+          !privateQuestion ||
+          typeof privateQuestion !== "object" ||
+          Array.isArray(privateQuestion)
+        ) {
+          throw new RequestError("Invalid quiz question data.", 409);
+        }
+
+        const question = publicQuestion as Record<string, unknown>;
+        const key = privateQuestion as Record<string, unknown>;
+
+        // Refuse publicly exposed answer keys.
+        if (
+          Object.keys(question).some(
+            (field) => !publicFields.includes(field),
+          )
+        ) {
+          throw new RequestError(
+            "Quiz answer-key migration is required.",
+            409,
+          );
+        }
+
+        const options = question.options;
+        const correctIndex = key.correctAnswerIndex;
+        const points = key.points;
+
+        if (
+          question.order !== index + 1 ||
+          question.questionType !== "multiple_choice" ||
+          typeof question.question !== "string" ||
+          !Array.isArray(options) ||
+          options.length !== 4 ||
+          options.some(
+            (option: unknown) =>
+              typeof option !== "string" ||
+              option.trim().length === 0
+          ) ||
+          typeof selected !== "number" ||
+          !Number.isInteger(selected) ||
+          selected < 0 ||
+          selected >= options.length ||
+          typeof correctIndex !== "number" ||
+          !Number.isInteger(correctIndex) ||
+          correctIndex < 0 ||
+          correctIndex >= options.length ||
+          typeof points !== "number" ||
+          !Number.isInteger(points) ||
+          points <= 0 ||
+          points > 100 ||
+          question.points !== points
+        ) {
+          throw new RequestError(
+            "Invalid quiz answers or scoring data.",
+            409,
+          );
+        }
+
+        const correct = selected === correctIndex;
+        const earned = correct ? points : 0;
+
+        score += earned;
+        totalPoints += points;
+
+        storedAnswers.push({
+          order: index + 1,
+          selectedAnswerIndex: selected,
+          selectedAnswerText: options[selected],
+          isCorrect: correct,
+          earnedPoints: earned,
+          possiblePoints: points,
+        });
+
+        items.push({
+          order: index + 1,
+          question: question.question,
+          selectedAnswer: options[selected],
+          correctAnswer: options[correctIndex],
+          correct,
+          earned,
+          possible: points,
+          explanation: clean(key.explanation),
+        });
+      }
+
+      if (
+        typeof assessment.totalPoints !== "number" ||
+        assessment.totalPoints !== totalPoints ||
+        totalPoints <= 0
+      ) {
+        throw new RequestError(
+          "Quiz scoring configuration is inconsistent.",
+          409,
+        );
+      }
+
+      const percentage = score / totalPoints * 100;
+
+      transaction.create(submissionRef, {
+        assessmentId,
+        courseId,
+        moduleId,
+        studentId: user.uid,
+        studentName: clean(
+          user.profile.name ??
+          user.profile.universityId ??
+          "Student"
+        ),
+        status: "graded",
+        submissionType: "ai_quiz",
+        submissionSource: "trusted_backend",
+        gradingMode: "automatic",
+        quizVersion: version,
+        answers: storedAnswers,
+        score,
+        totalPoints,
+        percentage,
+        feedback: "Automatically verified and scored by CASLMS.",
+        gradedBy: "system:verified-server",
+        submittedAt: FieldValue.serverTimestamp(),
+        gradedAt: FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      transaction.set(notificationRef, {
+        userId: user.uid,
+        type: "grade",
+        sourceType: "automaticAssessmentGrade",
+        sourceId: submissionId,
+        actorId: user.uid,
+        actorName: "CASLMS",
+        title: `Graded: ${clean(assessment.title)}`,
+        message:
+          `Your score is ${score} / ${totalPoints}. ` +
+          `Rating: ${percentage.toFixed(1)}%.`,
+        courseId,
+        moduleId,
+        isRead: false,
+        readAt: null,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      transaction.delete(draftRef);
+
+      return {
+        submissionId,
+        score,
+        totalPoints,
+        percentage,
+        items,
+      };
+    },
+  );
+
+  return json({
+    success: true,
+    ...result,
+  });
+}
 async function submitAssessment(
   request: Request,
   body: Record<
@@ -1408,6 +2067,16 @@ Deno.serve(
         ).toLowerCase();
 
       switch (action) {
+        case "publish_ai_quiz":
+          return await publishAiQuiz(
+            request,
+            body,
+          );
+        case "submit_ai_quiz":
+          return await submitAiQuiz(
+            request,
+            body,
+          );
         case "submit":
           return await submitAssessment(
             request,

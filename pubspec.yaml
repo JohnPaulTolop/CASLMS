@@ -44,6 +44,7 @@ dependencies:
   firebase_ai: ^4.0.0
   firebase_app_check: ^0.4.7
   archive: ^4.2.0
+  shared_preferences: ^2.5.6
 
 dev_dependencies:
   flutter_test:

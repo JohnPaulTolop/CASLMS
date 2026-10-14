@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/assessment_submission_service.dart';
+import '../../services/student_assessment_query_service.dart';
 
 import 'student_ai_quiz_page.dart';
 import 'student_assessment_submission_page.dart';
@@ -49,6 +50,8 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
   // ============================================================
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final StudentAssessmentQueryService _assessmentQuery =
+      StudentAssessmentQueryService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
   final AssessmentSubmissionService _submissionService =
@@ -195,15 +198,14 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
       // PUBLISHED ASSESSMENTS
       // ----------------------------------------------------------
 
-      final QuerySnapshot<Map<String, dynamic>> assessmentSnapshot =
-          await _firestore
-              .collection('assessments')
-              .where('moduleId', isEqualTo: widget.moduleId)
-              .get();
+      final assessmentDocuments = await _assessmentQuery.getVisibleAssessments(
+        courseId: widget.courseId,
+        moduleId: widget.moduleId,
+      );
 
       final List<Map<String, dynamic>> assessments = [];
 
-      for (final document in assessmentSnapshot.docs) {
+      for (final document in assessmentDocuments) {
         final Map<String, dynamic> data = document.data();
 
         final String courseId = (data['courseId'] ?? '').toString();
