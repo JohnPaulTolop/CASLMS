@@ -1555,7 +1555,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     ].where((value) => value.trim().isNotEmpty).toList();
 
     final String period = periodParts.join(
-      ' ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ',
+      ' \u2022 ',
     );
 
     return InkWell(
