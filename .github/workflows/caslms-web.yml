@@ -1,0 +1,49 @@
+name: CASLMS Web Build
+
+on:
+  push:
+    branches:
+      - feature/course-sections
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-web:
+    name: Build Flutter Web
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.1'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Flutter web
+        shell: bash
+        env:
+          FIREBASE_APPCHECK_WEB_SITE_KEY: ${{ secrets.FIREBASE_APPCHECK_WEB_SITE_KEY }}
+        run: |
+          if [ -z "$FIREBASE_APPCHECK_WEB_SITE_KEY" ]; then
+            echo "Missing Firebase App Check site key."
+            exit 1
+          fi
+
+          flutter build web --release --no-pub \
+            --dart-define="FIREBASE_APPCHECK_WEB_SITE_KEY=$FIREBASE_APPCHECK_WEB_SITE_KEY"
+
+          test -f build/web/index.html
+
+      - name: Build completed
+        run: echo "CASLMS web compiled successfully. No deployment performed."
