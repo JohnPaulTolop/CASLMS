@@ -1804,6 +1804,10 @@ async function recordGoogleFormSubmission(
     existingDocument.exists &&
     existing
   ) {
+    if (existing.gradingMode === "manual") {
+      return json({ success: true, submissionId, preservedManualGrade: true,
+        message: "The instructor's manual grade was preserved." });
+    }
     if (
       clean(
         existing.googleFormResponseId,
@@ -1831,7 +1835,15 @@ async function recordGoogleFormSubmission(
         firebaseUser.displayName,
     ) || studentEmail;
 
-  await submissionReference.set({
+  // A webhook racing an instructor's manual save must never replace its grade.
+  await firestore.runTransaction(async (transaction) => {
+    const latest = await transaction.get(submissionReference);
+    if (latest.exists) {
+      if (latest.data()?.gradingMode === "manual" ||
+          clean(latest.data()?.googleFormResponseId) === responseId) return;
+      throw new RequestError("This student already has a recorded submission.", 409);
+    }
+    transaction.set(submissionReference, {
     assessmentId,
     courseId,
     moduleId,
@@ -1863,6 +1875,7 @@ async function recordGoogleFormSubmission(
       FieldValue.serverTimestamp(),
     updatedAt:
       FieldValue.serverTimestamp(),
+  });
   });
 
   return json({

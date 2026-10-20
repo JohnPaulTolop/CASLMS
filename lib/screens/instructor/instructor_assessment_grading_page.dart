@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../services/assessment_artifact_submission_service.dart';
 import '../../services/assessment_submission_service.dart';
 import '../../services/roster_service.dart';
+import '../../services/enrollment_membership.dart';
 
 class InstructorAssessmentGradingScreen extends StatefulWidget {
   const InstructorAssessmentGradingScreen({
@@ -186,7 +187,7 @@ class _InstructorAssessmentGradingScreenState
       List<Map<String, dynamic>> submissions = await _submissionService
           .getAssessmentSubmissions(assessmentId: assessmentId);
 
-      if (_isGoogleForm(assessment)) {
+      if (assessment['deliveryType'] == 'external_link') {
         final List<Map<String, dynamic>> students = await _rosterService
             .getCourseStudents(courseId);
 
@@ -195,28 +196,48 @@ class _InstructorAssessmentGradingScreenState
             (submission['studentId'] ?? '').toString(): submission,
         };
 
-        submissions = students.map((student) {
-          final String studentId = (student['studentId'] ?? student['id'] ?? '')
-              .toString()
-              .trim();
-          final Map<String, dynamic>? existing =
-              submissionsByStudent[studentId];
+        final courseForSection = await _firestore
+            .collection('courses')
+            .doc(courseId)
+            .get();
+        final targetSection = (assessment['sectionId'] ?? '').toString().trim();
+        submissions = students
+            .where(
+              (student) =>
+                  targetSection.isEmpty ||
+                  EnrollmentMembership.sectionId(
+                        student,
+                        (courseForSection.data()?['classCode'] ?? '')
+                            .toString(),
+                      ) ==
+                      targetSection,
+            )
+            .map((student) {
+              final String studentId =
+                  (student['studentId'] ?? student['id'] ?? '')
+                      .toString()
+                      .trim();
+              final Map<String, dynamic>? existing =
+                  submissionsByStudent[studentId];
 
-          return <String, dynamic>{
-            'assessmentId': assessmentId,
-            'courseId': courseId,
-            'moduleId': moduleId,
-            'studentId': studentId,
-            'studentName': (student['name'] ?? 'Student').toString(),
-            'studentEmail': (student['email'] ?? '').toString(),
-            'submissionId': '${assessmentId}_$studentId',
-            'id': '${assessmentId}_$studentId',
-            'submissionType': 'google_form',
-            'status': 'pending_verification',
-            'complianceStatus': 'pending_verification',
-            if (existing != null) ...existing,
-          };
-        }).toList();
+              return <String, dynamic>{
+                'assessmentId': assessmentId,
+                'courseId': courseId,
+                'moduleId': moduleId,
+                'studentId': studentId,
+                'studentName': (student['name'] ?? 'Student').toString(),
+                'studentEmail': (student['email'] ?? '').toString(),
+                'submissionId': '${assessmentId}_$studentId',
+                'id': '${assessmentId}_$studentId',
+                'submissionType': _isGoogleForm(assessment)
+                    ? 'google_form'
+                    : 'external_link',
+                'status': 'pending_verification',
+                'complianceStatus': 'pending_verification',
+                ...?existing,
+              };
+            })
+            .toList();
       }
 
       final courseDocument = await _firestore
@@ -294,6 +315,118 @@ class _InstructorAssessmentGradingScreenState
     }
 
     return _totalPoints;
+  }
+
+  Future<void> _manualGrade(Map<String, dynamic> student) async {
+    final score = TextEditingController(
+      text: student['score'] is num ? student['score'].toString() : '',
+    );
+    final feedback = TextEditingController(
+      text: (student['feedback'] ?? '').toString(),
+    );
+    final formKey = GlobalKey<FormState>();
+    bool saving = false;
+    String? error;
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, update) => AlertDialog(
+          title: const Text('Manual Grade Input'),
+          content: SizedBox(
+            width: 430,
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${student['studentName'] ?? 'Student'} • $_assessmentTitle',
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: score,
+                      enabled: !saving,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: 'Score (out of $_totalPoints)',
+                      ),
+                      validator: (value) {
+                        final number = num.tryParse(value?.trim() ?? '');
+                        return number == null ||
+                                !number.isFinite ||
+                                number < 0 ||
+                                number > _totalPoints
+                            ? 'Enter a score from 0 to $_totalPoints.'
+                            : null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: feedback,
+                      enabled: !saving,
+                      minLines: 2,
+                      maxLines: 4,
+                      maxLength: 5000,
+                      decoration: const InputDecoration(
+                        labelText: 'Feedback (optional)',
+                      ),
+                    ),
+                    if (error != null)
+                      Text(error!, style: const TextStyle(color: red)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving
+                  ? null
+                  : () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (!(formKey.currentState?.validate() ?? false)) return;
+                      update(() {
+                        saving = true;
+                        error = null;
+                      });
+                      try {
+                        await _submissionService.saveManualGrade(
+                          assessmentId: widget.assessmentId,
+                          studentId: student['studentId'].toString(),
+                          score: num.parse(score.text.trim()),
+                          feedback: feedback.text,
+                        );
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext, true);
+                        }
+                      } catch (failure) {
+                        if (dialogContext.mounted) {
+                          update(() {
+                            saving = false;
+                            error = failure.toString();
+                          });
+                        }
+                      }
+                    },
+              child: Text(saving ? 'Saving...' : 'Save Grade'),
+            ),
+          ],
+        ),
+      ),
+    );
+    score.dispose();
+    feedback.dispose();
+    if (saved == true && mounted) await _loadPage();
   }
 
   String _rating(Map<String, dynamic> submission) {
@@ -1074,7 +1207,8 @@ class _InstructorAssessmentGradingScreenState
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: busy || notComplied
+                  onPressed:
+                      busy || notComplied || student['status'] == 'graded'
                       ? null
                       : () => _setGoogleFormCompliance(student, false),
                   icon: const Icon(Icons.cancel_outlined),
@@ -1089,6 +1223,25 @@ class _InstructorAssessmentGradingScreenState
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            student['score'] is num
+                ? 'Score: ${student['score']} / $_totalPoints'
+                : 'Score: Not graded',
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: busy ? null : () => _manualGrade(student),
+              icon: const Icon(Icons.edit_note),
+              label: Text(
+                student['score'] is num
+                    ? 'Edit Manual Grade'
+                    : 'Manual Grade Input',
+              ),
+            ),
           ),
         ],
       ),
@@ -1281,6 +1434,14 @@ class _InstructorAssessmentGradingScreenState
           ),
           const SizedBox(height: 5),
           Text('Rating: ${_rating(submission)}'),
+          if (_assessment?['deliveryType'] == 'external_link') ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _manualGrade(submission),
+              icon: const Icon(Icons.edit_note),
+              label: const Text('Manual Grade Input'),
+            ),
+          ],
           if (feedback.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(

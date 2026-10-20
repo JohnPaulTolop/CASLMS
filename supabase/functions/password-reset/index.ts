@@ -17,6 +17,8 @@ import {
   getFirestore,
 } from "npm:firebase-admin@13.4.0/firestore";
 
+import { resetIdentityAction } from "./native_identity.ts";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -93,17 +95,6 @@ function validEmail(
   );
 }
 
-function escapeHtml(
-  value: string,
-): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 // ============================================================
 // FIREBASE ADMIN
 // ============================================================
@@ -177,156 +168,61 @@ async function requestAllowed(
     .collection("passwordResetRateLimits")
     .doc(userId);
 
-  const snapshot =
-    await reference.get();
-
-  const now = Date.now();
-
-  const nextAllowedAtMs = Number(
-    snapshot.data()?.nextAllowedAtMs ?? 0,
-  );
-
-  if (nextAllowedAtMs > now) {
-    return false;
-  }
-
-  await reference.set(
-    {
+  return await firestore.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(reference);
+    const now = Date.now();
+    if (Number(snapshot.data()?.nextAllowedAtMs ?? 0) > now) return false;
+    transaction.set(reference, {
       userId,
       nextAllowedAtMs: now + 60_000,
-      updatedAt:
-        FieldValue.serverTimestamp(),
-    },
-    {
-      merge: true,
-    },
-  );
-
-  return true;
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return true;
+  });
 }
 
 // ============================================================
 // EMAIL DELIVERY
 // ============================================================
 
-async function sendResetEmail({
-  email,
-  name,
-  resetLink,
-}: {
-  email: string;
-  name: string;
-  resetLink: string;
-}): Promise<void> {
-  const resendKey = requiredSecret(
-    "RESEND_API_KEY",
+// Firebase Authentication delivers its own password-reset email.
+// Requires FIREBASE_WEB_API_KEY in Supabase Edge Function secrets.
+async function sendResetEmail(
+  email: string,
+  appCheckToken: string,
+): Promise<void> {
+  const apiKey = requiredSecret(
+    "FIREBASE_WEB_API_KEY",
   );
 
-  const fromEmail =
-    Deno.env.get(
-      "PASSWORD_RESET_FROM_EMAIL",
-    )?.trim() ||
-    Deno.env.get(
-      "APPROVAL_FROM_EMAIL",
-    )?.trim() ||
-    "CASLMS <onboarding@resend.dev>";
-
-  const displayName =
-    name.length === 0
-      ? "CASLMS user"
-      : name;
-
-  const safeName =
-    escapeHtml(displayName);
-
-  const safeLink =
-    escapeHtml(resetLink);
+  const endpoint = new URL(
+    "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode",
+  );
+  endpoint.searchParams.set(
+    "key",
+    apiKey,
+  );
 
   const emailResponse = await fetch(
-    "https://api.resend.com/emails",
+    endpoint.toString(),
     {
       method: "POST",
       headers: {
-        "Authorization":
-          `Bearer ${resendKey}`,
-        "Content-Type":
-          "application/json",
+        "Content-Type": "application/json",
+        "X-Firebase-AppCheck": appCheckToken,
       },
       body: JSON.stringify({
-        from: fromEmail,
-        to: [email],
-        subject:
-          "Reset your CASLMS password",
-        html: `
-          <div
-            style="
-              font-family:Arial,sans-serif;
-              line-height:1.6;
-              color:#10182f;
-              max-width:560px;
-              margin:auto;
-            "
-          >
-            <h2 style="color:#1769ff">
-              Reset your CASLMS password
-            </h2>
-
-            <p>Hello ${safeName},</p>
-
-            <p>
-              A password reset was requested
-              for your CASLMS account.
-            </p>
-
-            <p style="margin:28px 0">
-              <a
-                href="${safeLink}"
-                style="
-                  background:#1769ff;
-                  color:#ffffff;
-                  text-decoration:none;
-                  padding:13px 20px;
-                  border-radius:8px;
-                  font-weight:700;
-                "
-              >
-                Reset Password
-              </a>
-            </p>
-
-            <p>
-              This link is temporary and can only
-              be used for its intended password-reset
-              action.
-            </p>
-
-            <p>
-              If you did not request this reset,
-              you can safely ignore this email.
-              Your password will remain unchanged.
-            </p>
-
-            <p>CASLMS Administration</p>
-          </div>
-        `,
-        text:
-          `Hello ${displayName},\n\n` +
-          "A password reset was requested for your " +
-          "CASLMS account.\n\n" +
-          `Reset your password: ${resetLink}\n\n` +
-          "If you did not request this reset, " +
-          "ignore this email.",
+        requestType: "PASSWORD_RESET",
+        email,
       }),
     },
   );
 
   if (!emailResponse.ok) {
-    const details =
-      await emailResponse.text();
-
+    // Never log the email, API key, or raw Firebase response.
     throw new Error(
-      "Resend rejected the password reset " +
-        `email: ${details}`,
+      "Firebase rejected the password-reset request " +
+        `(HTTP ${emailResponse.status}).`,
     );
   }
 }
@@ -338,6 +234,7 @@ async function sendResetEmail({
 async function processResetRequest(
   campusId: string,
   email: string,
+  appCheckToken: string,
 ): Promise<void> {
   const users = await firestore
     .collection("users")
@@ -350,6 +247,7 @@ async function processResetRequest(
     .get();
 
   if (users.empty) {
+    console.info("Password reset skipped: no matching campus ID.");
     return;
   }
 
@@ -360,57 +258,74 @@ async function processResetRequest(
       ) === email,
   );
 
-  if (matches.length !== 1) {
+  if (users.size !== 1 || matches.length !== 1) {
+    console.info("Password reset skipped: ambiguous ID or contact email mismatch.");
     return;
   }
 
   const document = matches[0];
   const profile = document.data();
 
+  const authUser = await firebaseAuth.getUser(
+    document.id,
+  );
+  const identityAction = resetIdentityAction(
+    authUser, campusId, email, profile.authEmail,
+  );
+  if (identityAction === "skip") {
+    console.warn(
+      "Password reset skipped: unsupported identity or disabled account.",
+    );
+    return;
+  }
+
   if (
     !(await requestAllowed(
       document.id,
     ))
   ) {
+    console.info("Password reset skipped: rate limited.");
     return;
   }
 
-  const authEmail = normalizeEmail(
-    profile.authEmail ??
-      `${campusId}@caslms.app`,
-  );
+  // Validate configuration before changing any identity.
+  requiredSecret("FIREBASE_WEB_API_KEY");
 
-  const registeredEmail =
-    normalizeEmail(
-      profile.email,
-    );
-
-  const name = cleanText(
-    profile.name ??
-      profile.fullName,
-  );
-
-  const continueUrl =
-    Deno.env.get(
-      "PASSWORD_RESET_CONTINUE_URL",
-    )?.trim() ||
-    "https://ssu-caslms.vercel.app/";
-
-  const resetLink =
-    await firebaseAuth
-      .generatePasswordResetLink(
-        authEmail,
-        {
-          url: continueUrl,
-          handleCodeInApp: false,
-        },
-      );
-
-  await sendResetEmail({
-    email: registeredEmail,
-    name,
-    resetLink,
+  // Reserve the campus ID before freeing its synthetic Auth email. Rules and
+  // instructor registration reject attempts to register this ID with a new UID.
+  const reservation = firestore.collection("campusLoginIds").doc(campusId);
+  await firestore.runTransaction(async (transaction) => {
+    const existing = await transaction.get(reservation);
+    const freshProfile = await transaction.get(document.ref);
+    if (existing.exists && existing.data()?.uid !== document.id) {
+      throw new Error("Campus login reservation conflict.");
+    }
+    if (normalizeEmail(freshProfile.data()?.email) !== email ||
+      normalizeCampusId(freshProfile.data()?.universityId) !== campusId) {
+      throw new Error("Profile changed during password reset.");
+    }
+    transaction.set(reservation, {
+      uid: document.id,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
   });
+
+  if (identityAction === "migrate") {
+    // Firebase enforces email uniqueness: an address belonging to another UID
+    // causes an error. Never merge accounts or change passwords here.
+    await firebaseAuth.updateUser(document.id, {
+      email,
+      emailVerified: false,
+    });
+    console.info("Password reset: legacy Auth identity migrated.");
+  }
+  await document.ref.update({
+    authEmail: email,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  await sendResetEmail(email, appCheckToken);
+  console.info("Password reset: Firebase accepted the email request.");
 }
 
 // ============================================================
@@ -512,14 +427,17 @@ Deno.serve(
       await processResetRequest(
         campusId,
         email,
+        request.headers.get("X-Firebase-AppCheck")!.trim(),
       );
     } catch (error) {
       // Never reveal whether the ID or email
       // belongs to an existing account.
-      console.error(
-        "Password reset processing failed:",
-        error,
-      );
+      const code = typeof error === "object" && error !== null && "code" in error
+        ? String(error.code)
+        : error instanceof Error && /^(Missing environment secret:|Firebase rejected)/.test(error.message)
+        ? error.message
+        : "internal";
+      console.error("Password reset processing failed:", code);
     }
 
     return response({

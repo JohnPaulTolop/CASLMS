@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -73,6 +75,7 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
   List<Map<String, dynamic>> _assessments = [];
   List<Map<String, dynamic>> _submissions = [];
   List<Map<String, dynamic>> _resources = [];
+  StreamSubscription? _gradeChanges;
 
   // ============================================================
   // INIT
@@ -85,10 +88,46 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
     WidgetsBinding.instance.addObserver(this);
 
     _loadPage();
+    final uid = _auth.currentUser?.uid;
+    if (uid != null) {
+      _gradeChanges = _firestore
+          .collection('assessmentSubmissions')
+          .where('studentId', isEqualTo: uid)
+          .snapshots()
+          .listen(
+            (snapshot) {
+              if (!mounted) return;
+              setState(() {
+                _submissions = snapshot.docs
+                    .where(
+                      (doc) =>
+                          doc.data()['courseId'] == widget.courseId &&
+                          doc.data()['moduleId'] == widget.moduleId,
+                    )
+                    .map(
+                      (doc) => <String, dynamic>{
+                        ...doc.data(),
+                        'id': doc.id,
+                        'submissionId': doc.id,
+                      },
+                    )
+                    .toList();
+              });
+            },
+            onError: (Object error) {
+              if (mounted) {
+                _showError(
+                  'Unable to update assessment grades. Please refresh.',
+                );
+              }
+            },
+          );
+    }
   }
 
   @override
   void dispose() {
+    _gradeChanges?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -1454,7 +1493,7 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
                     notComplied
                         ? 'Your instructor could not verify a Google Form response.'
                         : graded
-                        ? 'Graded'
+                        ? 'Graded: ${submission['score']} / ${submission['totalPoints'] ?? assessment['totalPoints']}'
                         : _formatSubmittedAt(submission['submittedAt']),
                     style: TextStyle(
                       color: notComplied ? red : green,

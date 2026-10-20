@@ -14,7 +14,20 @@ class InstructorTeachingAssistantScreen extends StatefulWidget {
 
 class _InstructorTeachingAssistantScreenState
     extends State<InstructorTeachingAssistantScreen> {
-  static const teal = Color(0xFF00897B);
+  // ============================================================
+  // DESIGN SYSTEM
+  // ============================================================
+
+  static const Color teal = Color(0xFF00897B);
+  static const Color background = Color(0xFFF5F8FC);
+  static const Color heading = Color(0xFF172B4D);
+  static const Color secondaryText = Color(0xFF6B7C93);
+  static const Color borderColor = Color(0xFFE5ECF3);
+  static const Color red = Color(0xFFFF4B4B);
+
+  // ============================================================
+  // SERVICES & STATE
+  // ============================================================
 
   final _service = InstructorTeachingAiService();
   final _input = TextEditingController();
@@ -126,218 +139,504 @@ class _InstructorTeachingAssistantScreenState
     super.dispose();
   }
 
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
+      backgroundColor: background,
       appBar: AppBar(
-        title: const Text('AI Teaching Assistant'),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
         automaticallyImplyLeading: false,
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: () => Navigator.of(context).maybePop(),
+          icon: const Icon(Icons.arrow_back_rounded, color: heading),
+        ),
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Teaching Assistant',
+              style: TextStyle(
+                color: heading,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Text(
+              'AI Lesson & Assessment Builder',
+              style: TextStyle(
+                color: secondaryText,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Student Records Assistant',
-            icon: const Icon(Icons.manage_accounts_outlined),
+            icon: const Icon(Icons.manage_accounts_outlined, color: heading),
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) =>
-                    const LearnerAssistantScreen(role: 'instructor'),
+                builder: (_) => const LearnerAssistantScreen(role: 'instructor'),
               ),
             ),
           ),
           IconButton(
             tooltip: 'New conversation',
-            icon: const Icon(Icons.add_comment_outlined),
+            icon: const Icon(Icons.add_comment_outlined, color: teal),
             onPressed: _sending ? null : _newChat,
+          ),
+          const SizedBox(width: 8),
+        ],
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: borderColor),
+        ),
+      ),
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: Column(
+              children: [
+                _buildContextSelector(),
+                if (_error != null) _buildErrorBanner(),
+                Expanded(
+                  child: _messages.isEmpty
+                      ? _buildEmptyState()
+                      : _buildChatList(),
+                ),
+                _buildInputArea(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // UI COMPONENTS
+  // ============================================================
+
+  Widget _buildContextSelector() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          bottom: BorderSide(color: borderColor),
+          left: BorderSide(color: borderColor),
+          right: BorderSide(color: borderColor),
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.tune_rounded, size: 18, color: secondaryText),
+          const SizedBox(width: 12),
+          const Text(
+            'Context:',
+            style: TextStyle(
+              color: secondaryText,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _loading
+                ? const SizedBox(
+                    height: 2,
+                    child: LinearProgressIndicator(color: teal),
+                  )
+                : DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _courseId,
+                      isExpanded: true,
+                      icon: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: secondaryText,
+                      ),
+                      style: const TextStyle(
+                        color: heading,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '',
+                          child: Text('General teaching assistance'),
+                        ),
+                        ..._courses.map((course) {
+                          return DropdownMenuItem(
+                            value: course['id']!,
+                            child: Text(
+                              '${course['code']} - ${course['title']}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          );
+                        }),
+                      ],
+                      onChanged: _sending
+                          ? null
+                          : (value) {
+                              setState(() {
+                                _courseId = value ?? '';
+                                _messages.clear();
+                                _error = null;
+                              });
+                            },
+                    ),
+                  ),
           ),
         ],
       ),
-      body: Column(
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF0F0),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFD6D6)),
+      ),
+      child: Row(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Plan lessons, quizzes, assignments, rubrics '
-                  'and learning activities with AI.',
-                ),
-                const SizedBox(height: 12),
-                if (_loading)
-                  const LinearProgressIndicator(color: teal)
-                else
-                  DropdownButtonFormField<String>(
-                    initialValue: _courseId,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Course context',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: [
-                      const DropdownMenuItem(
-                        value: '',
-                        child: Text('General teaching assistance'),
-                      ),
-                      ..._courses.map((course) {
-                        return DropdownMenuItem(
-                          value: course['id']!,
-                          child: Text(
-                            '${course['code']} - ${course['title']}',
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }),
-                    ],
-                    onChanged: _sending
-                        ? null
-                        : (value) {
-                            setState(() {
-                              _courseId = value ?? '';
-                              _messages.clear();
-                              _error = null;
-                            });
-                          },
-                  ),
-                const SizedBox(height: 6),
-                const Text(
-                  'AI suggestions are drafts. Review before use. '
-                  'Chat history is kept only while this page is open.',
-                  style: TextStyle(fontSize: 12, color: Colors.black54),
-                ),
-              ],
+          const Icon(Icons.error_outline_rounded, color: red, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _error!,
+              style: const TextStyle(
+                color: red,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-          if (_error != null)
-            MaterialBanner(
-              content: Text(_error!),
-              actions: [
-                TextButton(
-                  onPressed: () => setState(() => _error = null),
-                  child: const Text('Dismiss'),
-                ),
-              ],
+          IconButton(
+            icon: const Icon(Icons.close_rounded, color: red, size: 18),
+            onPressed: () => setState(() => _error = null),
+            constraints: const BoxConstraints(),
+            padding: EdgeInsets.zero,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 60, 24, 24),
+      children: [
+        Container(
+          width: 70,
+          height: 70,
+          decoration: BoxDecoration(
+            color: teal.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.auto_awesome_rounded, size: 32, color: teal),
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'What would you like to create?',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: heading,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Plan lessons, generate quizzes, build rubrics, and\norganize learning activities instantly.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: secondaryText,
+            fontSize: 13,
+            height: 1.5,
+          ),
+        ),
+        const SizedBox(height: 40),
+        ...prompts.map((prompt) => _buildPromptCard(prompt)),
+      ],
+    );
+  }
+
+  Widget _buildPromptCard(String prompt) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: heading.withValues(alpha: 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
+        leading: const Icon(Icons.lightbulb_outline_rounded, color: teal, size: 22),
+        title: Text(
+          prompt,
+          style: const TextStyle(
+            color: heading,
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        trailing: const Icon(
+          Icons.arrow_forward_ios_rounded,
+          size: 14,
+          color: secondaryText,
+        ),
+        onTap: _sending ? null : () => _send(prompt),
+      ),
+    );
+  }
+
+  Widget _buildChatList() {
+    return ListView.builder(
+      controller: _scroll,
+      padding: const EdgeInsets.all(20),
+      itemCount: _messages.length + (_sending ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == _messages.length && _sending) {
+          return _buildTypingIndicator();
+        }
+        final message = _messages[index];
+        return _buildMessageBubble(message);
+      },
+    );
+  }
+
+  Widget _buildMessageBubble(TeachingAiTurn message) {
+    final bool isUser = message.isUser;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(
+        mainAxisAlignment:
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!isUser) ...[
+            const CircleAvatar(
+              radius: 16,
+              backgroundColor: teal,
+              child: Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 16),
             ),
-          Expanded(
-            child: _messages.isEmpty
-                ? ListView(
-                    padding: const EdgeInsets.all(18),
-                    children: [
-                      const Icon(Icons.auto_awesome, size: 45, color: teal),
-                      const SizedBox(height: 12),
-                      const Center(
-                        child: Text(
-                          'What would you like to create?',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      ...prompts.map(
-                        (prompt) => Card(
-                          child: ListTile(
-                            title: Text(prompt),
-                            trailing: const Icon(
-                              Icons.arrow_forward_ios,
-                              size: 15,
+            const SizedBox(width: 10),
+          ],
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              decoration: BoxDecoration(
+                color: isUser ? teal : Colors.white,
+                border: isUser ? null : Border.all(color: borderColor),
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(20),
+                  topRight: const Radius.circular(20),
+                  bottomLeft: Radius.circular(isUser ? 20 : 4),
+                  bottomRight: Radius.circular(isUser ? 4 : 20),
+                ),
+                boxShadow: [
+                  if (!isUser)
+                    BoxShadow(
+                      color: heading.withValues(alpha: 0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SelectableText(
+                    message.text,
+                    style: TextStyle(
+                      color: isUser ? Colors.white : heading,
+                      fontSize: 14,
+                      height: 1.5,
+                    ),
+                  ),
+                  if (!isUser) ...[
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: InkWell(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: message.text));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Draft copied to clipboard'),
+                              behavior: SnackBarBehavior.floating,
                             ),
-                            onTap: _sending ? null : () => _send(prompt),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
                           ),
-                        ),
-                      ),
-                    ],
-                  )
-                : ListView.builder(
-                    controller: _scroll,
-                    padding: const EdgeInsets.all(14),
-                    itemCount: _messages.length,
-                    itemBuilder: (context, index) {
-                      final message = _messages[index];
-                      return Align(
-                        alignment: message.isUser
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
-                        child: Container(
-                          constraints: const BoxConstraints(maxWidth: 730),
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: message.isUser
-                                ? const Color(0xFFD7F0EB)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              SelectableText(message.text),
-                              if (!message.isUser)
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: TextButton.icon(
-                                    onPressed: () => Clipboard.setData(
-                                      ClipboardData(text: message.text),
-                                    ),
-                                    icon: const Icon(Icons.copy, size: 16),
-                                    label: const Text('Copy draft'),
-                                  ),
+                              Icon(Icons.copy_rounded, size: 14, color: secondaryText),
+                              const SizedBox(width: 6),
+                              const Text(
+                                'Copy',
+                                style: TextStyle(
+                                  color: secondaryText,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
                                 ),
+                              ),
                             ],
                           ),
                         ),
-                      );
-                    },
-                  ),
-          ),
-          if (_sending)
-            const Padding(
-              padding: EdgeInsets.all(8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: teal,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: 12),
-                  Text('Generating an answer...'),
+                  ],
                 ],
               ),
             ),
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _input,
-                      enabled: !_sending && !_loading,
-                      maxLines: 3,
-                      minLines: 1,
-                      maxLength: 3000,
-                      decoration: const InputDecoration(
-                        hintText: 'Ask your teaching assistant...',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    tooltip: 'Send message',
-                    onPressed: _sending || _loading ? null : () => _send(),
-                    icon: const Icon(Icons.send),
-                    style: IconButton.styleFrom(backgroundColor: teal),
-                  ),
-                ],
+          ),
+          if (isUser) const SizedBox(width: 32),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTypingIndicator() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          const CircleAvatar(
+            radius: 16,
+            backgroundColor: teal,
+            child: Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 16),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: borderColor),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+                bottomLeft: Radius.circular(4),
+                bottomRight: Radius.circular(20),
               ),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: teal),
+                ),
+                SizedBox(width: 12),
+                Text(
+                  'Analyzing course data...',
+                  style: TextStyle(
+                    color: secondaryText,
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputArea() {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        12,
+        16,
+        MediaQuery.of(context).padding.bottom + 12,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: borderColor)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: borderColor),
+              ),
+              child: TextField(
+                controller: _input,
+                enabled: !_sending && !_loading,
+                maxLines: 5,
+                minLines: 1,
+                maxLength: 3000,
+                textInputAction: TextInputAction.newline,
+                style: const TextStyle(fontSize: 14, color: heading),
+                decoration: const InputDecoration(
+                  hintText: 'Ask your teaching assistant...',
+                  hintStyle: TextStyle(color: secondaryText, fontSize: 14),
+                  border: InputBorder.none,
+                  counterText: '',
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 14,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            margin: const EdgeInsets.only(bottom: 2),
+            decoration: const BoxDecoration(
+              color: teal,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              tooltip: 'Send message',
+              onPressed: _sending || _loading
+                  ? null
+                  : () {
+                      if (_input.text.trim().isNotEmpty) _send();
+                    },
+              icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
             ),
           ),
         ],

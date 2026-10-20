@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 
 class AssessmentSubmissionService {
   AssessmentSubmissionService({
@@ -379,6 +381,11 @@ class AssessmentSubmissionService {
 
       final String decision = complied ? 'complied' : 'not_complied';
       final Map<String, dynamic>? existing = existingDocument.data();
+      if (existing?['status'] == 'graded') {
+        throw AssessmentSubmissionException(
+          'This response is graded. Use Manual Grade Input to correct its score.',
+        );
+      }
 
       if ((existing?['complianceStatus'] ?? '').toString().toLowerCase() ==
           decision) {
@@ -447,14 +454,65 @@ class AssessmentSubmissionService {
     });
   }
 
-  // Retain the old method signature, but reject manual score changes.
+  Future<void> saveManualGrade({
+    required String assessmentId,
+    required String studentId,
+    required num score,
+    String feedback = '',
+  }) async {
+    if (!score.isFinite || score < 0) {
+      throw AssessmentSubmissionException('Enter a valid non-negative score.');
+    }
+    await _requireRole('instructor');
+    final idToken = await _auth.currentUser!.getIdToken(true);
+    final appCheck = await FirebaseAppCheck.instance.getToken(true);
+    if (idToken == null || appCheck == null || appCheck.isEmpty) {
+      throw AssessmentSubmissionException('Please sign in again and retry.');
+    }
+    try {
+      final result = await Supabase.instance.client.functions.invoke(
+        'manual-grade',
+        headers: {
+          'Authorization': 'Bearer $idToken',
+          'X-Firebase-AppCheck': appCheck,
+        },
+        body: {
+          'assessmentId': assessmentId,
+          'studentId': studentId,
+          'score': score,
+          'feedback': feedback,
+        },
+      );
+      if (result.data is! Map || result.data['success'] != true) {
+        throw AssessmentSubmissionException('Unable to save the grade.');
+      }
+    } on FunctionException catch (error) {
+      throw AssessmentSubmissionException(
+        error.details is Map
+            ? (error.details['error'] ?? 'Unable to save the grade.').toString()
+            : 'Unable to save the grade. Please retry.',
+      );
+    }
+  }
+
   Future<void> gradeSubmission({
     required String submissionId,
     required num score,
     String feedback = '',
   }) async {
-    throw AssessmentSubmissionException(
-      'Assessment scores are read-only. Use Save Feedback instead.',
+    final doc = await _firestore
+        .collection(submissionsCollection)
+        .doc(submissionId)
+        .get();
+    final data = doc.data();
+    if (data == null) {
+      throw AssessmentSubmissionException('Submission not found.');
+    }
+    await saveManualGrade(
+      assessmentId: data['assessmentId'].toString(),
+      studentId: data['studentId'].toString(),
+      score: score,
+      feedback: feedback,
     );
   }
 

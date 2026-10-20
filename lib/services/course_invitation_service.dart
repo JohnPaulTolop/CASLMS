@@ -354,6 +354,7 @@ class CourseInvitationService {
                 .trim(),
             'status': 'active',
             'enrollmentSource': 'instructor_invitation',
+            'sectionId': (course['classCode'] ?? '').toString().trim(),
             'invitationId': cleanInvitationId,
             'invitedBy': (invitation['instructorId'] ?? '').toString(),
             'enrolledAt': FieldValue.serverTimestamp(),

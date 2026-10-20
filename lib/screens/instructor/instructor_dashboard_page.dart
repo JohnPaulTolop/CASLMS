@@ -27,19 +27,12 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   // ============================================================
 
   static const Color primaryTeal = Color(0xFF00897B);
-
   static const Color background = Color(0xFFF7F9FC);
-
   static const Color textDark = Color(0xFF10182F);
-
   static const Color textGrey = Color(0xFF68738A);
-
   static const Color blue = Color(0xFF1769FF);
-
   static const Color orange = Color(0xFFFF9418);
-
   static const Color purple = Color(0xFF7B4DFF);
-
   static const Color borderColor = Color(0xFFE6EAF0);
 
   // ============================================================
@@ -47,7 +40,6 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   // ============================================================
 
   final InstructorCourseService _courseService = InstructorCourseService();
-
   final AssignmentService _assignmentService = AssignmentService();
 
   // ============================================================
@@ -55,15 +47,10 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   // ============================================================
 
   bool _isLoading = true;
-
   String? _errorMessage;
-
   Map<String, dynamic>? _instructor;
-
   List<Map<String, dynamic>> _courses = [];
-
   List<Map<String, dynamic>> _pendingSubmissions = [];
-
   String _searchQuery = '';
 
   // ============================================================
@@ -73,7 +60,6 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   @override
   void initState() {
     super.initState();
-
     _loadDashboard();
   }
 
@@ -92,18 +78,14 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     try {
       final List<dynamic> results = await Future.wait<dynamic>([
         _courseService.getCurrentInstructorProfile(),
-
         _courseService.getInstructorCourses(),
-
         _assignmentService.getInstructorPendingSubmissions(),
       ]);
 
       final Map<String, dynamic> instructor =
           results[0] as Map<String, dynamic>;
-
       final List<Map<String, dynamic>> courses =
           results[1] as List<Map<String, dynamic>>;
-
       final List<Map<String, dynamic>> pendingSubmissions =
           results[2] as List<Map<String, dynamic>>;
 
@@ -113,11 +95,8 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
       setState(() {
         _instructor = instructor;
-
         _courses = courses;
-
         _pendingSubmissions = pendingSubmissions;
-
         _isLoading = false;
       });
     } on InstructorCourseServiceException catch (e) {
@@ -145,7 +124,6 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
       setState(() {
         _isLoading = false;
-
         _errorMessage = 'Unable to load instructor dashboard.';
       });
     }
@@ -176,11 +154,9 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
   int get _activeStudentCount {
     int count = 0;
-
     for (final Map<String, dynamic> course in _courses) {
       count += (course['studentCount'] as num?)?.toInt() ?? 0;
     }
-
     return count;
   }
 
@@ -199,17 +175,13 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
     return _courses.where((course) {
       final String title = (course['title'] ?? '').toString().toLowerCase();
-
       final String code = (course['code'] ?? '').toString().toLowerCase();
-
       final String classCode = (course['classCode'] ?? '')
           .toString()
           .toLowerCase();
-
       final String semester = (course['semester'] ?? '')
           .toString()
           .toLowerCase();
-
       final String academicYear = (course['academicYear'] ?? '')
           .toString()
           .toLowerCase();
@@ -368,86 +340,68 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
     return RefreshIndicator(
       color: primaryTeal,
-
       onRefresh: _loadDashboard,
-
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 35),
-
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-
           children: [
             // ==================================================
-            // HEADER
+            // HEADER & WELCOME
             // ==================================================
-
             _buildHeader(),
-
+            const SizedBox(height: 24),
+            _buildWelcomeBanner(),
             const SizedBox(height: 24),
 
-            _buildWelcomeBanner(),
-
-            const SizedBox(height: 20),
-
             // ==================================================
-            // SEARCH
+            // SEARCH (Moved up)
             // ==================================================
             _buildSearchBar(),
-
             const SizedBox(height: 24),
 
             // ==================================================
-            // RECENT COURSES
-            // ==================================================
-            _buildActiveClassesHeader(),
-
-            const SizedBox(height: 14),
-
-            _buildActiveClasses(),
-
-            const SizedBox(height: 20),
-
-            // ==================================================
-            // REAL STATISTICS
+            // REAL STATISTICS (Grouped and compacted)
             // ==================================================
             _buildStatistics(),
+            const SizedBox(height: 24),
 
-            const SizedBox(height: 28),
+            // ==================================================
+            // QUICK ACTIONS & TOOLS
+            // ==================================================
+            const Text(
+              'Quick Actions',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: textDark,
+                letterSpacing: -0.3,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _buildQuickActions(),
+            const SizedBox(height: 24),
 
             // ==================================================
             // COURSE WORKFLOW
             // ==================================================
             _buildCourseBuilderBanner(),
-
             const SizedBox(height: 28),
 
             // ==================================================
-            // TOOLS
+            // COURSES LIST
             // ==================================================
-            const Text(
-              'Quick Actions',
-
-              style: TextStyle(
-                fontSize: 18,
-
-                fontWeight: FontWeight.w800,
-
-                color: textDark,
-
-                letterSpacing: -0.3,
-              ),
-            ),
-
+            _buildActiveClassesHeader(),
             const SizedBox(height: 14),
+            _buildActiveClasses(),
+            const SizedBox(height: 24),
 
-            _buildQuickActions(),
-            const SizedBox(height: 8),
-
+            // ==================================================
+            // FOOTER / HELP
+            // ==================================================
             Align(
               alignment: Alignment.centerRight,
               child: Tooltip(
@@ -459,7 +413,6 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                 ),
               ),
             ),
-
             const SizedBox(height: 30),
           ],
         ),
@@ -877,196 +830,88 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   }
 
   // ============================================================
-  // REAL STATISTICS
+  // REAL STATISTICS (Grouped Container)
   // ============================================================
 
   Widget _buildStatistics() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final bool narrow = constraints.maxWidth < 650;
-
-        final List<Widget> cards = [
-          _buildStatCard(
-            title: 'Active Students',
-
-            value: '$_activeStudentCount',
-
-            subtitle: _activeCourseCount == 1
-                ? 'Across 1 class'
-                : 'Across $_activeCourseCount classes',
-
-            icon: Icons.groups_rounded,
-
-            color: blue,
-          ),
-
-          _buildStatCard(
-            title: 'Pending Grading',
-
-            value: '$_pendingGradingCount',
-
-            subtitle: _pendingGradingCount == 1
-                ? 'Submission to review'
-                : 'Submissions to review',
-
-            icon: Icons.grading_rounded,
-
-            color: orange,
-          ),
-
-          _buildStatCard(
-            title: 'Active Courses',
-
-            value: '$_activeCourseCount',
-
-            subtitle: _activeCourseCount == 1
-                ? 'Course you manage'
-                : 'Courses you manage',
-
-            icon: Icons.class_rounded,
-
-            color: primaryTeal,
-          ),
-        ];
-
-        if (narrow) {
-          return Column(
-            children: [
-              cards[0],
-
-              const SizedBox(height: 12),
-
-              cards[1],
-
-              const SizedBox(height: 12),
-
-              cards[2],
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            Expanded(child: cards[0]),
-
-            const SizedBox(width: 16),
-
-            Expanded(child: cards[1]),
-
-            const SizedBox(width: 16),
-
-            Expanded(child: cards[2]),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-  }) {
     return Container(
-      width: double.infinity,
-
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-
-        borderRadius: BorderRadius.circular(18),
-
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: borderColor),
-
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-
+            color: Colors.black.withValues(alpha: 0.025),
             blurRadius: 15,
-
             offset: const Offset(0, 5),
           ),
         ],
       ),
-
       child: Row(
         children: [
-          Container(
-            width: 46,
-
-            height: 46,
-
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.10),
-
-              borderRadius: BorderRadius.circular(14),
-            ),
-
-            child: Icon(icon, color: color, size: 23),
-          ),
-
-          const SizedBox(width: 13),
-
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-
-              children: [
-                Text(
-                  title,
-
-                  maxLines: 1,
-
-                  overflow: TextOverflow.ellipsis,
-
-                  style: const TextStyle(
-                    fontSize: 11.5,
-
-                    color: textGrey,
-
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-
-                const SizedBox(height: 3),
-
-                Text(
-                  value,
-
-                  style: TextStyle(
-                    fontSize: 24,
-
-                    fontWeight: FontWeight.w800,
-
-                    color: color,
-                  ),
-                ),
-
-                const SizedBox(height: 2),
-
-                Text(
-                  subtitle,
-
-                  maxLines: 1,
-
-                  overflow: TextOverflow.ellipsis,
-
-                  style: const TextStyle(
-                    fontSize: 10,
-
-                    color: textGrey,
-
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
+            child: _buildInnerStat(
+              title: 'Active Students',
+              value: '$_activeStudentCount',
+              icon: Icons.groups_rounded,
+              color: blue,
+            ),
+          ),
+          Container(width: 1, height: 45, color: borderColor),
+          Expanded(
+            child: _buildInnerStat(
+              title: 'To Grade',
+              value: '$_pendingGradingCount',
+              icon: Icons.grading_rounded,
+              color: orange,
+            ),
+          ),
+          Container(width: 1, height: 45, color: borderColor),
+          Expanded(
+            child: _buildInnerStat(
+              title: 'Courses',
+              value: '$_activeCourseCount',
+              icon: Icons.class_rounded,
+              color: primaryTeal,
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildInnerStat({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 11,
+            color: textGrey,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 

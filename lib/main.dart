@@ -10,7 +10,6 @@ import 'config/supabase_config.dart';
 import 'firebase_options.dart';
 import 'screens/auth_page.dart';
 import 'screens/session_gate.dart';
-import 'screens/student/student_main_page.dart';
 
 const bool _caslmsLocalIntegration = bool.fromEnvironment(
   'CASLMS_LOCAL_INTEGRATION',
@@ -24,9 +23,7 @@ Future<void> main() async {
   // ============================================================
 
   if (_caslmsLocalIntegration && (kReleaseMode || !kIsWeb)) {
-    throw StateError(
-      'Local integration mode supports debug web builds only.',
-    );
+    throw StateError('Local integration mode supports debug web builds only.');
   }
 
   await Firebase.initializeApp(
@@ -42,19 +39,11 @@ Future<void> main() async {
   );
 
   if (_caslmsLocalIntegration) {
-    await FirebaseAuth.instance.useAuthEmulator(
-      '127.0.0.1',
-      9099,
-    );
+    await FirebaseAuth.instance.useAuthEmulator('127.0.0.1', 9099);
 
-    FirebaseFirestore.instance.useFirestoreEmulator(
-      '127.0.0.1',
-      8080,
-    );
+    FirebaseFirestore.instance.useFirestoreEmulator('127.0.0.1', 8080);
 
-    debugPrint(
-      'CASLMS LOCAL INTEGRATION: Firebase emulators enabled.',
-    );
+    debugPrint('CASLMS LOCAL INTEGRATION: Firebase emulators enabled.');
   }
 
   // ============================================================
@@ -100,8 +89,9 @@ Future<void> main() async {
 /// for the current platform.
 ///
 /// Web:
-/// - Uses reCAPTCHA Enterprise.
-/// - Requires FIREBASE_APPCHECK_WEB_SITE_KEY in production.
+/// - Uses the Firebase debug provider in debug builds.
+/// - Uses reCAPTCHA Enterprise in profile and release builds.
+/// - Requires FIREBASE_APPCHECK_WEB_SITE_KEY outside debug builds.
 ///
 /// Android:
 /// - Uses the Firebase debug provider during development.
@@ -115,36 +105,33 @@ Future<void> _activateFirebaseAppCheck() async {
   // ============================================================
 
   if (kIsWeb) {
-    const webSiteKey = String.fromEnvironment(
-      'FIREBASE_APPCHECK_WEB_SITE_KEY',
-    );
-
-    if (webSiteKey.isEmpty) {
-      if (kReleaseMode) {
-        throw StateError(
-          'Firebase App Check web site key is missing. '
-          'Build the application with '
-          '--dart-define=FIREBASE_APPCHECK_WEB_SITE_KEY=YOUR_SITE_KEY',
-        );
-      }
+    if (kDebugMode) {
+      await FirebaseAppCheck.instance.activate(providerWeb: WebDebugProvider());
 
       debugPrint(
-        'Firebase App Check was skipped for local web development '
-        'because FIREBASE_APPCHECK_WEB_SITE_KEY was not provided.',
+        'Firebase App Check activated with the web debug provider. '
+        'Register the debug token from the browser console in Firebase '
+        'Console > App Check > Manage debug tokens.',
       );
 
       return;
     }
 
+    const webSiteKey = String.fromEnvironment('FIREBASE_APPCHECK_WEB_SITE_KEY');
+
+    if (webSiteKey.isEmpty) {
+      throw StateError(
+        'Firebase App Check web site key is missing. '
+        'Build the application with '
+        '--dart-define=FIREBASE_APPCHECK_WEB_SITE_KEY=YOUR_SITE_KEY',
+      );
+    }
+
     await FirebaseAppCheck.instance.activate(
-      providerWeb: ReCaptchaEnterpriseProvider(
-        webSiteKey,
-      ),
+      providerWeb: ReCaptchaEnterpriseProvider(webSiteKey),
     );
 
-    debugPrint(
-      'Firebase App Check activated with reCAPTCHA Enterprise.',
-    );
+    debugPrint('Firebase App Check activated with reCAPTCHA Enterprise.');
 
     return;
   }
@@ -193,9 +180,7 @@ Future<void> _activateFirebaseAppCheck() async {
 }
 
 class CASLMSApp extends StatelessWidget {
-  const CASLMSApp({
-    super.key,
-  });
+  const CASLMSApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -206,7 +191,6 @@ class CASLMSApp extends StatelessWidget {
       // ========================================================
       // GLOBAL THEME
       // ========================================================
-
       theme: ThemeData(
         primarySwatch: Colors.blue,
         scaffoldBackgroundColor: Colors.grey[50],
@@ -224,10 +208,7 @@ class CASLMSApp extends StatelessWidget {
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.blueAccent,
-            side: const BorderSide(
-              color: Colors.blueAccent,
-              width: 2,
-            ),
+            side: const BorderSide(color: Colors.blueAccent, width: 2),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
@@ -238,22 +219,15 @@ class CASLMSApp extends StatelessWidget {
           fillColor: Colors.white,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-              color: Colors.grey[300]!,
-            ),
+            borderSide: BorderSide(color: Colors.grey[300]!),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(
-              color: Colors.grey[300]!,
-            ),
+            borderSide: BorderSide(color: Colors.grey[300]!),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(
-              color: Colors.blueAccent,
-              width: 2,
-            ),
+            borderSide: const BorderSide(color: Colors.blueAccent, width: 2),
           ),
         ),
       ),
@@ -261,7 +235,6 @@ class CASLMSApp extends StatelessWidget {
       // ========================================================
       // ROUTING
       // ========================================================
-
       initialRoute: '/',
       routes: {
         // SessionGate decides whether to display the landing,
@@ -271,8 +244,8 @@ class CASLMSApp extends StatelessWidget {
         // Login and registration.
         '/auth': (context) => const AuthScreen(),
 
-        // Existing direct student route.
-        '/student_dashboard': (context) => const StudentMainScreen(),
+        // Legacy URLs must pass the same account/verification gate.
+        '/student_dashboard': (context) => const SessionGate(),
       },
     );
   }

@@ -1,0 +1,40 @@
+{
+  "College of Arts and Sciences (CAS)": [
+    "BSIT",
+    "BSIS",
+    "BSPsych",
+    "BSStat"
+  ],
+  "College of Education (COED)": [
+    "BEEd",
+    "BSEd English",
+    "BSEd Math",
+    "BSEd Science",
+    "BSEd Social Studies",
+    "BPEd",
+    "BECEd"
+  ],
+  "College of Engineering (COENG)": [
+    "BSCE",
+    "BSEE",
+    "BSCpE",
+    "BSECE"
+  ],
+  "College of Nursing and Health Sciences (CONHS)": [
+    "BSN",
+    "BSND",
+    "BSPharm"
+  ],
+  "College of Industrial Technology (CIT)": [
+    "Bachelor of Industrial Technology - Automotive",
+    "Bachelor of Industrial Technology - Culinary",
+    "Bachelor of Industrial Technology - Electrical",
+    "Bachelor of Industrial Technology - Electronics",
+    "Bachelor of Industrial Technology - Architectural Drafting",
+    "Bachelor of Industrial Technology - Mechanical",
+    "Bachelor of Industrial Technology - HVAC & Refrigeration",
+    "Bachelor of Industrial Technology - Beauty Care & Wellness",
+    "Bachelor of Industrial Technology - Apparel & Fashion",
+    "BS in Architecture"
+  ]
+}

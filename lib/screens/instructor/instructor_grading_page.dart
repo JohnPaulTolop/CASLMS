@@ -49,6 +49,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
   String _selectedFilter = 'submitted';
 
   List<Map<String, dynamic>> _submissions = [];
+  List<Map<String, dynamic>> _externalAssessments = [];
 
   // ============================================================
   // INIT
@@ -122,6 +123,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
               .get();
 
       final List<Map<String, dynamic>> loadedSubmissions = [];
+      final List<Map<String, dynamic>> manualAssessments = [];
 
       // ----------------------------------------------------------
       // PROCESS EACH OWNED COURSE
@@ -165,6 +167,15 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
         final Map<String, Map<String, dynamic>> assessmentById = {};
 
         for (final document in assessmentSnapshot.docs) {
+          final item = document.data();
+          if (item['deliveryType'] == 'external_link' &&
+              ['published', 'closed'].contains(item['status'])) {
+            manualAssessments.add({
+              ...item,
+              'assessmentId': document.id,
+              'courseCode': course['code'],
+            });
+          }
           assessmentById[document.id] = {
             ...document.data(),
             'id': document.id,
@@ -283,6 +294,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
 
       setState(() {
         _submissions = loadedSubmissions;
+        _externalAssessments = manualAssessments;
 
         _isLoading = false;
       });
@@ -366,6 +378,42 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
     }
 
     await _loadGradingData();
+  }
+
+  Future<void> _selectManualAssessment() async {
+    if (_externalAssessments.isEmpty) {
+      _showError('Publish an external quiz or assessment first.');
+      return;
+    }
+    final selected = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Manual Grade Input'),
+        content: SizedBox(
+          width: 440,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final assessment in _externalAssessments)
+                ListTile(
+                  title: Text((assessment['title'] ?? 'Assessment').toString()),
+                  subtitle: Text(
+                    '${assessment['courseCode'] ?? ''} • ${assessment['totalPoints']} points',
+                  ),
+                  onTap: () => Navigator.pop(dialog, assessment),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    if (selected != null && mounted) await _openGrading(selected);
   }
 
   // ============================================================
@@ -507,7 +555,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
         centerTitle: true,
 
         title: const Text(
-          'Pending Grading',
+          'Grades & Feedback',
           style: TextStyle(
             color: textDark,
             fontSize: 18,
@@ -516,6 +564,11 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
         ),
 
         actions: [
+          TextButton.icon(
+            onPressed: _isLoading ? null : _selectManualAssessment,
+            icon: const Icon(Icons.edit_note),
+            label: const Text('Manual Grade Input'),
+          ),
           IconButton(
             tooltip: 'Refresh',
 

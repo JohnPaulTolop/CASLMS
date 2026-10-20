@@ -358,6 +358,11 @@ async function submitApplication(
     `${campusId}@caslms.app`
       .toLowerCase();
 
+  const reservedId = await firestore.collection("campusLoginIds").doc(campusId).get();
+  if (reservedId.exists && reservedId.data()?.uid !== decoded.uid) {
+    return response({ error: "This faculty ID is already registered." }, 409);
+  }
+
   if (
     cleanText(decoded.email)
       .toLowerCase() !==

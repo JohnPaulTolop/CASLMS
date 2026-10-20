@@ -22,20 +22,10 @@ class InstructorClassDetailsScreen extends StatefulWidget {
 
   // ============================================================
   // LEGACY PARAMETERS
-  //
-  // Kept so older pages using:
-  //
-  // InstructorClassDetailsScreen(
-  //   title: ...,
-  //   section: ...,
-  // )
-  //
-  // will still compile.
   // ============================================================
 
   final String title;
   final String section;
-
   final int? studentCount;
   final Map<String, dynamic>? course;
 
@@ -63,11 +53,12 @@ class _InstructorClassDetailsScreenState
   // DESIGN SYSTEM
   // ============================================================
 
-  static const Color primaryTeal = Color(0xFF00897B);
-  static const Color background = Color(0xFFF7F9FC);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
-  static const Color borderColor = Color(0xFFE6EAF0);
+  static const Color teal = Color(0xFF00897B);
+  static const Color darkTeal = Color(0xFF00695C);
+  static const Color background = Color(0xFFF5F8FC);
+  static const Color heading = Color(0xFF172B4D);
+  static const Color secondaryText = Color(0xFF6B7C93);
+  static const Color borderColor = Color(0xFFE5ECF3);
 
   static const Color red = Color(0xFFFF4B4B);
   static const Color orange = Color(0xFFFF9418);
@@ -85,26 +76,18 @@ class _InstructorClassDetailsScreenState
   // STATE
   // ============================================================
 
-  int _selectedTab = 1;
-
   bool _isLoading = true;
-
   String? _errorMessage;
 
+  bool _overviewExpanded = false;
+
   Map<String, dynamic>? _course;
-
   List<Map<String, dynamic>> _modules = [];
-
   List<Map<String, dynamic>> _students = [];
-
   List<Map<String, dynamic>> _courseInvitations = [];
-
   final Set<String> _busyInvitationIds = {};
-
   bool _isSendingInvitation = false;
-
   List<Map<String, dynamic>> _assessments = [];
-
   List<Map<String, dynamic>> _assessmentSubmissions = [];
 
   // ============================================================
@@ -114,7 +97,6 @@ class _InstructorClassDetailsScreenState
   @override
   void initState() {
     super.initState();
-
     _loadCourseData();
   }
 
@@ -123,26 +105,16 @@ class _InstructorClassDetailsScreenState
   // ============================================================
 
   Future<String> _resolveCourseId() async {
-    // Preferred source.
     final String directId = widget.courseId.trim();
+    if (directId.isNotEmpty) return directId;
 
-    if (directId.isNotEmpty) {
-      return directId;
-    }
-
-    // Course Map fallback.
     final String mapId =
         (widget.course?['courseId'] ?? widget.course?['id'] ?? '')
             .toString()
             .trim();
+    if (mapId.isNotEmpty) return mapId;
 
-    if (mapId.isNotEmpty) {
-      return mapId;
-    }
-
-    // Compatibility fallback for older screens.
     final String? instructorId = _auth.currentUser?.uid;
-
     if (instructorId == null || instructorId.isEmpty) {
       throw Exception('You must be logged in as an instructor.');
     }
@@ -153,7 +125,6 @@ class _InstructorClassDetailsScreenState
         .get();
 
     final String requestedCode = widget.courseCode.trim().toLowerCase();
-
     final String requestedTitle =
         (widget.courseTitle.trim().isNotEmpty
                 ? widget.courseTitle
@@ -163,21 +134,11 @@ class _InstructorClassDetailsScreenState
 
     for (final document in snapshot.docs) {
       final Map<String, dynamic> data = document.data();
-
       final String code = (data['code'] ?? '').toString().trim().toLowerCase();
+      final String title = (data['title'] ?? '').toString().trim().toLowerCase();
 
-      final String title = (data['title'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
-
-      if (requestedCode.isNotEmpty && code == requestedCode) {
-        return document.id;
-      }
-
-      if (requestedTitle.isNotEmpty && title == requestedTitle) {
-        return document.id;
-      }
+      if (requestedCode.isNotEmpty && code == requestedCode) return document.id;
+      if (requestedTitle.isNotEmpty && title == requestedTitle) return document.id;
     }
 
     throw Exception('The selected course could not be found in Firestore.');
@@ -204,10 +165,6 @@ class _InstructorClassDetailsScreenState
 
       final String courseId = await _resolveCourseId();
 
-      // ========================================================
-      // COURSE
-      // ========================================================
-
       final DocumentSnapshot<Map<String, dynamic>> courseDocument =
           await _firestore.collection('courses').doc(courseId).get();
 
@@ -216,18 +173,11 @@ class _InstructorClassDetailsScreenState
       }
 
       final Map<String, dynamic> courseData = courseDocument.data()!;
-
-      final String ownerId = (courseData['instructorId'] ?? '')
-          .toString()
-          .trim();
+      final String ownerId = (courseData['instructorId'] ?? '').toString().trim();
 
       if (ownerId != instructorId) {
         throw Exception('You can only manage your own courses.');
       }
-
-      // ========================================================
-      // MODULES
-      // ========================================================
 
       final QuerySnapshot<Map<String, dynamic>> moduleSnapshot =
           await _firestore
@@ -236,26 +186,18 @@ class _InstructorClassDetailsScreenState
               .get();
 
       final List<Map<String, dynamic>> modules = moduleSnapshot.docs
-          .map(
-            (document) => {
-              ...document.data(),
-              'id': document.id,
-              'moduleId': document.id,
-            },
-          )
+          .map((document) => {
+                ...document.data(),
+                'id': document.id,
+                'moduleId': document.id,
+              })
           .toList();
 
       modules.sort((a, b) {
         final int aOrder = (a['order'] as num?)?.toInt() ?? 0;
-
         final int bOrder = (b['order'] as num?)?.toInt() ?? 0;
-
         return aOrder.compareTo(bOrder);
       });
-
-      // ========================================================
-      // ENROLLMENTS
-      // ========================================================
 
       final QuerySnapshot<Map<String, dynamic>> enrollmentSnapshot =
           await _firestore
@@ -267,30 +209,20 @@ class _InstructorClassDetailsScreenState
 
       for (final enrollmentDocument in enrollmentSnapshot.docs) {
         final Map<String, dynamic> enrollment = enrollmentDocument.data();
+        final String enrollmentStatus =
+            (enrollment['status'] ?? '').toString().trim().toLowerCase();
 
-        final String enrollmentStatus = (enrollment['status'] ?? '')
-            .toString()
-            .trim()
-            .toLowerCase();
+        if (enrollmentStatus != 'active') continue;
 
-        if (enrollmentStatus != 'active') {
-          continue;
-        }
+        final String studentId =
+            (enrollment['studentId'] ?? '').toString().trim();
 
-        final String studentId = (enrollment['studentId'] ?? '')
-            .toString()
-            .trim();
-
-        if (studentId.isEmpty) {
-          continue;
-        }
+        if (studentId.isEmpty) continue;
 
         Map<String, dynamic>? userData;
-
         try {
           final DocumentSnapshot<Map<String, dynamic>> userDocument =
               await _firestore.collection('users').doc(studentId).get();
-
           userData = userDocument.data();
         } catch (_) {
           userData = null;
@@ -308,24 +240,14 @@ class _InstructorClassDetailsScreenState
         final String aName = (a['name'] ?? a['studentName'] ?? '')
             .toString()
             .toLowerCase();
-
         final String bName = (b['name'] ?? b['studentName'] ?? '')
             .toString()
             .toLowerCase();
-
         return aName.compareTo(bName);
       });
 
-      // ========================================================
-      // COURSE INVITATIONS
-      // ========================================================
-
       final List<Map<String, dynamic>> courseInvitations =
           await _invitationService.getCourseInvitations(courseId: courseId);
-
-      // ========================================================
-      // EXTERNAL ASSESSMENTS
-      // ========================================================
 
       final QuerySnapshot<Map<String, dynamic>> assessmentSnapshot =
           await _firestore
@@ -334,18 +256,12 @@ class _InstructorClassDetailsScreenState
               .get();
 
       final List<Map<String, dynamic>> assessments = assessmentSnapshot.docs
-          .map(
-            (document) => {
-              ...document.data(),
-              'id': document.id,
-              'assessmentId': document.id,
-            },
-          )
+          .map((document) => {
+                ...document.data(),
+                'id': document.id,
+                'assessmentId': document.id,
+              })
           .toList();
-
-      // ========================================================
-      // EXTERNAL ASSESSMENT SUBMISSIONS
-      // ========================================================
 
       final QuerySnapshot<Map<String, dynamic>> submissionSnapshot =
           await _firestore
@@ -355,18 +271,14 @@ class _InstructorClassDetailsScreenState
 
       final List<Map<String, dynamic>> assessmentSubmissions =
           submissionSnapshot.docs
-              .map(
-                (document) => {
-                  ...document.data(),
-                  'id': document.id,
-                  'submissionId': document.id,
-                },
-              )
+              .map((document) => {
+                    ...document.data(),
+                    'id': document.id,
+                    'submissionId': document.id,
+                  })
               .toList();
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _course = {
@@ -374,27 +286,17 @@ class _InstructorClassDetailsScreenState
           'id': courseDocument.id,
           'courseId': courseDocument.id,
         };
-
         _modules = modules;
-
         _students = students;
-
         _courseInvitations = courseInvitations;
-
         _assessments = assessments;
-
         _assessmentSubmissions = assessmentSubmissions;
-
         _isLoading = false;
       });
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
-
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     }
@@ -404,64 +306,44 @@ class _InstructorClassDetailsScreenState
   // DYNAMIC VALUES
   // ============================================================
 
-  String get _courseId {
-    return (_course?['courseId'] ?? _course?['id'] ?? widget.courseId)
-        .toString()
-        .trim();
-  }
+  String get _courseId =>
+      (_course?['courseId'] ?? _course?['id'] ?? widget.courseId)
+          .toString()
+          .trim();
 
-  String get _courseCode {
-    return (_course?['code'] ?? widget.courseCode).toString().trim();
-  }
+  String get _courseCode =>
+      (_course?['code'] ?? widget.courseCode).toString().trim();
 
-  String get _courseTitle {
-    return (_course?['title'] ??
-            (widget.courseTitle.isNotEmpty ? widget.courseTitle : widget.title))
-        .toString()
-        .trim();
-  }
+  String get _courseTitle => (_course?['title'] ??
+          (widget.courseTitle.isNotEmpty ? widget.courseTitle : widget.title))
+      .toString()
+      .trim();
 
-  String get _classCode {
-    return (_course?['classCode'] ??
-            (widget.classCode.isNotEmpty ? widget.classCode : widget.section))
-        .toString()
-        .trim();
-  }
+  String get _classCode => (_course?['classCode'] ??
+          (widget.classCode.isNotEmpty ? widget.classCode : widget.section))
+      .toString()
+      .trim();
 
-  String get _semester {
-    return (_course?['semester'] ?? '').toString().trim();
-  }
+  String get _semester => (_course?['semester'] ?? '').toString().trim();
 
-  String get _academicYear {
-    return (_course?['academicYear'] ?? '').toString().trim();
-  }
+  String get _academicYear => (_course?['academicYear'] ?? '').toString().trim();
 
-  String get _courseDescription {
-    return (_course?['description'] ?? '').toString().trim();
-  }
+  String get _courseDescription =>
+      (_course?['description'] ?? '').toString().trim();
+
+  String get _instructorName =>
+      (_course?['instructorName'] ?? widget.instructorName).toString().trim();
+
+  String get _courseStatus =>
+      (_course?['status'] ?? '').toString().trim().toLowerCase();
 
   // ============================================================
-  // FIX: DYNAMIC INSTRUCTOR NAME
-  // ============================================================
-
-  String get _instructorName {
-    return (_course?['instructorName'] ?? widget.instructorName)
-        .toString()
-        .trim();
-  }
-
-  String get _courseStatus {
-    return (_course?['status'] ?? '').toString().trim().toLowerCase();
-  }
-
-  // ============================================================
-  // CREATE MODULE
+  // COURSE ACTIONS
   // ============================================================
 
   Future<void> _createModule() async {
     if (_courseId.isEmpty) {
       _showError('Course information is missing.');
-
       return;
     }
 
@@ -476,27 +358,15 @@ class _InstructorClassDetailsScreenState
       ),
     );
 
-    if (!mounted) {
-      return;
-    }
-
-    await _loadCourseData();
+    if (mounted) await _loadCourseData();
   }
 
-  // ============================================================
-  // OPEN MODULE MANAGEMENT
-  // ============================================================
-
   Future<void> _openModule(Map<String, dynamic> module) async {
-    final String moduleId = (module['moduleId'] ?? module['id'] ?? '')
-        .toString()
-        .trim();
+    final String moduleId =
+        (module['moduleId'] ?? module['id'] ?? '').toString().trim();
 
     if (moduleId.isEmpty || _courseId.isEmpty) {
-      _showError(
-        'Unable to open this module because its ID information is missing.',
-      );
-
+      _showError('Unable to open this module because its ID information is missing.');
       return;
     }
 
@@ -513,51 +383,34 @@ class _InstructorClassDetailsScreenState
       ),
     );
 
-    if (!mounted) {
-      return;
-    }
-
-    await _loadCourseData();
+    if (mounted) await _loadCourseData();
   }
 
-  // ============================================================
-  // OPEN STUDENT CHAT
-  // ============================================================
-
   Future<void> _openStudentChat(Map<String, dynamic> student) async {
-    final String studentId = (student['studentId'] ?? student['uid'] ?? '')
-        .toString()
-        .trim();
-
-    final String studentName = (student['name'] ?? student['studentName'] ?? '')
-        .toString()
-        .trim();
-
+    final String studentId =
+        (student['studentId'] ?? student['uid'] ?? '').toString().trim();
+    final String studentName =
+        (student['name'] ?? student['studentName'] ?? '').toString().trim();
     final String studentEmail = (student['email'] ?? '').toString().trim();
-
     final String? instructorId = _auth.currentUser?.uid;
 
     if (studentId.isEmpty) {
       _showError('Student ID is missing.');
-
       return;
     }
 
     if (instructorId == null || instructorId.isEmpty) {
       _showError('Instructor account information is missing.');
-
       return;
     }
 
     if (_courseId.isEmpty) {
       _showError('Course information is missing.');
-
       return;
     }
 
     if (_instructorName.isEmpty) {
       _showError('Instructor name is missing.');
-
       return;
     }
 
@@ -565,23 +418,16 @@ class _InstructorClassDetailsScreenState
       context,
       MaterialPageRoute(
         builder: (context) => InstructorChatScreen(
-          // Required by current dynamic chat.
           courseId: _courseId,
           instructorId: instructorId,
           instructorName: _instructorName,
           studentId: studentId,
-
           studentName: studentName.isEmpty ? studentEmail : studentName,
-
           studentEmail: studentEmail,
         ),
       ),
     );
   }
-
-  // ============================================================
-  // VERIFIED COURSE INVITATIONS
-  // ============================================================
 
   Future<void> _inviteStudent() async {
     if (_isSendingInvitation || _courseId.isEmpty) return;
@@ -634,9 +480,7 @@ class _InstructorClassDetailsScreenState
 
   Future<void> _cancelInvitation(Map<String, dynamic> invitation) async {
     final String invitationId =
-        (invitation['invitationId'] ?? invitation['id'] ?? '')
-            .toString()
-            .trim();
+        (invitation['invitationId'] ?? invitation['id'] ?? '').toString().trim();
     if (invitationId.isEmpty || _busyInvitationIds.contains(invitationId)) {
       return;
     }
@@ -681,17 +525,9 @@ class _InstructorClassDetailsScreenState
     }
   }
 
-  // ============================================================
-  // ERROR MESSAGE
-  // ============================================================
-
   void _showError(String message) {
-    if (!mounted) {
-      return;
-    }
-
+    if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -702,77 +538,557 @@ class _InstructorClassDetailsScreenState
   }
 
   // ============================================================
+  // SHARED DESIGN COMPONENTS
+  // ============================================================
+
+  Widget _panel({
+    required Widget child,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(18),
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: heading.withValues(alpha: 0.035),
+            blurRadius: 16,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  Widget _sectionHeading(
+    String title,
+    String subtitle, {
+    Widget? trailing,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: heading,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: secondaryText,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (trailing != null) ...[
+          const SizedBox(width: 12),
+          trailing,
+        ],
+      ],
+    );
+  }
+
+  Widget _pill(
+    String label, {
+    Color color = teal,
+    Color? backgroundColor,
+    IconData? icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: backgroundColor ?? color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 5),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _compactStat(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F8FC),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 19),
+          const SizedBox(height: 7),
+          Text(
+            value,
+            style: const TextStyle(
+              color: heading,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: secondaryText,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _overviewChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE7F6F3),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: darkTeal, size: 15),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: const TextStyle(
+              color: darkTeal,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _leadingAvatar(String name, IconData fallbackIcon, {Color color = teal}) {
+    final displayName = name.trim();
+
+    if (displayName.isEmpty) {
+      return Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Icon(fallbackIcon, color: color, size: 22),
+      );
+    }
+
+    final initials = displayName
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .take(2)
+        .map((part) => part[0].toUpperCase())
+        .join();
+
+    return Container(
+      width: 44,
+      height: 44,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: const BorderRadius.all(Radius.circular(14)),
+      ),
+      child: Text(
+        initials,
+        style: TextStyle(
+          color: color,
+          fontSize: 14,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+  }
+
+  Widget _contentCard({
+    required Widget leading,
+    required String title,
+    required String subtitle,
+    Widget? trailing,
+    VoidCallback? onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(13),
+            child: Row(
+              children: [
+                leading,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: heading,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        subtitle,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: secondaryText,
+                          fontSize: 11,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (trailing != null) ...[
+                  const SizedBox(width: 8),
+                  trailing,
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyState({
+    required IconData icon,
+    required String title,
+    required String message,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 38, horizontal: 20),
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE7F6F3),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(icon, size: 30, color: teal),
+          ),
+          const SizedBox(height: 15),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: heading,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: secondaryText,
+              fontSize: 12,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // COLLAPSIBLE OVERVIEW
+  // ============================================================
+
+  Widget _buildCollapsibleOverview() {
+    final bool isActive = _courseStatus == 'active';
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: heading.withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            borderRadius: BorderRadius.circular(20),
+            onTap: () {
+              setState(() {
+                _overviewExpanded = !_overviewExpanded;
+              });
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(15),
+              child: Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF00796B), Color(0xFF26A69A)],
+                      ),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.co_present_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _courseTitle.isEmpty ? 'Class workspace' : _courseTitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: heading,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          '${_students.length} students'
+                          '${_courseCode.isNotEmpty ? ' • $_courseCode' : ''}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: secondaryText,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? const Color(0xFFE3F6EF)
+                          : const Color(0xFFFFF1DB),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Text(
+                      _courseStatus.isEmpty ? 'Unknown' : _courseStatus.toUpperCase(),
+                      style: TextStyle(
+                        color: isActive
+                            ? const Color(0xFF13805D)
+                            : const Color(0xFF9A6B13),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _overviewExpanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 250),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: secondaryText,
+                      size: 23,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 250),
+            sizeCurve: Curves.easeInOut,
+            crossFadeState: _overviewExpanded
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
+            firstChild: Padding(
+              padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Divider(color: borderColor, height: 1),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      if (_classCode.isNotEmpty)
+                        _overviewChip(Icons.key_rounded, _classCode),
+                      if (_semester.isNotEmpty)
+                        _overviewChip(Icons.calendar_today_outlined, _semester),
+                      if (_academicYear.isNotEmpty)
+                        _overviewChip(Icons.school_outlined, _academicYear),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _compactStat(
+                          'Students',
+                          '${_students.length}',
+                          Icons.people_alt_outlined,
+                          teal,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _compactStat(
+                          'Modules',
+                          '${_modules.length}',
+                          Icons.menu_book_outlined,
+                          teal,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _compactStat(
+                          'Assessments',
+                          '${_assessments.length}',
+                          Icons.assignment_outlined,
+                          teal,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_courseDescription.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      _courseDescription,
+                      style: const TextStyle(
+                        color: secondaryText,
+                        fontSize: 11.5,
+                        height: 1.45,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            secondChild: const SizedBox(
+              width: double.infinity,
+              height: 0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
   // BUILD
   // ============================================================
 
   @override
   Widget build(BuildContext context) {
-    return instructorScaffold(
-      context: context,
-      backgroundColor: background,
-
-      appBar: AppBar(
+    return DefaultTabController(
+      length: 4,
+      child: instructorScaffold(
+        context: context,
         backgroundColor: background,
-        elevation: 0,
-        centerTitle: true,
-
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 20,
-            color: textDark,
+        appBar: AppBar(
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          leading: IconButton(
+            tooltip: 'Back',
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(
+              Icons.arrow_back_rounded,
+              color: heading,
+            ),
           ),
-          onPressed: () {
-            Navigator.pop(context);
-          },
-        ),
-
-        title: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              _courseTitle.isEmpty ? 'Course' : _courseTitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: textDark,
-              ),
+          title: const Text(
+            'Course Details',
+            style: TextStyle(
+              color: heading,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
             ),
-
-            const SizedBox(height: 2),
-
-            Text(
-              '${_students.length} enrolled',
-              style: const TextStyle(
-                fontSize: 11,
-                color: textGrey,
-                fontWeight: FontWeight.w600,
-              ),
+          ),
+          actions: [
+            IconButton(
+              tooltip: 'Refresh course',
+              onPressed: _loadCourseData,
+              icon: const Icon(Icons.refresh_rounded, color: teal),
             ),
+            const SizedBox(width: 6),
           ],
-        ),
-
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            onPressed: _loadCourseData,
-            icon: const Icon(Icons.refresh_rounded, color: textDark),
-          ),
-
-          const SizedBox(width: 6),
-        ],
-      ),
-
-      body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: _buildBody(),
+          bottom: const PreferredSize(
+            preferredSize: Size.fromHeight(1),
+            child: Divider(height: 1, color: borderColor),
           ),
         ),
+        body: _buildBody(),
       ),
     );
   }
@@ -783,369 +1099,175 @@ class _InstructorClassDetailsScreenState
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: primaryTeal));
+      return const Center(child: CircularProgressIndicator(color: teal));
     }
 
     if (_errorMessage != null) {
       return _buildErrorState();
     }
 
-    return Column(
-      children: [
-        // ======================================================
-        // COURSE HEADER
-        // ======================================================
-
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 4),
-          child: _buildCourseHeader(),
-        ),
-
-        // ======================================================
-        // TABS
-        // ======================================================
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          padding: const EdgeInsets.all(4),
-          constraints: const BoxConstraints(maxWidth: 650),
-          decoration: BoxDecoration(
-            color: const Color(0xFFEEEFF3),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
+    return SafeArea(
+      top: false,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1200),
+          child: Column(
             children: [
-              Expanded(child: _buildSegmentTab('Roster', 0)),
-              Expanded(child: _buildSegmentTab('Modules', 1)),
-              Expanded(child: _buildSegmentTab('Grades', 2)),
-              Expanded(child: _buildSegmentTab('Settings', 3)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: _buildCollapsibleOverview(),
+              ),
+              Container(
+                margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor),
+                ),
+                child: const TabBar(
+                  isScrollable: false,
+                  dividerColor: Colors.transparent,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  indicator: BoxDecoration(
+                    color: Color(0xFFE4F5F1),
+                    borderRadius: BorderRadius.all(Radius.circular(10)),
+                  ),
+                  labelPadding: EdgeInsets.symmetric(horizontal: 4),
+                  labelColor: darkTeal,
+                  unselectedLabelColor: secondaryText,
+                  labelStyle: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  unselectedLabelStyle: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  tabs: [
+                    Tab(height: 36, text: 'Roster'),
+                    Tab(height: 36, text: 'Modules'),
+                    Tab(height: 36, text: 'Grades'),
+                    Tab(height: 36, text: 'Settings'),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _buildRosterTab(),
+                    _buildModulesTab(),
+                    _buildGradesTab(),
+                    _buildSettingsTab(),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-
-        // ======================================================
-        // SELECTED TAB
-        // ======================================================
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _loadCourseData,
-            color: primaryTeal,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(22, 8, 22, 40),
-              children: [_buildSelectedTabContent()],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ============================================================
-  // COURSE HEADER
-  // ============================================================
-
-  Widget _buildCourseHeader() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: primaryTeal,
-        borderRadius: BorderRadius.circular(22),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(17),
-            ),
-            child: const Icon(
-              Icons.school_rounded,
-              color: Colors.white,
-              size: 29,
-            ),
-          ),
-
-          const SizedBox(width: 15),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (_courseCode.isNotEmpty)
-                  Text(
-                    _courseCode,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-
-                if (_courseCode.isNotEmpty) const SizedBox(height: 4),
-
-                Text(
-                  _courseTitle,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-
-                if (_courseDescription.isNotEmpty) ...[
-                  const SizedBox(height: 5),
-
-                  Text(
-                    _courseDescription,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 10),
-
-                Wrap(
-                  spacing: 7,
-                  runSpacing: 7,
-                  children: [
-                    if (_classCode.isNotEmpty)
-                      _buildHeaderChip(Icons.key_rounded, _classCode),
-
-                    if (_semester.isNotEmpty)
-                      _buildHeaderChip(
-                        Icons.calendar_today_outlined,
-                        _semester,
-                      ),
-
-                    if (_academicYear.isNotEmpty)
-                      _buildHeaderChip(Icons.school_outlined, _academicYear),
-
-                    _buildHeaderChip(
-                      Icons.people_alt_outlined,
-                      '${_students.length} students',
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeaderChip(IconData icon, String text) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(9),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white, size: 12),
-
-          const SizedBox(width: 5),
-
-          Text(
-            text,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 9.5,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
       ),
     );
   }
 
   // ============================================================
-  // TABS
+  // TAB CONTENTS
   // ============================================================
 
-  Widget _buildSegmentTab(String title, int index) {
-    final bool selected = _selectedTab == index;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedTab = index;
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : [],
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          title,
-          style: TextStyle(
-            color: selected ? primaryTeal : textGrey,
-            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-            fontSize: 12,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSelectedTabContent() {
-    switch (_selectedTab) {
-      case 0:
-        return _buildRosterContent();
-
-      case 1:
-        return _buildModulesContent();
-
-      case 2:
-        return _buildGradesContent();
-
-      case 3:
-        return _buildSettingsContent();
-
-      default:
-        return _buildModulesContent();
-    }
-  }
-
-  // ============================================================
-  // ROSTER
-  // ============================================================
-
-  Widget _buildRosterContent() {
+  Widget _buildRosterTab() {
     final List<Map<String, dynamic>> pendingInvitations = _courseInvitations
-        .where(
-          (invitation) =>
-              (invitation['status'] ?? '').toString().toLowerCase() ==
-              'pending',
-        )
+        .where((invitation) =>
+            (invitation['status'] ?? '').toString().toLowerCase() == 'pending')
         .toList();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
       children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Student Roster',
-                    style: TextStyle(
-                      color: textDark,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  SizedBox(height: 3),
-                  Text(
-                    'Students currently enrolled in this course.',
-                    style: TextStyle(color: textGrey, fontSize: 11.5),
-                  ),
-                ],
-              ),
-            ),
-
-            ElevatedButton.icon(
-              onPressed: _isSendingInvitation ? null : _inviteStudent,
-              icon: _isSendingInvitation
-                  ? const SizedBox(
-                      width: 15,
-                      height: 15,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Icon(
-                      Icons.person_add_alt_1_rounded,
-                      color: Colors.white,
-                      size: 17,
-                    ),
-              label: Text(
-                _isSendingInvitation ? 'Sending...' : 'Invite',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryTeal,
-                elevation: 0,
-              ),
-            ),
-
-            const SizedBox(width: 9),
-
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: primaryTeal.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${_students.length}',
-                style: const TextStyle(
-                  color: primaryTeal,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-
         if (pendingInvitations.isNotEmpty) ...[
           _buildPendingInvitations(pendingInvitations),
-          const SizedBox(height: 22),
+          const SizedBox(height: 18),
         ],
+        _panel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeading(
+                'Student Roster',
+                'Students currently enrolled in this course.',
+                trailing: FilledButton.icon(
+                  onPressed: _isSendingInvitation ? null : _inviteStudent,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: teal,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 13,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: _isSendingInvitation
+                      ? const SizedBox(
+                          width: 15,
+                          height: 15,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.person_add_alt_1_rounded, size: 17),
+                  label: Text(_isSendingInvitation ? 'Sending...' : 'Invite'),
+                ),
+              ),
+              const SizedBox(height: 18),
+              if (_students.isEmpty)
+                _emptyState(
+                  icon: Icons.group_outlined,
+                  title: 'No students enrolled',
+                  message:
+                      'Invite students using their registered Campus ID. They will appear here after accepting.',
+                )
+              else
+                ..._students.map((student) {
+                  final String name =
+                      (student['name'] ?? student['studentName'] ?? '').toString().trim();
+                  final String email = (student['email'] ?? '').toString().trim();
+                  final String universityId =
+                      (student['universityId'] ?? '').toString().trim();
+                  final String displayName = name.isNotEmpty ? name : universityId;
 
-        if (_students.isEmpty)
-          _buildEmptyState(
-            icon: Icons.group_outlined,
-            title: 'No students enrolled',
-            message: 'Invite students using their registered Campus ID. They will appear here after accepting.',
-          )
-        else
-          ..._students.map(_buildStudentCard),
+                  return _contentCard(
+                    leading: _leadingAvatar(displayName, Icons.person_outline),
+                    title: displayName.isNotEmpty ? displayName : email,
+                    subtitle: [
+                      if (email.isNotEmpty) email,
+                      if (universityId.isNotEmpty) 'Campus ID: $universityId'
+                    ].join('\n'),
+                    trailing: IconButton(
+                      tooltip: 'Message student',
+                      onPressed: () => _openStudentChat(student),
+                      icon: const Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        color: teal,
+                        size: 20,
+                      ),
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
       ],
     );
   }
 
   Widget _buildPendingInvitations(List<Map<String, dynamic>> invitations) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: orange.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(17),
+        borderRadius: BorderRadius.circular(15),
         border: Border.all(color: orange.withValues(alpha: 0.25)),
       ),
       child: Column(
@@ -1159,7 +1281,7 @@ class _InstructorClassDetailsScreenState
                 '${invitations.length} pending '
                 '${invitations.length == 1 ? 'invitation' : 'invitations'}',
                 style: const TextStyle(
-                  color: textDark,
+                  color: heading,
                   fontWeight: FontWeight.w800,
                   fontSize: 13,
                 ),
@@ -1167,399 +1289,113 @@ class _InstructorClassDetailsScreenState
             ],
           ),
           const SizedBox(height: 10),
-          ...invitations.map(_buildPendingInvitationRow),
-        ],
-      ),
-    );
-  }
+          ...invitations.map((invitation) {
+            final String invitationId =
+                (invitation['invitationId'] ?? invitation['id'] ?? '').toString().trim();
+            final String studentName =
+                (invitation['studentName'] ?? 'Student').toString().trim();
+            final String campusId =
+                (invitation['studentCampusId'] ?? '').toString().trim();
+            final bool busy = _busyInvitationIds.contains(invitationId);
 
-  Widget _buildPendingInvitationRow(Map<String, dynamic> invitation) {
-    final String invitationId =
-        (invitation['invitationId'] ?? invitation['id'] ?? '')
-            .toString()
-            .trim();
-    final String studentName = (invitation['studentName'] ?? 'Student')
-        .toString()
-        .trim();
-    final String campusId = (invitation['studentCampusId'] ?? '')
-        .toString()
-        .trim();
-    final bool busy = _busyInvitationIds.contains(invitationId);
-
-    return Container(
-      margin: const EdgeInsets.only(top: 7),
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            radius: 16,
-            backgroundColor: Color(0xFFFFF2DF),
-            child: Icon(Icons.schedule_rounded, color: orange, size: 17),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  studentName.isEmpty ? campusId : studentName,
-                  style: const TextStyle(
-                    color: textDark,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
-                  ),
-                ),
-                if (campusId.isNotEmpty)
-                  Text(
-                    'Campus ID: $campusId',
-                    style: const TextStyle(color: textGrey, fontSize: 10),
-                  ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: busy ? null : () => _cancelInvitation(invitation),
-            child: Text(busy ? 'Cancelling...' : 'Cancel'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStudentCard(Map<String, dynamic> student) {
-    final String name = (student['name'] ?? student['studentName'] ?? '')
-        .toString()
-        .trim();
-
-    final String email = (student['email'] ?? '').toString().trim();
-
-    final String universityId = (student['universityId'] ?? '')
-        .toString()
-        .trim();
-
-    final String displayName = name.isNotEmpty ? name : universityId;
-
-    final String initial = displayName.isNotEmpty
-        ? displayName.substring(0, 1).toUpperCase()
-        : '?';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 11),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 21,
-            backgroundColor: primaryTeal.withValues(alpha: 0.10),
-            child: Text(
-              initial,
-              style: const TextStyle(
-                color: primaryTeal,
-                fontWeight: FontWeight.w800,
+            return _contentCard(
+              leading: const CircleAvatar(
+                radius: 16,
+                backgroundColor: Color(0xFFFFF2DF),
+                child: Icon(Icons.schedule_rounded, color: orange, size: 17),
               ),
-            ),
-          ),
-
-          const SizedBox(width: 13),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  displayName.isNotEmpty ? displayName : email,
-                  style: const TextStyle(
-                    color: textDark,
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-
-                if (email.isNotEmpty) ...[
-                  const SizedBox(height: 3),
-
-                  Text(
-                    email,
-                    style: const TextStyle(color: textGrey, fontSize: 10.5),
-                  ),
-                ],
-
-                if (universityId.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-
-                  Text(
-                    universityId,
-                    style: const TextStyle(color: textGrey, fontSize: 10),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          IconButton(
-            tooltip: 'Message student',
-            onPressed: () {
-              _openStudentChat(student);
-            },
-            icon: const Icon(
-              Icons.chat_bubble_outline_rounded,
-              color: primaryTeal,
-              size: 20,
-            ),
-          ),
+              title: studentName.isEmpty ? campusId : studentName,
+              subtitle: campusId.isNotEmpty ? 'Campus ID: $campusId' : 'Pending response',
+              trailing: TextButton(
+                onPressed: busy ? null : () => _cancelInvitation(invitation),
+                child: Text(busy ? 'Cancelling...' : 'Cancel', style: const TextStyle(color: red)),
+              ),
+            );
+          }),
         ],
       ),
     );
   }
 
-  // ============================================================
-  // MODULES
-  // ============================================================
-
-  Widget _buildModulesContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildModulesTab() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
       children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Course Modules',
-                    style: TextStyle(
-                      color: textDark,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
+        _panel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeading(
+                'Course Modules',
+                'Open a module to manage its assessments.',
+                trailing: FilledButton.icon(
+                  onPressed: _createModule,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: teal,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 13,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  SizedBox(height: 3),
-                  Text(
-                    'Open a module to manage its assessments.',
-                    style: TextStyle(color: textGrey, fontSize: 11.5),
-                  ),
-                ],
+                  icon: const Icon(Icons.add_rounded, size: 18),
+                  label: const Text('Add Module'),
+                ),
               ),
-            ),
+              const SizedBox(height: 18),
+              if (_modules.isEmpty)
+                _emptyState(
+                  icon: Icons.menu_book_outlined,
+                  title: 'No modules yet',
+                  message: 'Create the first module for this course.',
+                )
+              else
+                ..._modules.map((module) {
+                  final String title = (module['title'] ?? '').toString().trim();
+                  final String description =
+                      (module['description'] ?? '').toString().trim();
+                  final String status =
+                      (module['status'] ?? 'draft').toString().trim().toLowerCase();
+                  final int order = (module['order'] as num?)?.toInt() ?? 0;
+                  final String moduleId =
+                      (module['moduleId'] ?? module['id'] ?? '').toString();
 
-            const SizedBox(width: 10),
+                  final int assessmentCount = _assessments.where((assessment) {
+                    return (assessment['moduleId'] ?? '').toString() == moduleId;
+                  }).length;
 
-            ElevatedButton.icon(
-              onPressed: _createModule,
-              icon: const Icon(
-                Icons.add_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
-              label: const Text(
-                'Add Module',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryTeal,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(11),
-                ),
-              ),
-            ),
-          ],
+                  final bool published = status == 'published';
+                  final Color statusColor = published ? green : orange;
+
+                  return _contentCard(
+                    leading: _leadingAvatar('', Icons.menu_book_rounded),
+                    title: order > 0
+                        ? 'MODULE $order: ${title.isEmpty ? 'Untitled' : title}'
+                        : (title.isEmpty ? 'Untitled' : title),
+                    subtitle: [
+                      if (description.isNotEmpty) description,
+                      'Assessments: $assessmentCount • Status: ${status.toUpperCase()}'
+                    ].join('\n'),
+                    trailing: const Icon(
+                      Icons.chevron_right_rounded,
+                      color: secondaryText,
+                    ),
+                    onTap: () => _openModule(module),
+                  );
+                }),
+            ],
+          ),
         ),
-
-        const SizedBox(height: 16),
-
-        if (_modules.isEmpty)
-          _buildEmptyState(
-            icon: Icons.menu_book_outlined,
-            title: 'No modules yet',
-            message: 'Create the first module for this course.',
-          )
-        else
-          ..._modules.map(_buildModuleCard),
       ],
     );
   }
 
-  Widget _buildModuleCard(Map<String, dynamic> module) {
-    final String title = (module['title'] ?? '').toString().trim();
-
-    final String description = (module['description'] ?? '').toString().trim();
-
-    final String status = (module['status'] ?? 'draft')
-        .toString()
-        .trim()
-        .toLowerCase();
-
-    final int order = (module['order'] as num?)?.toInt() ?? 0;
-
-    final String moduleId = (module['moduleId'] ?? module['id'] ?? '')
-        .toString();
-
-    final int assessmentCount = _assessments.where((assessment) {
-      return (assessment['moduleId'] ?? '').toString() == moduleId;
-    }).length;
-
-    final bool published = status == 'published';
-
-    final Color statusColor = published ? green : orange;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: () {
-            _openModule(module);
-          },
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: borderColor),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: primaryTeal.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(13),
-                  ),
-                  child: const Icon(
-                    Icons.menu_book_rounded,
-                    color: primaryTeal,
-                    size: 23,
-                  ),
-                ),
-
-                const SizedBox(width: 13),
-
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (order > 0)
-                        Text(
-                          'MODULE $order',
-                          style: const TextStyle(
-                            color: primaryTeal,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-
-                      if (order > 0) const SizedBox(height: 3),
-
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          color: textDark,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-
-                      if (description.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-
-                        Text(
-                          description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: textGrey,
-                            fontSize: 10.5,
-                            height: 1.35,
-                          ),
-                        ),
-                      ],
-
-                      const SizedBox(height: 7),
-
-                      Wrap(
-                        spacing: 7,
-                        runSpacing: 5,
-                        children: [
-                          _buildSmallBadge(
-                            text:
-                                '$assessmentCount assessment${assessmentCount == 1 ? '' : 's'}',
-                            color: primaryTeal,
-                          ),
-                          _buildSmallBadge(
-                            text: status.toUpperCase(),
-                            color: statusColor,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 10),
-
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: Color(0xFF9BA4B4),
-                  size: 23,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSmallBadge({required String text, required Color color}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.09),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: color,
-          fontSize: 8.5,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // GRADES
-  // ============================================================
-
-  Widget _buildGradesContent() {
+  Widget _buildGradesTab() {
     final int submitted = _assessmentSubmissions.where((submission) {
-      final String status = (submission['status'] ?? '')
-          .toString()
-          .toLowerCase();
-
+      final String status = (submission['status'] ?? '').toString().toLowerCase();
       return status == 'submitted';
     }).length;
 
@@ -1568,249 +1404,152 @@ class _InstructorClassDetailsScreenState
     }).length;
 
     final int published = _assessments.where((assessment) {
-      return (assessment['status'] ?? '').toString().toLowerCase() ==
-          'published';
+      return (assessment['status'] ?? '').toString().toLowerCase() == 'published';
     }).length;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
       children: [
-        const Text(
-          'Assessment Grading',
-          style: TextStyle(
-            color: textDark,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-
-        const SizedBox(height: 4),
-
-        const Text(
-          'External assessment submissions and grades.',
-          style: TextStyle(color: textGrey, fontSize: 11.5),
-        ),
-
-        const SizedBox(height: 18),
-
         Row(
           children: [
             Expanded(
-              child: _buildStatCard(
-                title: 'Published',
-                value: '$published',
-                icon: Icons.assignment_turned_in_outlined,
-                color: primaryTeal,
+              child: _compactStat(
+                'Published',
+                '$published',
+                Icons.assignment_turned_in_outlined,
+                teal,
               ),
             ),
-
-            const SizedBox(width: 10),
-
+            const SizedBox(width: 8),
             Expanded(
-              child: _buildStatCard(
-                title: 'To Grade',
-                value: '$submitted',
-                icon: Icons.pending_actions_rounded,
-                color: orange,
+              child: _compactStat(
+                'To Grade',
+                '$submitted',
+                Icons.pending_actions_rounded,
+                orange,
               ),
             ),
-
-            const SizedBox(width: 10),
-
+            const SizedBox(width: 8),
             Expanded(
-              child: _buildStatCard(
-                title: 'Graded',
-                value: '$graded',
-                icon: Icons.verified_outlined,
-                color: green,
+              child: _compactStat(
+                'Graded',
+                '$graded',
+                Icons.verified_outlined,
+                green,
               ),
             ),
           ],
         ),
+        const SizedBox(height: 18),
+        _panel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _sectionHeading(
+                'Assessment Grading',
+                'External assessment submissions and grades.',
+              ),
+              const SizedBox(height: 14),
+              if (_assessmentSubmissions.isEmpty)
+                _emptyState(
+                  icon: Icons.grade_outlined,
+                  title: 'No assessment submissions yet',
+                  message:
+                      'Student submissions will appear here after the student external-assessment workflow is connected.',
+                )
+              else
+                ..._assessmentSubmissions.map((submission) {
+                  final String studentName =
+                      (submission['studentName'] ?? '').toString();
+                  final String status =
+                      (submission['status'] ?? 'submitted').toString().toLowerCase();
+                  final dynamic score = submission['score'];
+                  final bool isGraded = status == 'graded';
 
-        const SizedBox(height: 22),
-
-        if (_assessmentSubmissions.isEmpty)
-          _buildEmptyState(
-            icon: Icons.grade_outlined,
-            title: 'No assessment submissions yet',
-            message: 'Student submissions will appear here after the student external-assessment workflow is connected.',
-          )
-        else
-          ..._assessmentSubmissions.map(_buildSubmissionCard),
+                  return _contentCard(
+                    leading: _leadingAvatar(
+                        studentName,
+                        isGraded
+                            ? Icons.check_circle_outline_rounded
+                            : Icons.pending_actions_rounded,
+                        color: isGraded ? green : orange),
+                    title: studentName,
+                    subtitle: 'Status: ${status.toUpperCase()}',
+                    trailing: Text(
+                      score is num ? '$score' : status.toUpperCase(),
+                      style: TextStyle(
+                        color: isGraded ? green : orange,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 22),
-
-          const SizedBox(height: 8),
-
-          Text(
-            value,
-            style: const TextStyle(
-              color: textDark,
-              fontSize: 19,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-
-          const SizedBox(height: 2),
-
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: textGrey, fontSize: 9.5),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSubmissionCard(Map<String, dynamic> submission) {
-    final String studentName = (submission['studentName'] ?? '').toString();
-
-    final String status = (submission['status'] ?? 'submitted')
-        .toString()
-        .toLowerCase();
-
-    final dynamic score = submission['score'];
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            status == 'graded'
-                ? Icons.check_circle_outline_rounded
-                : Icons.pending_actions_rounded,
-            color: status == 'graded' ? green : orange,
-          ),
-
-          const SizedBox(width: 12),
-
-          Expanded(
-            child: Text(
-              studentName,
-              style: const TextStyle(
-                color: textDark,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-
-          Text(
-            score is num ? '$score' : status.toUpperCase(),
-            style: TextStyle(
-              color: status == 'graded' ? green : orange,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // SETTINGS
-  // ============================================================
-
-  Widget _buildSettingsContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildSettingsTab() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
       children: [
-        const Text(
-          'Course Information',
-          style: TextStyle(
-            color: textDark,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-
-        const SizedBox(height: 4),
-
-        const Text(
-          'Current information stored in Firestore.',
-          style: TextStyle(color: textGrey, fontSize: 11.5),
-        ),
-
-        const SizedBox(height: 16),
-
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: borderColor),
-          ),
+        _panel(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSettingTile(
-                icon: Icons.tag_rounded,
-                title: 'Course Code',
-                value: _courseCode,
+              _sectionHeading(
+                'Course Information',
+                'Current information stored in Firestore.',
               ),
-
-              const Divider(height: 1, color: borderColor),
-
-              _buildSettingTile(
-                icon: Icons.key_rounded,
-                title: 'Class Code',
-                value: _classCode,
-              ),
-
-              const Divider(height: 1, color: borderColor),
-
-              _buildSettingTile(
-                icon: Icons.person_outline_rounded,
-                title: 'Instructor',
-                value: _instructorName,
-              ),
-
-              const Divider(height: 1, color: borderColor),
-
-              _buildSettingTile(
-                icon: Icons.calendar_today_outlined,
-                title: 'Semester',
-                value: _semester,
-              ),
-
-              const Divider(height: 1, color: borderColor),
-
-              _buildSettingTile(
-                icon: Icons.school_outlined,
-                title: 'Academic Year',
-                value: _academicYear,
-              ),
-
-              const Divider(height: 1, color: borderColor),
-
-              _buildSettingTile(
-                icon: Icons.visibility_outlined,
-                title: 'Status',
-                value: _courseStatus,
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Column(
+                  children: [
+                    _buildSettingTile(
+                      icon: Icons.tag_rounded,
+                      title: 'Course Code',
+                      value: _courseCode,
+                    ),
+                    const Divider(height: 1, color: borderColor),
+                    _buildSettingTile(
+                      icon: Icons.key_rounded,
+                      title: 'Class Code',
+                      value: _classCode,
+                    ),
+                    const Divider(height: 1, color: borderColor),
+                    _buildSettingTile(
+                      icon: Icons.person_outline_rounded,
+                      title: 'Instructor',
+                      value: _instructorName,
+                    ),
+                    const Divider(height: 1, color: borderColor),
+                    _buildSettingTile(
+                      icon: Icons.calendar_today_outlined,
+                      title: 'Semester',
+                      value: _semester,
+                    ),
+                    const Divider(height: 1, color: borderColor),
+                    _buildSettingTile(
+                      icon: Icons.school_outlined,
+                      title: 'Academic Year',
+                      value: _academicYear,
+                    ),
+                    const Divider(height: 1, color: borderColor),
+                    _buildSettingTile(
+                      icon: Icons.visibility_outlined,
+                      title: 'Status',
+                      value: _courseStatus.toUpperCase(),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -1826,11 +1565,11 @@ class _InstructorClassDetailsScreenState
   }) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 17, vertical: 4),
-      leading: Icon(icon, color: primaryTeal, size: 21),
+      leading: Icon(icon, color: teal, size: 21),
       title: Text(
         title,
         style: const TextStyle(
-          color: textDark,
+          color: heading,
           fontSize: 12.5,
           fontWeight: FontWeight.w700,
         ),
@@ -1843,64 +1582,11 @@ class _InstructorClassDetailsScreenState
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            color: textGrey,
+            color: secondaryText,
             fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
         ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // EMPTY STATE
-  // ============================================================
-
-  Widget _buildEmptyState({
-    required IconData icon,
-    required String title,
-    required String message,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(27),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: primaryTeal.withValues(alpha: 0.09),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: primaryTeal, size: 28),
-          ),
-
-          const SizedBox(height: 12),
-
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: textDark,
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-
-          const SizedBox(height: 5),
-
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: textGrey, fontSize: 11, height: 1.5),
-          ),
-        ],
       ),
     );
   }
@@ -1912,28 +1598,23 @@ class _InstructorClassDetailsScreenState
   Widget _buildErrorState() {
     return RefreshIndicator(
       onRefresh: _loadCourseData,
-      color: primaryTeal,
+      color: teal,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(30),
         children: [
           const SizedBox(height: 110),
-
           const Icon(Icons.error_outline_rounded, color: red, size: 50),
-
           const SizedBox(height: 13),
-
           Text(
             _errorMessage ?? 'Unable to load course information.',
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: textGrey,
+              color: secondaryText,
               fontWeight: FontWeight.w600,
             ),
           ),
-
           const SizedBox(height: 20),
-
           Center(
             child: ElevatedButton.icon(
               onPressed: _loadCourseData,
@@ -1942,7 +1623,7 @@ class _InstructorClassDetailsScreenState
                 'Try Again',
                 style: TextStyle(color: Colors.white),
               ),
-              style: ElevatedButton.styleFrom(backgroundColor: primaryTeal),
+              style: ElevatedButton.styleFrom(backgroundColor: teal),
             ),
           ),
         ],
@@ -1959,7 +1640,7 @@ class _InviteStudentDialog extends StatefulWidget {
 }
 
 class _InviteStudentDialogState extends State<_InviteStudentDialog> {
-  static const Color primaryTeal = Color(0xFF00897B);
+  static const Color teal = Color(0xFF00897B);
 
   final TextEditingController _campusIdController = TextEditingController();
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
@@ -1981,7 +1662,7 @@ class _InviteStudentDialogState extends State<_InviteStudentDialog> {
     return AlertDialog(
       title: const Row(
         children: [
-          Icon(Icons.person_add_alt_1_rounded, color: primaryTeal),
+          Icon(Icons.person_add_alt_1_rounded, color: teal),
           SizedBox(width: 10),
           Expanded(child: Text('Invite Student')),
         ],
@@ -2024,7 +1705,7 @@ class _InviteStudentDialogState extends State<_InviteStudentDialog> {
               const SizedBox(height: 12),
               const Text(
                 'The student must accept the invitation before enrollment becomes active.',
-                style: TextStyle(color: Color(0xFF68738A), fontSize: 12),
+                style: TextStyle(color: Color(0xFF6B7C93), fontSize: 12),
               ),
             ],
           ),
@@ -2039,7 +1720,7 @@ class _InviteStudentDialogState extends State<_InviteStudentDialog> {
           onPressed: _submit,
           icon: const Icon(Icons.send_rounded),
           label: const Text('Send Invitation'),
-          style: FilledButton.styleFrom(backgroundColor: primaryTeal),
+          style: FilledButton.styleFrom(backgroundColor: teal),
         ),
       ],
     );

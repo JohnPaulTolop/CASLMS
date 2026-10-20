@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../services/enrollment_service.dart';
 import '../../services/student_assessment_query_service.dart';
 
-import 'notifications_page.dart';
+import '../instructor/notifications_page.dart';
 import 'student_course_invitations_page.dart';
 
 class StudentDashboardScreen extends StatefulWidget {

@@ -26,7 +26,14 @@ service cloud.firestore {
 
     function isActive() {
       return userExists() &&
-        currentUser().status == 'active';
+        currentUser().status == 'active' &&
+        (
+          currentUser().get('emailVerificationRequired', false) != true ||
+          (
+            request.auth.token.get('email_verified', false) == true &&
+            request.auth.token.get('email', '') == currentUser().email
+          )
+        );
     }
 
     function isStudent() {
@@ -118,16 +125,9 @@ service cloud.firestore {
 
       allow list: if isActive();
 
-      allow create: if
-        isAdmin()
-        ||
-        (
-          signedIn() &&
-          request.auth.uid == userId &&
-          request.resource.data.uid == userId &&
-          request.resource.data.role == 'student' &&
-          request.resource.data.status == 'active'
-        );
+      // Student profiles and ID reservations are created atomically by the
+      // verified student-registration backend. Clients cannot self-activate.
+      allow create: if isAdmin();
 
       allow update: if
         isAdmin()
@@ -145,6 +145,8 @@ service cloud.firestore {
             resource.data.universityId &&
           request.resource.data.authEmail ==
             resource.data.authEmail &&
+          (resource.data.get('emailVerificationRequired', false) != true ||
+            request.resource.data.email == resource.data.email) &&
           !request.resource.data
             .diff(resource.data)
             .affectedKeys()
@@ -155,6 +157,8 @@ service cloud.firestore {
               'approvalStatus',
               'universityId',
               'authEmail',
+              'emailVerificationRequired',
+              'emailVerifiedAt',
               'instructorApplicationId',
               'reviewedBy',
               'reviewedAt',
@@ -555,13 +559,19 @@ service cloud.firestore {
             'invitationId',
             'invitedBy',
             'enrolledAt',
-            'acceptedAt'
+            'acceptedAt',
+            'sectionId'
           ]) &&
           data.courseId is string &&
           data.studentId == request.auth.uid &&
           data.studentName is string &&
           data.studentCampusId == currentUser().universityId &&
           data.status == 'active' &&
+          data.get('sectionId', get(
+            /databases/$(database)/documents/courses/$(data.courseId)
+          ).data.classCode) == get(
+            /databases/$(database)/documents/courses/$(data.courseId)
+          ).data.classCode &&
           data.enrolledAt == request.time &&
           data.acceptedAt == request.time &&
           enrollmentId == data.courseId + "_" + request.auth.uid &&

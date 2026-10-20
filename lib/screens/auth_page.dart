@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../config/academic_catalog.dart';
+
 import '../services/campus_auth_service.dart';
 import '../services/instructor_registration_service.dart';
 import '../services/password_reset_service.dart';
@@ -110,6 +112,7 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() {
       _registrationAccountType = type;
       _facultyIdDocument = null;
+      _departmentController.clear();
       _courseController.clear();
     });
   }
@@ -712,29 +715,68 @@ class _AuthScreenState extends State<AuthScreen> {
 
                     if (_isSignUpMode) ...[
                       const SizedBox(height: 18),
-                      _label('Department'),
+                      _label('Department / College'),
                       const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _departmentController,
-                        enabled: !_isLoading,
-                        textCapitalization: TextCapitalization.words,
-                        textInputAction: TextInputAction.next,
-                        decoration: _inputDecoration(
-                          hintText: 'Enter your department',
-                          icon: Icons.account_balance_outlined,
-                        ),
-                        validator: (value) {
-                          if (!_isSignUpMode) {
+                      if (!_isInstructorRegistration)
+                        DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            'department-${_departmentController.text}',
+                          ),
+                          initialValue:
+                              AcademicCatalog.programs.containsKey(
+                                _departmentController.text,
+                              )
+                              ? _departmentController.text
+                              : null,
+                          isExpanded: true,
+                          menuMaxHeight: 350,
+                          decoration: _inputDecoration(
+                            hintText: 'Select department / college',
+                            icon: Icons.account_balance_outlined,
+                          ),
+                          items: AcademicCatalog.programs.keys
+                              .map(
+                                (department) => DropdownMenuItem(
+                                  value: department,
+                                  child: Text(
+                                    department,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _isLoading
+                              ? null
+                              : (department) => setState(() {
+                                  _departmentController.text = department ?? '';
+                                  _courseController.clear();
+                                }),
+                          validator: (value) => value == null
+                              ? 'Select your department / college.'
+                              : null,
+                        )
+                      else
+                        TextFormField(
+                          controller: _departmentController,
+                          enabled: !_isLoading,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next,
+                          decoration: _inputDecoration(
+                            hintText: 'Enter your department',
+                            icon: Icons.account_balance_outlined,
+                          ),
+                          validator: (value) {
+                            if (!_isSignUpMode) {
+                              return null;
+                            }
+
+                            if ((value?.trim() ?? '').isEmpty) {
+                              return 'Please enter your department';
+                            }
+
                             return null;
-                          }
-
-                          if ((value?.trim() ?? '').isEmpty) {
-                            return 'Please enter your department';
-                          }
-
-                          return null;
-                        },
-                      ),
+                          },
+                        ),
                       const SizedBox(height: 18),
                       _label(
                         _isInstructorRegistration
@@ -742,33 +784,85 @@ class _AuthScreenState extends State<AuthScreen> {
                             : 'Course / Program',
                       ),
                       const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _courseController,
-                        enabled: !_isLoading,
-                        textCapitalization: TextCapitalization.words,
-                        textInputAction: TextInputAction.next,
-                        decoration: _inputDecoration(
-                          hintText: _isInstructorRegistration
-                              ? 'e.g. Faculty, BSIT'
-                              : 'e.g. BSIT',
-                          icon: _isInstructorRegistration
-                              ? Icons.work_outline_rounded
-                              : Icons.school_outlined,
-                        ),
-                        validator: (value) {
-                          if (!_isSignUpMode) {
+                      if (!_isInstructorRegistration)
+                        DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            'program-${_departmentController.text}-${_courseController.text}',
+                          ),
+                          initialValue:
+                              AcademicCatalog.contains(
+                                _departmentController.text,
+                                _courseController.text,
+                              )
+                              ? _courseController.text
+                              : null,
+                          isExpanded: true,
+                          menuMaxHeight: 350,
+                          decoration: _inputDecoration(
+                            hintText: _departmentController.text.isEmpty
+                                ? 'Select a department first'
+                                : 'Select course / program',
+                            icon: Icons.school_outlined,
+                          ),
+                          items:
+                              (AcademicCatalog.programs[_departmentController
+                                          .text] ??
+                                      <String>[])
+                                  .map(
+                                    (program) => DropdownMenuItem(
+                                      value: program,
+                                      child: Text(
+                                        program,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged:
+                              _isLoading ||
+                                  !AcademicCatalog.programs.containsKey(
+                                    _departmentController.text,
+                                  )
+                              ? null
+                              : (program) => setState(
+                                  () => _courseController.text = program ?? '',
+                                ),
+                          validator: (value) =>
+                              !AcademicCatalog.contains(
+                                _departmentController.text,
+                                value ?? '',
+                              )
+                              ? 'Select a program from your department.'
+                              : null,
+                        )
+                      else
+                        TextFormField(
+                          controller: _courseController,
+                          enabled: !_isLoading,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next,
+                          decoration: _inputDecoration(
+                            hintText: _isInstructorRegistration
+                                ? 'e.g. Faculty, BSIT'
+                                : 'e.g. BSIT',
+                            icon: _isInstructorRegistration
+                                ? Icons.work_outline_rounded
+                                : Icons.school_outlined,
+                          ),
+                          validator: (value) {
+                            if (!_isSignUpMode) {
+                              return null;
+                            }
+
+                            if ((value?.trim() ?? '').isEmpty) {
+                              return _isInstructorRegistration
+                                  ? 'Please enter your position or program'
+                                  : 'Please enter your course or program';
+                            }
+
                             return null;
-                          }
-
-                          if ((value?.trim() ?? '').isEmpty) {
-                            return _isInstructorRegistration
-                                ? 'Please enter your position or program'
-                                : 'Please enter your course or program';
-                          }
-
-                          return null;
-                        },
-                      ),
+                          },
+                        ),
 
                       if (_isInstructorRegistration) ...[
                         const SizedBox(height: 18),

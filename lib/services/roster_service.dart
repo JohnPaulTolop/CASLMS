@@ -1,65 +1,53 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-class RosterService {
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+import 'enrollment_membership.dart';
 
-  final FirebaseAuth _auth =
-      FirebaseAuth.instance;
+class RosterService {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // ============================================================
   // CURRENT USER
   // ============================================================
 
-  String? get currentUserId =>
-      _auth.currentUser?.uid;
+  String? get currentUserId => _auth.currentUser?.uid;
 
   // ============================================================
   // GET CURRENT INSTRUCTOR PROFILE
   // ============================================================
 
-  Future<Map<String, dynamic>?>
-      getCurrentInstructorProfile() async {
+  Future<Map<String, dynamic>?> getCurrentInstructorProfile() async {
     try {
-      final User? user =
-          _auth.currentUser;
+      final User? user = _auth.currentUser;
 
       if (user == null) {
         return null;
       }
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          document =
-          await _firestore
-              .collection('users')
-              .doc(user.uid)
-              .get();
+      final DocumentSnapshot<Map<String, dynamic>> document = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get();
 
       if (!document.exists) {
         return null;
       }
 
-      final Map<String, dynamic>? data =
-          document.data();
+      final Map<String, dynamic>? data = document.data();
 
       if (data == null) {
         return null;
       }
 
-      return {
-        ...data,
-        'id': document.id,
-      };
+      return {...data, 'id': document.id};
     } on FirebaseException catch (e) {
       throw RosterServiceException(
-        e.message ??
-            'Unable to load instructor profile.',
+        e.message ?? 'Unable to load instructor profile.',
       );
     } catch (_) {
-      throw RosterServiceException(
-        'Unable to load instructor profile.',
-      );
+      throw RosterServiceException('Unable to load instructor profile.');
     }
   }
 
@@ -67,41 +55,28 @@ class RosterService {
   // GET CURRENT INSTRUCTOR COURSES
   // ============================================================
 
-  Future<List<Map<String, dynamic>>>
-      getInstructorCourses() async {
+  Future<List<Map<String, dynamic>>> getInstructorCourses() async {
     try {
-      final User? user =
-          _auth.currentUser;
+      final User? user = _auth.currentUser;
 
       if (user == null) {
-        throw RosterServiceException(
-          'No instructor is currently logged in.',
-        );
+        throw RosterServiceException('No instructor is currently logged in.');
       }
 
-      final QuerySnapshot<Map<String, dynamic>>
-          snapshot =
-          await _firestore
-              .collection('courses')
-              .where(
-                'instructorId',
-                isEqualTo: user.uid,
-              )
-              .get();
+      final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
+          .collection('courses')
+          .where('instructorId', isEqualTo: user.uid)
+          .get();
 
-      final List<Map<String, dynamic>> courses =
-          [];
+      final List<Map<String, dynamic>> courses = [];
 
-      for (final courseDocument
-          in snapshot.docs) {
-        final Map<String, dynamic> course =
-            courseDocument.data();
+      for (final courseDocument in snapshot.docs) {
+        final Map<String, dynamic> course = courseDocument.data();
 
-        final String status =
-            (course['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String status = (course['status'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (status != 'active') {
           continue;
@@ -111,41 +86,24 @@ class RosterService {
         // COUNT ACTIVE STUDENTS
         // --------------------------------------------------------
 
-        final QuerySnapshot<Map<String, dynamic>>
-            enrollmentSnapshot =
+        final QuerySnapshot<Map<String, dynamic>> enrollmentSnapshot =
             await _firestore
                 .collection('enrollments')
-                .where(
-                  'courseId',
-                  isEqualTo: courseDocument.id,
-                )
+                .where('courseId', isEqualTo: courseDocument.id)
                 .get();
 
-        int studentCount = 0;
-
-        for (final enrollmentDocument
-            in enrollmentSnapshot.docs) {
-          final String enrollmentStatus =
-              (enrollmentDocument
-                          .data()['status'] ??
-                      '')
-                  .toString()
-                  .trim()
-                  .toLowerCase();
-
-          if (enrollmentStatus == 'active') {
-            studentCount++;
-          }
-        }
+        final studentCount = EnrollmentMembership.uniqueActive(
+          enrollmentSnapshot.docs.map(
+            (doc) => <String, dynamic>{...doc.data(), 'id': doc.id},
+          ),
+        ).length;
 
         courses.add({
           ...course,
 
-          'id':
-              courseDocument.id,
+          'id': courseDocument.id,
 
-          'studentCount':
-              studentCount,
+          'studentCount': studentCount,
         });
       }
 
@@ -153,36 +111,23 @@ class RosterService {
       // SORT BY COURSE CODE
       // ----------------------------------------------------------
 
-      courses.sort(
-        (a, b) {
-          final String codeA =
-              (a['code'] ?? '')
-                  .toString()
-                  .toLowerCase();
+      courses.sort((a, b) {
+        final String codeA = (a['code'] ?? '').toString().toLowerCase();
 
-          final String codeB =
-              (b['code'] ?? '')
-                  .toString()
-                  .toLowerCase();
+        final String codeB = (b['code'] ?? '').toString().toLowerCase();
 
-          return codeA.compareTo(
-            codeB,
-          );
-        },
-      );
+        return codeA.compareTo(codeB);
+      });
 
       return courses;
     } on RosterServiceException {
       rethrow;
     } on FirebaseException catch (e) {
       throw RosterServiceException(
-        e.message ??
-            'Unable to load instructor courses.',
+        e.message ?? 'Unable to load instructor courses.',
       );
     } catch (_) {
-      throw RosterServiceException(
-        'Unable to load instructor courses.',
-      );
+      throw RosterServiceException('Unable to load instructor courses.');
     }
   }
 
@@ -190,45 +135,32 @@ class RosterService {
   // GET ONE COURSE
   // ============================================================
 
-  Future<Map<String, dynamic>?> getCourseById(
-    String courseId,
-  ) async {
+  Future<Map<String, dynamic>?> getCourseById(String courseId) async {
     try {
       if (courseId.trim().isEmpty) {
         return null;
       }
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          document =
-          await _firestore
-              .collection('courses')
-              .doc(courseId)
-              .get();
+      final DocumentSnapshot<Map<String, dynamic>> document = await _firestore
+          .collection('courses')
+          .doc(courseId)
+          .get();
 
       if (!document.exists) {
         return null;
       }
 
-      final Map<String, dynamic>? data =
-          document.data();
+      final Map<String, dynamic>? data = document.data();
 
       if (data == null) {
         return null;
       }
 
-      return {
-        ...data,
-        'id': document.id,
-      };
+      return {...data, 'id': document.id};
     } on FirebaseException catch (e) {
-      throw RosterServiceException(
-        e.message ??
-            'Unable to load course.',
-      );
+      throw RosterServiceException(e.message ?? 'Unable to load course.');
     } catch (_) {
-      throw RosterServiceException(
-        'Unable to load course.',
-      );
+      throw RosterServiceException('Unable to load course.');
     }
   }
 
@@ -239,26 +171,22 @@ class RosterService {
   // Dashboard buttons that still pass a title instead of courseId.
   // ============================================================
 
-  Future<Map<String, dynamic>?>
-      findInstructorCourseByTitle(
+  Future<Map<String, dynamic>?> findInstructorCourseByTitle(
     String title,
   ) async {
     if (title.trim().isEmpty) {
       return null;
     }
 
-    final List<Map<String, dynamic>> courses =
-        await getInstructorCourses();
+    final List<Map<String, dynamic>> courses = await getInstructorCourses();
 
-    final String target =
-        title.trim().toLowerCase();
+    final String target = title.trim().toLowerCase();
 
     for (final course in courses) {
-      final String courseTitle =
-          (course['title'] ?? '')
-              .toString()
-              .trim()
-              .toLowerCase();
+      final String courseTitle = (course['title'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
 
       if (courseTitle == target) {
         return course;
@@ -272,41 +200,33 @@ class RosterService {
   // GET ACTIVE STUDENTS ENROLLED IN COURSE
   // ============================================================
 
-  Future<List<Map<String, dynamic>>> getCourseStudents(
-    String courseId,
-  ) async {
+  Future<List<Map<String, dynamic>>> getCourseStudents(String courseId) async {
     try {
       if (courseId.trim().isEmpty) {
         return [];
       }
 
-      final QuerySnapshot<Map<String, dynamic>>
-          enrollmentSnapshot =
+      final QuerySnapshot<Map<String, dynamic>> enrollmentSnapshot =
           await _firestore
               .collection('enrollments')
-              .where(
-                'courseId',
-                isEqualTo: courseId,
-              )
+              .where('courseId', isEqualTo: courseId)
               .get();
 
-      final List<Map<String, dynamic>> students =
-          [];
+      final List<Map<String, dynamic>> students = [];
 
-      for (final enrollmentDocument
-          in enrollmentSnapshot.docs) {
-        final Map<String, dynamic> enrollment =
-            enrollmentDocument.data();
-
+      for (final enrollment in EnrollmentMembership.uniqueActive(
+        enrollmentSnapshot.docs.map(
+          (doc) => <String, dynamic>{...doc.data(), 'id': doc.id},
+        ),
+      )) {
         // --------------------------------------------------------
         // ACTIVE ENROLLMENTS ONLY
         // --------------------------------------------------------
 
-        final String enrollmentStatus =
-            (enrollment['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String enrollmentStatus = (enrollment['status'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (enrollmentStatus != 'active') {
           continue;
@@ -316,10 +236,9 @@ class RosterService {
         // STUDENT UID
         // --------------------------------------------------------
 
-        final String studentId =
-            (enrollment['studentId'] ?? '')
-                .toString()
-                .trim();
+        final String studentId = (enrollment['studentId'] ?? '')
+            .toString()
+            .trim();
 
         if (studentId.isEmpty) {
           continue;
@@ -329,19 +248,14 @@ class RosterService {
         // LOAD USER DOCUMENT
         // --------------------------------------------------------
 
-        final DocumentSnapshot<Map<String, dynamic>>
-            studentDocument =
-            await _firestore
-                .collection('users')
-                .doc(studentId)
-                .get();
+        final DocumentSnapshot<Map<String, dynamic>> studentDocument =
+            await _firestore.collection('users').doc(studentId).get();
 
         if (!studentDocument.exists) {
           continue;
         }
 
-        final Map<String, dynamic>? student =
-            studentDocument.data();
+        final Map<String, dynamic>? student = studentDocument.data();
 
         if (student == null) {
           continue;
@@ -351,11 +265,10 @@ class RosterService {
         // VERIFY ROLE
         // --------------------------------------------------------
 
-        final String role =
-            (student['role'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String role = (student['role'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (role != 'student') {
           continue;
@@ -365,11 +278,10 @@ class RosterService {
         // VERIFY USER STATUS
         // --------------------------------------------------------
 
-        final String userStatus =
-            (student['status'] ?? 'active')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String userStatus = (student['status'] ?? 'active')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (userStatus != 'active') {
           continue;
@@ -380,49 +292,38 @@ class RosterService {
           // CANONICAL UID
           // ------------------------------------------------------
 
-          'id':
-              studentDocument.id,
+          'id': studentDocument.id,
 
-          'studentId':
-              studentDocument.id,
+          'studentId': studentDocument.id,
 
           // ------------------------------------------------------
           // PROFILE
           // ------------------------------------------------------
+          'name': (student['name'] ?? enrollment['studentName'] ?? 'Student')
+              .toString(),
 
-          'name':
-              (student['name'] ??
-                      enrollment['studentName'] ??
-                      'Student')
-                  .toString(),
+          'email': (student['email'] ?? '').toString(),
 
-          'email':
-              (student['email'] ?? '')
-                  .toString(),
+          'universityId': (student['universityId'] ?? '').toString(),
 
-          'universityId':
-              (student['universityId'] ?? '')
-                  .toString(),
-
-          'profileImageUrl':
-              (student['profileImageUrl'] ?? '')
-                  .toString(),
+          'profileImageUrl': (student['profileImageUrl'] ?? '').toString(),
 
           // ------------------------------------------------------
           // ENROLLMENT
           // ------------------------------------------------------
+          'enrollmentId': enrollment['id'],
 
-          'enrollmentId':
-              enrollmentDocument.id,
+          'sectionId': EnrollmentMembership.text(enrollment['sectionId']),
+          'sectionName': EnrollmentMembership.text(enrollment['sectionName']),
+          'sectionIdentifier': EnrollmentMembership.text(
+            enrollment['sectionIdentifier'],
+          ),
 
-          'courseId':
-              courseId,
+          'courseId': courseId,
 
-          'enrollmentStatus':
-              enrollmentStatus,
+          'enrollmentStatus': enrollmentStatus,
 
-          'enrolledAt':
-              enrollment['enrolledAt'],
+          'enrolledAt': enrollment['enrolledAt'],
         });
       }
 
@@ -430,34 +331,21 @@ class RosterService {
       // SORT BY NAME
       // ----------------------------------------------------------
 
-      students.sort(
-        (a, b) {
-          final String nameA =
-              (a['name'] ?? '')
-                  .toString()
-                  .toLowerCase();
+      students.sort((a, b) {
+        final String nameA = (a['name'] ?? '').toString().toLowerCase();
 
-          final String nameB =
-              (b['name'] ?? '')
-                  .toString()
-                  .toLowerCase();
+        final String nameB = (b['name'] ?? '').toString().toLowerCase();
 
-          return nameA.compareTo(
-            nameB,
-          );
-        },
-      );
+        return nameA.compareTo(nameB);
+      });
 
       return students;
     } on FirebaseException catch (e) {
       throw RosterServiceException(
-        e.message ??
-            'Unable to load course students.',
+        e.message ?? 'Unable to load course students.',
       );
     } catch (_) {
-      throw RosterServiceException(
-        'Unable to load course students.',
-      );
+      throw RosterServiceException('Unable to load course students.');
     }
   }
 
@@ -465,50 +353,38 @@ class RosterService {
   // VERIFY INSTRUCTOR OWNS COURSE
   // ============================================================
 
-  Future<bool> currentInstructorOwnsCourse(
-    String courseId,
-  ) async {
+  Future<bool> currentInstructorOwnsCourse(String courseId) async {
     try {
-      final User? user =
-          _auth.currentUser;
+      final User? user = _auth.currentUser;
 
-      if (user == null ||
-          courseId.trim().isEmpty) {
+      if (user == null || courseId.trim().isEmpty) {
         return false;
       }
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          document =
-          await _firestore
-              .collection('courses')
-              .doc(courseId)
-              .get();
+      final DocumentSnapshot<Map<String, dynamic>> document = await _firestore
+          .collection('courses')
+          .doc(courseId)
+          .get();
 
       if (!document.exists) {
         return false;
       }
 
-      final Map<String, dynamic>? data =
-          document.data();
+      final Map<String, dynamic>? data = document.data();
 
       if (data == null) {
         return false;
       }
 
-      final String instructorId =
-          (data['instructorId'] ?? '')
-              .toString();
+      final String instructorId = (data['instructorId'] ?? '').toString();
 
       return instructorId == user.uid;
     } on FirebaseException catch (e) {
       throw RosterServiceException(
-        e.message ??
-            'Unable to verify course ownership.',
+        e.message ?? 'Unable to verify course ownership.',
       );
     } catch (_) {
-      throw RosterServiceException(
-        'Unable to verify course ownership.',
-      );
+      throw RosterServiceException('Unable to verify course ownership.');
     }
   }
 }
@@ -520,11 +396,8 @@ class RosterService {
 class RosterServiceException implements Exception {
   final String message;
 
-  RosterServiceException(
-    this.message,
-  );
+  RosterServiceException(this.message);
 
   @override
-  String toString() =>
-      message;
+  String toString() => message;
 }

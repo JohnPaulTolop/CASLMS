@@ -23,57 +23,70 @@ class RoleNavigationBar extends StatelessWidget {
       instructor ? const Color(0xFF00897B) : const Color(0xFF1769FF);
 
   List<_RoleDestination> get _destinations => <_RoleDestination>[
-    _RoleDestination(
-      index: 0,
-      label: instructor ? 'Dashboard' : 'Home',
-      icon: Icons.home_outlined,
-      activeIcon: Icons.home_rounded,
-    ),
-    _RoleDestination(
-      index: 1,
-      label: instructor ? 'My Courses' : 'Modules',
-      icon: instructor ? Icons.class_outlined : Icons.folder_outlined,
-      activeIcon: instructor ? Icons.class_rounded : Icons.folder_rounded,
-    ),
-    _RoleDestination(
-      index: 2,
-      label: instructor ? 'Grading' : 'Tasks',
-      icon: Icons.assignment_outlined,
-      activeIcon: Icons.assignment_rounded,
-    ),
-    _RoleDestination(
-      index: 3,
-      label: instructor ? 'Analytics' : 'Progress',
-      icon: Icons.insights_outlined,
-      activeIcon: Icons.insights_rounded,
-    ),
-    const _RoleDestination(
-      index: 4,
-      label: 'Profile',
-      icon: Icons.person_outline_rounded,
-      activeIcon: Icons.person_rounded,
-    ),
-    const _RoleDestination(
-      index: 5,
-      label: 'Chat',
-      icon: Icons.chat_bubble_outline_rounded,
-      activeIcon: Icons.chat_bubble_rounded,
-    ),
-    const _RoleDestination(
-      index: 6,
-      label: 'AI Assistant',
-      icon: Icons.smart_toy_outlined,
-      activeIcon: Icons.smart_toy_rounded,
-    ),
-  ];
+        _RoleDestination(
+          index: 0,
+          label: instructor ? 'Dashboard' : 'Home',
+          icon: Icons.home_outlined,
+          activeIcon: Icons.home_rounded,
+        ),
+        _RoleDestination(
+          index: 1,
+          label: instructor ? 'My Courses' : 'Modules',
+          icon: instructor ? Icons.class_outlined : Icons.folder_outlined,
+          activeIcon: instructor ? Icons.class_rounded : Icons.folder_rounded,
+        ),
+        _RoleDestination(
+          index: 2,
+          label: instructor ? 'Grading' : 'Tasks',
+          icon: Icons.assignment_outlined,
+          activeIcon: Icons.assignment_rounded,
+        ),
+        _RoleDestination(
+          index: 3,
+          label: instructor ? 'Analytics' : 'Progress',
+          icon: Icons.insights_outlined,
+          activeIcon: Icons.insights_rounded,
+        ),
+        const _RoleDestination(
+          index: 4,
+          label: 'Profile',
+          icon: Icons.person_outline_rounded,
+          activeIcon: Icons.person_rounded,
+        ),
+        const _RoleDestination(
+          index: 5,
+          label: 'Chat',
+          icon: Icons.chat_bubble_outline_rounded,
+          activeIcon: Icons.chat_bubble_rounded,
+        ),
+        const _RoleDestination(
+          index: 6,
+          label: 'AI Assistant',
+          icon: Icons.smart_toy_outlined,
+          activeIcon: Icons.smart_toy_rounded,
+        ),
+      ];
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      color: const Color(0xFFF7F9FC),
+    // A full-width container that sits flush against the bottom edges 
+    // to look like a standard navigation bar.
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: const Border(
+          top: BorderSide(color: Color(0xFFE8ECF3)),
+        ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: const Color(0xFF172033).withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, -4), // Shadow points upwards
+          ),
+        ],
+      ),
       child: SafeArea(
         top: false,
-        minimum: const EdgeInsets.fromLTRB(12, 4, 12, 10),
         child: LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final bool wide = constraints.maxWidth >= _wideBreakpoint;
@@ -82,7 +95,8 @@ class RoleNavigationBar extends StatelessWidget {
               heightFactor: 1,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 1040),
-                child: _NavigationSurface(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
                   child: wide
                       ? _buildWideNavigation()
                       : _buildCompactNavigation(context),
@@ -120,8 +134,7 @@ class RoleNavigationBar extends StatelessWidget {
       allDestinations[2],
       allDestinations[instructor ? 6 : 5],
     ];
-    final bool secondaryDestinationSelected =
-        (selectedIndex == 3 ||
+    final bool secondaryDestinationSelected = (selectedIndex == 3 ||
         selectedIndex == 4 ||
         selectedIndex == (instructor ? 5 : 6));
 
@@ -179,34 +192,6 @@ class RoleNavigationBar extends StatelessWidget {
     if (destinationIndex != null) {
       onSelected(destinationIndex);
     }
-  }
-}
-
-class _NavigationSurface extends StatelessWidget {
-  const _NavigationSurface({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE8ECF3)),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: const Color(0xFF172033).withValues(alpha: 0.10),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
-        child: child,
-      ),
-    );
   }
 }
 

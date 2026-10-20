@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CaslmsGuide {
@@ -188,6 +189,7 @@ class _CaslmsTourDialog extends StatefulWidget {
 
 class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
   int index = 0;
+  static const Color primaryTeal = Color(0xFF00897B);
 
   @override
   Widget build(BuildContext context) {
@@ -195,72 +197,308 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
     final entry = entries[index];
     final last = index == entries.length - 1;
 
-    return AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.school_outlined, color: Color(0xFF00897B)),
-          SizedBox(width: 10),
-          Expanded(child: Text('Welcome to CASLMS')),
-        ],
-      ),
-      content: SizedBox(
-        width: 440,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            LinearProgressIndicator(
-              value: (index + 1) / entries.length,
-              color: const Color(0xFF00897B),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '${index + 1} of ${entries.length}',
-              style: const TextStyle(color: Colors.black54),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              entry.title,
-              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            ...entry.steps
-                .take(3)
-                .map(
-                  (step) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text('• $step'),
-                  ),
-                ),
-            if (entry.planned)
-              const Text(
-                'This feature is still being developed.',
-                style: TextStyle(color: Colors.deepOrange),
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: const Text('Skip tour'),
-        ),
-        if (index > 0)
-          TextButton(
-            onPressed: () => setState(() => index--),
-            child: const Text('Back'),
+    return Dialog.fullscreen(
+      backgroundColor: Colors.white,
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          surfaceTintColor: Colors.transparent,
+          automaticallyImplyLeading: false,
+          systemOverlayStyle: const SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.dark,
+            systemNavigationBarColor: Colors.white,
+            systemNavigationBarIconBrightness: Brightness.dark,
           ),
-        FilledButton(
-          onPressed: () {
-            if (last) {
-              Navigator.pop(context, true);
-            } else {
-              setState(() => index++);
-            }
-          },
-          child: Text(last ? 'Finish' : 'Next'),
+          title: const Row(
+            children: [
+              Icon(Icons.school_outlined, color: primaryTeal),
+              SizedBox(width: 10),
+              Text(
+                'Welcome to CASLMS',
+                style: TextStyle(
+                  color: Color(0xFF10182F),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text(
+                'Skip Tour',
+                style: TextStyle(
+                  color: Color(0xFF68738A),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+          ],
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(4),
+            child: LinearProgressIndicator(
+              value: (index + 1) / entries.length,
+              color: primaryTeal,
+              backgroundColor: primaryTeal.withValues(alpha: 0.1),
+            ),
+          ),
         ),
-      ],
+        body: SafeArea(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final bool isWide = constraints.maxWidth > 800;
+
+                // ==================================================
+                // SCREENSHOT PLACEHOLDER
+                // ==================================================
+                final Widget imageSpace = AspectRatio(
+                  aspectRatio: isWide ? 4 / 3 : 16 / 10,
+                  child: Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF7F9FC),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: const Color(0xFFE6EAF0), width: 1.5),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: primaryTeal.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.image_outlined,
+                            size: 64,
+                            color: primaryTeal.withValues(alpha: 0.7),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Text(
+                          'Screenshot space for:',
+                          style: TextStyle(
+                            color: const Color(0xFF68738A).withValues(alpha: 0.7),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            '"${entry.title}"',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Color(0xFF68738A),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+
+                // ==================================================
+                // INSTRUCTION PANEL
+                // ==================================================
+                final Widget contentSpace = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'STEP ${index + 1} OF ${entries.length}',
+                      style: const TextStyle(
+                        color: primaryTeal,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 11,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      entry.title,
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF10182F),
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    ...entry.steps.asMap().entries.map((e) {
+                      final int i = e.key;
+                      final String step = e.value;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 20),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              margin: const EdgeInsets.only(top: 2),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: primaryTeal.withValues(alpha: 0.12),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                '${i + 1}',
+                                style: const TextStyle(
+                                  color: primaryTeal,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 4.0),
+                                child: Text(
+                                  step,
+                                  style: const TextStyle(
+                                    color: Color(0xFF263149),
+                                    fontSize: 15,
+                                    height: 1.5,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                    if (entry.planned) ...[
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.deepOrange.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.deepOrange.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.build_circle_outlined,
+                                color: Colors.deepOrange, size: 22),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'This feature is currently in development.',
+                                style: TextStyle(
+                                  color: Colors.deepOrange.shade700,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        if (index > 0)
+                          OutlinedButton(
+                            onPressed: () => setState(() => index--),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF10182F),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 24, vertical: 18),
+                              side: const BorderSide(
+                                  color: Color(0xFFE6EAF0), width: 1.5),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14)),
+                            ),
+                            child: const Text(
+                              'Back',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        const Spacer(),
+                        FilledButton.icon(
+                          onPressed: () {
+                            if (last) {
+                              Navigator.pop(context, true);
+                            } else {
+                              setState(() => index++);
+                            }
+                          },
+                          style: FilledButton.styleFrom(
+                            backgroundColor: primaryTeal,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 32, vertical: 18),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14)),
+                            elevation: 0,
+                          ),
+                          icon: Icon(
+                            last
+                                ? Icons.check_circle_rounded
+                                : Icons.arrow_forward_rounded,
+                            size: 18,
+                          ),
+                          label: Text(
+                            last ? 'Finish Tour' : 'Next Step',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w800, fontSize: 14),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+
+                if (isWide) {
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 16),
+                          child: imageSpace,
+                        ),
+                      ),
+                      Expanded(
+                        flex: 4,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 16),
+                          child: contentSpace,
+                        ),
+                      ),
+                    ],
+                  );
+                }
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    imageSpace,
+                    const SizedBox(height: 32),
+                    contentSpace,
+                  ],
+                );
+              },
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -295,8 +533,16 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
         .toList();
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F9FC),
       appBar: AppBar(
-        title: const Text('Help & User Guide'),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: const Color(0xFF10182F),
+        title: const Text(
+          'Help & User Guide',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+        ),
         actions: [
           IconButton(
             tooltip: 'Replay the beginner guided tour',
@@ -304,76 +550,178 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                 CaslmsOnboarding.replay(context, role: widget.role),
             icon: const Icon(Icons.replay_rounded),
           ),
+          const SizedBox(width: 8),
         ],
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(1),
+          child: Divider(height: 1, color: Color(0xFFE6EAF0)),
+        ),
       ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 850),
           child: ListView(
-            padding: const EdgeInsets.all(18),
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.all(24),
             children: [
               const Text(
                 'CASLMS Beginner Guide',
-                style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF10182F),
+                  letterSpacing: -0.5,
+                ),
               ),
               const SizedBox(height: 8),
               const Text(
                 'Choose a task to see simple step-by-step instructions. '
-                'Topics marked In development describe planned workflows.',
+                'Topics marked "In development" describe planned workflows.',
+                style: TextStyle(color: Color(0xFF68738A), height: 1.5),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 24),
               TextField(
                 controller: search,
                 onChanged: (value) =>
                     setState(() => filter = value.trim().toLowerCase()),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Search help topics...',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
+                  hintStyle: const TextStyle(color: Color(0xFFA0A8B7)),
+                  prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF00897B)),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFFE6EAF0)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFFE6EAF0)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(color: Color(0xFF00897B), width: 1.5),
+                  ),
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 24),
               if (entries.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Text('No matching guide topics.'),
+                Container(
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE6EAF0)),
+                  ),
+                  child: const Column(
+                    children: [
+                      Icon(Icons.search_off_rounded, size: 48, color: Color(0xFF00897B)),
+                      SizedBox(height: 16),
+                      Text(
+                        'No matching guide topics.',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF68738A),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ...entries.map(
                 (entry) => Card(
+                  elevation: 0,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  color: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: const BorderSide(color: Color(0xFFE6EAF0)),
+                  ),
                   child: ExpansionTile(
-                    leading: const Icon(
-                      Icons.help_outline,
-                      color: Color(0xFF00897B),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF00897B).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.lightbulb_outline_rounded,
+                        color: Color(0xFF00897B),
+                        size: 20,
+                      ),
                     ),
-                    title: Text(entry.title),
+                    title: Text(
+                      entry.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF10182F),
+                      ),
+                    ),
                     subtitle: entry.planned
                         ? const Text(
                             'In development',
-                            style: TextStyle(color: Colors.deepOrange),
+                            style: TextStyle(
+                              color: Colors.deepOrange,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                           )
                         : null,
                     children: [
-                      for (var i = 0; i < entry.steps.length; i++)
-                        ListTile(
-                          leading: CircleAvatar(
-                            radius: 13,
-                            child: Text(
-                              '${i + 1}',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                          title: Text(entry.steps[i]),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16.0),
+                        child: Column(
+                          children: [
+                            for (var i = 0; i < entry.steps.length; i++)
+                              ListTile(
+                                leading: CircleAvatar(
+                                  radius: 12,
+                                  backgroundColor: const Color(0xFF00897B).withValues(alpha: 0.1),
+                                  child: Text(
+                                    '${i + 1}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF00897B),
+                                    ),
+                                  ),
+                                ),
+                                title: Text(
+                                  entry.steps[i],
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    color: Color(0xFF263149),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
+                      ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () =>
-                    CaslmsOnboarding.replay(context, role: widget.role),
-                icon: const Icon(Icons.replay),
-                label: const Text('Replay guided tour'),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () =>
+                      CaslmsOnboarding.replay(context, role: widget.role),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF00897B),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: const BorderSide(color: Color(0xFF00897B), width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  icon: const Icon(Icons.replay_rounded),
+                  label: const Text(
+                    'Replay Guided Tour',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
               ),
             ],
           ),

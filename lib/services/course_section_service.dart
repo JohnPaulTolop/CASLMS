@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'enrollment_membership.dart';
+
 class CourseSectionService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -123,7 +125,24 @@ class CourseSectionService {
       return _text(a['identifier']).compareTo(_text(b['identifier']));
     });
 
-    return sections;
+    final enrollments = await _db
+        .collection('enrollments')
+        .where('courseId', isEqualTo: courseId)
+        .get();
+    final counts = EnrollmentMembership.counts(
+      enrollments.docs.map(
+        (doc) => <String, dynamic>{...doc.data(), 'id': doc.id},
+      ),
+      legacyCode,
+    );
+    return sections
+        .map(
+          (section) => <String, dynamic>{
+            ...section,
+            'studentCount': counts[section['id']] ?? 0,
+          },
+        )
+        .toList();
   }
 
   Future<Map<String, dynamic>> getSection({
