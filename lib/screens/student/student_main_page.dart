@@ -13,6 +13,8 @@ import 'progress_page.dart';
 import 'student_assignments_page.dart';
 import 'student_dashboard_page.dart';
 import 'student_profile_page.dart';
+import 'activities_scores_page.dart';
+import 'posted_grades_page.dart';
 
 class StudentMainScreen extends StatefulWidget {
   const StudentMainScreen({super.key});
@@ -44,6 +46,8 @@ class _StudentMainScreenState extends State<StudentMainScreen> {
       const StudentProfileScreen(),
       const StudentMessagesScreen(),
       const LearnerAssistantScreen(role: 'student'),
+      const ActivitiesScoresScreen(),
+      const PostedGradesScreen(),
     ];
 
     _startNotificationPopups();

@@ -84,4 +84,17 @@ const inviteResult = await fetch(`${base}:commit`, { method: 'POST', headers: {
   updateTransforms: [{ fieldPath: 'enrolledAt', setToServerValue: 'REQUEST_TIME' }, { fieldPath: 'acceptedAt', setToServerValue: 'REQUEST_TIME' }] }] }) });
 assert.equal(inviteResult.status, 200, `Invitation retains explicit original-section membership: ${await inviteResult.text()}`);
 checks++;
+await seed('liveClasses/server-session', { courseId: 'course', sectionId: 'ORIGINAL', instructorId: 'teacher', status: 'live' });
+await status('liveClasses/server-session', 'GET', undefined, token('verified', true), 403, 'Room state is only returned through the authorized backend');
+await status('liveClasses/server-session', 'PATCH', { status: 'live', studentIds: 'forged' }, token('teacher'), 403, 'Even instructors cannot forge room capacity directly');
+await status('liveClasses/forged-session', 'PATCH', { courseId: 'course', status: 'live' }, token('legacy'), 403, 'Students cannot create or alter live sessions');
+await seed('semesterGrades/own-final', { courseId: 'course', studentId: 'verified', posted: true, revision: 1, encrypted: 'test-ciphertext' });
+await seed('semesterGrades/own-final/revisions/1', { studentId: 'verified', encrypted: 'test-ciphertext' });
+await status('semesterGrades/own-final', 'GET', undefined, token('verified', true), 403, 'Owner cannot fetch posted grade without backend password reveal');
+await status('semesterGrades/own-final', 'GET', undefined, token('legacy'), 403, 'Classmate cannot fetch another student final grade');
+await status('semesterGrades/own-final', 'GET', undefined, token('teacher'), 403, 'Instructors use authorized grading backend, not direct final-grade reads');
+await status('semesterGrades/forged', 'PATCH', { studentId: 'verified', posted: true, grade: '1.00' }, token('verified', true), 403, 'Student cannot forge a posted final grade');
+await status('semesterGrades/own-final/revisions/1', 'GET', undefined, token('verified', true), 403, 'Encrypted grade history cannot bypass reveal');
+await status('semesterGradePolicies/forged', 'PATCH', { weights: 'forged' }, token('teacher'), 403, 'Policy publication requires backend validation');
+await status('gradeRevealAttempts/verified', 'DELETE', undefined, token('verified', true), 403, 'Students cannot reset credential rate limits');
 console.log(`Passed ${checks} Firestore access and membership checks against the local emulator.`);

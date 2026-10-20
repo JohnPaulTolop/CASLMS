@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 
 import '../../services/course_section_service.dart';
 import '../../services/enrollment_membership.dart';
+import '../shared/live_classes_page.dart';
 import 'instructor_assessment_grading_page.dart';
+import 'instructor_semester_grades_page.dart';
 import 'instructor_class_details_page.dart';
 
 class InstructorSectionDetailsScreen extends StatefulWidget {
@@ -1241,6 +1243,30 @@ class _InstructorSectionDetailsScreenState
             ),
           ),
           actions: [
+            IconButton(
+              tooltip: 'Live Classes',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => LiveClassesScreen(
+                    courseId: widget.courseId,
+                    sectionId: widget.sectionId,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.video_call_outlined, color: teal),
+            ),
+            IconButton(
+              tooltip: 'Compute & Finalize Semester Grades',
+              icon: const Icon(Icons.calculate_outlined, color: teal),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => InstructorSemesterGradesScreen(
+                    courseId: widget.courseId,
+                    sectionId: widget.sectionId,
+                  ),
+                ),
+              ),
+            ),
             IconButton(
               tooltip: 'Refresh section',
               onPressed: _refresh,

@@ -45,6 +45,7 @@ dependencies:
   firebase_app_check: ^0.4.7
   archive: ^4.2.0
   shared_preferences: ^2.5.6
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:

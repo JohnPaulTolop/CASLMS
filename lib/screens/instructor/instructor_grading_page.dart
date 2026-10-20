@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'instructor_ui.dart';
 
 import 'instructor_assessment_grading_page.dart';
+import 'instructor_semester_grades_page.dart';
 
 class InstructorGradingScreen extends StatefulWidget {
   const InstructorGradingScreen({super.key});
@@ -406,6 +407,15 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Compute & Finalize Semester Grades',
+            icon: const Icon(Icons.calculate_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const InstructorSemesterGradesScreen(),
+              ),
+            ),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(dialog),
             child: const Text('Cancel'),

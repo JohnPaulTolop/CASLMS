@@ -2390,6 +2390,17 @@ service cloud.firestore {
     // DEFAULT DENY
     // ============================================================
 
+    // Semester results are server-only, including for their owner. A Firebase
+    // session alone does not satisfy the separate password-reveal requirement.
+    match /semesterGrades/{document=**} {
+      allow read, write: if false;
+    }
+    match /semesterGradePolicies/{document=**} {
+      allow read, write: if false;
+    }
+    match /gradeRevealAttempts/{document=**} {
+      allow read, write: if false;
+    }
     match /{document=**} {
       allow read, write: if false;
     }

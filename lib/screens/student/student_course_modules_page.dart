@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/enrollment_service.dart';
 import '../../services/progress_service.dart';
+import '../shared/live_classes_page.dart';
 
 import 'student_module_detail_page.dart';
 
@@ -212,6 +213,17 @@ class _StudentCourseModulesScreenState
           ],
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            tooltip: 'Live Classes',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => LiveClassesScreen(courseId: widget.courseId),
+              ),
+            ),
+            icon: const Icon(Icons.video_call_outlined, color: primaryBlue),
+          ),
+        ],
       ),
       body: SafeArea(
         child: _isLoading

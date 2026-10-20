@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>CAS LMS • Live classroom</title>
+  <link rel="stylesheet" href="live-class.css">
+</head>
+<body>
+  <header>
+    <div><span class="live-dot"></span><strong id="title">Live classroom</strong><span id="state" role="status">Connecting…</span></div>
+    <button id="people-toggle" aria-expanded="false">Participants <span id="count">0 / 31</span></button>
+  </header>
+  <main>
+    <section id="classroom" aria-label="Classroom video">
+      <div id="notice" role="status">Connecting to your class. Your camera and microphone are off.</div>
+      <div id="screens" aria-label="Shared screen"></div>
+      <div id="grid"></div>
+    </section>
+    <aside id="people" hidden><h2>Participants</h2><p>30 student places + 1 instructor</p><ul id="roster"></ul></aside>
+  </main>
+  <footer>
+    <button id="mic" disabled aria-pressed="false">Turn mic on</button>
+    <button id="camera" disabled aria-pressed="false">Turn camera on</button>
+    <button id="share" hidden disabled aria-pressed="false">Share screen</button>
+    <button id="sound" disabled>Enable sound</button>
+    <button id="leave" class="danger">Leave class</button>
+  </footer>
+  <div id="audio" aria-hidden="true"></div>
+  <script src="vendor/livekit-client-2.23.0.min.js"></script>
+  <script src="live-class.js"></script>
+</body>
+</html>
