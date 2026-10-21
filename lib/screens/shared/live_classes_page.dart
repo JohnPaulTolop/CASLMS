@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/live_class_service.dart';
 import 'live_classroom_embed.dart';
+import 'grading_ui.dart';
 
 class LiveClassesScreen extends StatefulWidget {
   const LiveClassesScreen({super.key, required this.courseId, this.sectionId});
@@ -73,6 +74,8 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
   Future<void> _act(String action) async {
     if (_busy) return;
     final session = _state?['session'] as Map?;
+    if (action == 'end' && !await _confirmEndClass(context)) return;
+    if (!mounted) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -89,7 +92,7 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
       if (action == 'join') {
         _inRoom = true;
         await Navigator.of(context).push(
-          MaterialPageRoute<void>(
+          GradeRoute<void>(
             builder: (_) => _LiveRoomScreen(
               courseId: widget.courseId,
               sectionId: _state!['sectionId'] as String,
@@ -113,140 +116,484 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
     final status = session?['status'] as String?;
     final instructor = _state?['instructor'] == true;
     final configured = _state?['configured'] == true;
+    final live = status == 'live';
+    final transitioning = status == 'starting' || status == 'ending';
+    final accent = instructor ? gradeTeal : gradeBlue;
+    final count = (session?['studentCount'] as num?)?.toInt() ?? 0;
+    final stateLabel = !configured
+        ? 'Setup pending'
+        : live
+        ? 'Live now'
+        : status == 'starting'
+        ? 'Starting'
+        : status == 'ending'
+        ? 'Ending'
+        : 'No active session';
+    final stateColor = live
+        ? gradeTeal
+        : transitioning
+        ? const Color(0xFFB76A00)
+        : gradeMuted;
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F8FC),
+      backgroundColor: gradeBackground,
       appBar: AppBar(
-        title: const Text('Live Classes'),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh class',
-            onPressed: _busy ? null : () => _refresh(),
-            icon: const Icon(Icons.refresh),
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        title: const Text(
+          'Live Classes',
+          style: TextStyle(
+            color: gradeInk,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
           ),
+        ),
+        actions: [
+          RoundGradeAction(
+            icon: Icons.refresh_rounded,
+            label: 'Refresh class',
+            accent: accent,
+            onTap: _busy ? null : () => _refresh(),
+          ),
+          const SizedBox(width: 16),
         ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 650),
-                  child: Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(28),
+          : RefreshIndicator(
+              onRefresh: () => _refresh(),
+              child: LayoutBuilder(
+                builder: (context, size) => SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: EdgeInsets.all(size.maxWidth < 600 ? 16 : 28),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1120),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
-                            Icons.video_call_rounded,
-                            size: 52,
-                            color: Color(0xFF1769FF),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            (_state?['courseTitle'] ?? 'Live classroom')
-                                .toString(),
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            (_state?['sectionName'] ?? 'Your enrolled section')
-                                .toString(),
-                          ),
-                          const SizedBox(height: 20),
-                          const Text(
-                            'Up to 30 students + 1 instructor',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Your place is reserved for this class when you join, so you can reconnect. Camera and microphone start off. Recording is off.',
+                          GradeEntrance(
+                            child: GradeHero(
+                              title:
+                                  (_state?['courseTitle'] ??
+                                          'Your live classroom')
+                                      .toString(),
+                              subtitle:
+                                  '${_state?['sectionName'] ?? 'Your enrolled section'} · Learn together, wherever you are.',
+                              icon: Icons.video_call_outlined,
+                              accent: accent,
+                              eyebrow: instructor
+                                  ? 'TEACH & CONNECT'
+                                  : 'LEARN & CONNECT',
+                              trailing: const GradeBadge(
+                                '30 students + 1 instructor',
+                                color: Colors.white,
+                                icon: Icons.groups_outlined,
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 22),
-                          if (_error != null)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 18),
-                              child: Text(
-                                _error!,
-                                style: const TextStyle(color: Colors.red),
+                          if (_error != null) ...[
+                            GradeSurface(
+                              padding: const EdgeInsets.all(18),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(
+                                    Icons.info_outline,
+                                    color: Color(0xFFC54444),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _error!,
+                                      style: const TextStyle(
+                                        color: Color(0xFFC54444),
+                                        height: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: _busy ? null : () => _refresh(),
+                                    child: const Text('Retry'),
+                                  ),
+                                ],
                               ),
                             ),
-                          if (_state != null && !configured)
-                            const Text(
-                              'Live classes are not ready yet. The administrator needs to finish the video service setup.',
-                            )
-                          else if (_state != null) ...[
-                            if (status == 'live' || status == 'ending') ...[
-                              Text(
-                                (session?['title'] ?? 'Live class').toString(),
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                '${session?['studentCount'] ?? 0} / 30 student places reserved',
-                              ),
-                              const SizedBox(height: 18),
-                              if (status == 'live')
-                                FilledButton.icon(
-                                  onPressed: _busy ? null : () => _act('join'),
-                                  icon: const Icon(Icons.videocam_outlined),
-                                  label: const Text('Join class'),
-                                ),
-                              if (instructor)
-                                TextButton.icon(
-                                  onPressed: _busy ? null : () => _act('end'),
-                                  icon: const Icon(Icons.stop_circle_outlined),
-                                  label: Text(
-                                    status == 'ending'
-                                        ? 'Retry ending class'
-                                        : 'End class for everyone',
-                                  ),
-                                ),
-                              if (status == 'ending')
-                                const Text(
-                                  'The instructor is closing this classroom.',
-                                ),
-                            ] else if (status == 'starting') ...[
-                              const Text(
-                                'The classroom is starting. This page will refresh automatically.',
-                              ),
-                              if (instructor)
-                                TextButton(
-                                  onPressed: _busy ? null : () => _act('start'),
-                                  child: const Text(
-                                    'Retry if the class has been starting for over 3 minutes',
-                                  ),
-                                ),
-                            ] else if (instructor) ...[
-                              TextField(
-                                controller: _title,
-                                maxLength: 100,
-                                decoration: const InputDecoration(
-                                  labelText: 'Class title',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              FilledButton.icon(
-                                onPressed: _busy ? null : () => _act('start'),
-                                icon: const Icon(Icons.video_call),
-                                label: const Text('Start live class'),
-                              ),
-                            ] else
-                              const Text(
-                                'No class is live right now. You can join here when your instructor starts one.',
-                              ),
+                            const SizedBox(height: 16),
                           ],
-                          if (_busy)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 18),
-                              child: LinearProgressIndicator(),
-                            ),
+                          LayoutBuilder(
+                            builder: (context, width) {
+                              final sessionPanel = GradeSurface(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            instructor
+                                                ? 'Your classroom'
+                                                : 'Join your classroom',
+                                            style: const TextStyle(
+                                              color: gradeInk,
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        GradeBadge(
+                                          stateLabel,
+                                          color: stateColor,
+                                          icon: live
+                                              ? Icons.radio_button_checked
+                                              : Icons.schedule_rounded,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 22),
+                                    if (_state == null)
+                                      const GradeStateMessage(
+                                        title: 'Class details unavailable',
+                                        message:
+                                            'Refresh to load your classroom.',
+                                        icon: Icons.cloud_off_outlined,
+                                      )
+                                    else if (!configured)
+                                      const GradeStateMessage(
+                                        title:
+                                            'Your classroom is being prepared',
+                                        message: 'The administrator needs to finish setting up the video service. Check back here when it is ready.',
+                                        icon: Icons.video_settings_outlined,
+                                      )
+                                    else if (live || transitioning) ...[
+                                      Text(
+                                        (session?['title'] ?? 'Live class')
+                                            .toString(),
+                                        style: const TextStyle(
+                                          color: gradeInk,
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.w800,
+                                          height: 1.3,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Text(
+                                        live
+                                            ? 'The room is open. Join when you are ready.'
+                                            : status == 'starting'
+                                            ? 'Getting the room ready. This page updates automatically.'
+                                            : 'The instructor is closing this classroom.',
+                                        style: const TextStyle(
+                                          color: gradeMuted,
+                                          height: 1.6,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 24),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.groups_outlined,
+                                            color: accent,
+                                            size: 21,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(
+                                              '$count of 30 student places reserved',
+                                              style: const TextStyle(
+                                                color: gradeInk,
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: LinearProgressIndicator(
+                                          value: (count / 30).clamp(0.0, 1.0),
+                                          minHeight: 7,
+                                          color: accent,
+                                          backgroundColor: gradeBorder,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 24),
+                                      if (live)
+                                        SizedBox(
+                                          width: double.infinity,
+                                          child: FilledButton.icon(
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor: accent,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 20,
+                                                  ),
+                                            ),
+                                            onPressed: _busy
+                                                ? null
+                                                : () => _act('join'),
+                                            icon: const Icon(
+                                              Icons.login_rounded,
+                                            ),
+                                            label: Text(
+                                              _busy
+                                                  ? 'Please wait...'
+                                                  : 'Join class',
+                                            ),
+                                          ),
+                                        ),
+                                      if (status == 'starting' && instructor)
+                                        OutlinedButton.icon(
+                                          onPressed: _busy
+                                              ? null
+                                              : () => _act('start'),
+                                          icon: const Icon(
+                                            Icons.refresh_rounded,
+                                          ),
+                                          label: const Text(
+                                            'Retry starting class',
+                                          ),
+                                        ),
+                                      if (status == 'starting' && instructor)
+                                        const Padding(
+                                          padding: EdgeInsets.only(top: 8),
+                                          child: Text(
+                                            'Retry only if the room has been starting for over 3 minutes.',
+                                            style: TextStyle(
+                                              color: gradeMuted,
+                                              fontSize: 12,
+                                              height: 1.5,
+                                            ),
+                                          ),
+                                        ),
+                                      if (instructor && status != 'starting')
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            top: 12,
+                                          ),
+                                          child: TextButton.icon(
+                                            style: TextButton.styleFrom(
+                                              foregroundColor: const Color(
+                                                0xFFC54444,
+                                              ),
+                                            ),
+                                            onPressed: _busy
+                                                ? null
+                                                : () => _act('end'),
+                                            icon: const Icon(
+                                              Icons.stop_circle_outlined,
+                                              size: 19,
+                                            ),
+                                            label: Text(
+                                              status == 'ending'
+                                                  ? 'Retry ending class'
+                                                  : 'End class for everyone',
+                                            ),
+                                          ),
+                                        ),
+                                    ] else if (instructor) ...[
+                                      const Text(
+                                        'Bring your class together.',
+                                        style: TextStyle(
+                                          fontSize: 24,
+                                          color: gradeInk,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                      const Text(
+                                        'Give this session a title. Once started, enrolled students in this section can join.',
+                                        style: TextStyle(
+                                          color: gradeMuted,
+                                          fontSize: 13,
+                                          height: 1.6,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 24),
+                                      TextField(
+                                        controller: _title,
+                                        enabled: !_busy,
+                                        maxLength: 100,
+                                        textInputAction: TextInputAction.done,
+                                        decoration: gradeInput(
+                                          'Class title',
+                                          icon: Icons.edit_outlined,
+                                          hint: 'e.g. Unit 2 discussion',
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      SizedBox(
+                                        width: double.infinity,
+                                        child: FilledButton.icon(
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: accent,
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 20,
+                                            ),
+                                          ),
+                                          onPressed: _busy
+                                              ? null
+                                              : () => _act('start'),
+                                          icon: const Icon(
+                                            Icons.video_call_outlined,
+                                          ),
+                                          label: Text(
+                                            _busy
+                                                ? 'Starting classroom...'
+                                                : 'Start live class',
+                                          ),
+                                        ),
+                                      ),
+                                    ] else ...[
+                                      Center(
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 16,
+                                          ),
+                                          child: Column(
+                                            children: [
+                                              CircleAvatar(
+                                                radius: 38,
+                                                backgroundColor: accent
+                                                    .withValues(alpha: .08),
+                                                child: Icon(
+                                                  Icons
+                                                      .event_available_outlined,
+                                                  size: 34,
+                                                  color: accent,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 20),
+                                              const Text(
+                                                'See you in class.',
+                                                style: TextStyle(
+                                                  color: gradeInk,
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 24,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 10),
+                                              const Text(
+                                                'No class is live right now. Your classroom will appear here when your instructor starts a session.',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                  color: gradeMuted,
+                                                  height: 1.6,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    if (_busy)
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 18),
+                                        child: LinearProgressIndicator(),
+                                      ),
+                                    if (configured)
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 20),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.sync_rounded,
+                                              size: 16,
+                                              color: gradeMuted,
+                                            ),
+                                            SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                'Class status updates automatically every 15 seconds.',
+                                                style: TextStyle(
+                                                  color: gradeMuted,
+                                                  fontSize: 11,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              );
+                              final guide = GradeSurface(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Before you join',
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w800,
+                                        color: gradeInk,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    _tip(
+                                      Icons.mic_off_outlined,
+                                      'Start quietly',
+                                      'Your microphone and camera start off. Turn them on when you are ready.',
+                                      accent,
+                                    ),
+                                    _tip(
+                                      Icons.headphones_outlined,
+                                      'Hear clearly',
+                                      'Use headphones to reduce echo. Enable sound inside the room if needed.',
+                                      accent,
+                                    ),
+                                    _tip(
+                                      Icons.wifi_rounded,
+                                      'Stay connected',
+                                      'Your reserved place lets you rejoin the same session if your connection drops.',
+                                      accent,
+                                    ),
+                                    _tip(
+                                      instructor
+                                          ? Icons.present_to_all_rounded
+                                          : Icons.groups_outlined,
+                                      instructor
+                                          ? 'Present to your class'
+                                          : 'Learn together',
+                                      instructor
+                                          ? 'Share your screen from inside the room. End the session when everyone is done.'
+                                          : 'Open Participants to see who is in the classroom.',
+                                      accent,
+                                    ),
+                                    const Divider(color: gradeBorder),
+                                    const SizedBox(height: 8),
+                                    const GradeBadge(
+                                      'Recording is off',
+                                      color: gradeMuted,
+                                      icon: Icons.shield_outlined,
+                                    ),
+                                  ],
+                                ),
+                              );
+                              return width.maxWidth < 850
+                                  ? Column(
+                                      children: [
+                                        sessionPanel,
+                                        const SizedBox(height: 16),
+                                        guide,
+                                      ],
+                                    )
+                                  : Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(flex: 3, child: sessionPanel),
+                                        const SizedBox(width: 20),
+                                        Expanded(flex: 2, child: guide),
+                                      ],
+                                    );
+                            },
+                          ),
                         ],
                       ),
                     ),
@@ -256,7 +603,74 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
             ),
     );
   }
+
+  Widget _tip(IconData icon, String title, String description, Color accent) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 22),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: accent.withValues(alpha: .08),
+              child: Icon(icon, size: 19, color: accent),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: gradeInk,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      color: gradeMuted,
+                      fontSize: 12,
+                      height: 1.6,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
 }
+
+Future<bool> _confirmEndClass(BuildContext context) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('End class for everyone?'),
+        content: const Text(
+          'All participants will be disconnected. To meet again, start a new live class.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Keep class open'),
+          ),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFC54444),
+            ),
+            onPressed: () => Navigator.pop(dialog, true),
+            icon: const Icon(Icons.call_end_rounded, size: 18),
+            label: const Text('End class'),
+          ),
+        ],
+      ),
+    ) ??
+    false;
 
 class _LiveRoomScreen extends StatefulWidget {
   const _LiveRoomScreen({
@@ -317,12 +731,17 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
   void _leave() {
     if (mounted && !_leaving) {
       _leaving = true;
-      Navigator.of(context).pop();
+      final route = ModalRoute.of(context);
+      final navigator = Navigator.of(context);
+      // Close an open confirmation before leaving the classroom route.
+      if (route != null) navigator.popUntil((candidate) => candidate == route);
+      navigator.pop();
     }
   }
 
   Future<void> _end() async {
     if (_ending) return;
+    if (!await _confirmEndClass(context) || !mounted) return;
     setState(() => _ending = true);
     try {
       await _service.request(
@@ -344,23 +763,54 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFF101827),
+    backgroundColor: const Color(0xFF0B1120),
     appBar: AppBar(
-      title: Text((widget.connection['title'] ?? 'Live class').toString()),
+      backgroundColor: const Color(0xFF101A2D),
+      foregroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
       leading: IconButton(
-        tooltip: 'Leave class',
+        tooltip: 'Back to Live Classes',
         onPressed: _leave,
-        icon: const Icon(Icons.arrow_back),
+        icon: const Icon(Icons.arrow_back_rounded),
+      ),
+      title: const Text(
+        'Live classroom',
+        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
       ),
       actions: [
         if (widget.connection['instructor'] == true)
-          TextButton(
-            onPressed: _ending ? null : _end,
-            child: Text(_ending ? 'Ending...' : 'End for everyone'),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: RoundGradeAction(
+              icon: Icons.stop_circle_outlined,
+              label: _ending ? 'Ending class...' : 'End class for everyone',
+              accent: const Color(0xFFFF8797),
+              onTap: _ending ? null : _end,
+            ),
           ),
-        TextButton(onPressed: _leave, child: const Text('Leave')),
+        Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFCBDAEF),
+            ),
+            onPressed: _leave,
+            icon: const Icon(Icons.logout_rounded, size: 18),
+            label: const Text('Leave'),
+          ),
+        ),
       ],
     ),
-    body: LiveClassroomEmbed(connection: widget.connection, onLeave: _leave),
+    body: Column(
+      children: [
+        if (_ending) const LinearProgressIndicator(minHeight: 2),
+        Expanded(
+          child: LiveClassroomEmbed(
+            connection: widget.connection,
+            onLeave: _leave,
+          ),
+        ),
+      ],
+    ),
   );
 }

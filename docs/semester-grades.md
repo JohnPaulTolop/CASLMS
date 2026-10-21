@@ -3,7 +3,7 @@
 ## Scope and policy
 
 This implements the exact formula and numerical scale supplied for this project.
-It is named `ssu-configured-50-base-v1`; it is not represented as a verified
+It is named `ssu-configured-50-base-v2`; it is not represented as a verified
 universal CHED mandate. SSU publishes its handbook at
 https://ssu.edu.ph/student-handbook/, but the retrieved landing page alone does
 not establish this exact transmutation table or syllabus component weights.
@@ -18,7 +18,7 @@ weightedRawPercentage = sum(categoryRatio × configuredCategoryWeight)
 transmutedPercentage = (weightedRawPercentage × 0.5) + 50
 ```
 
-Weights are percentages totaling 100. The UI starts with zero weights and
+Categories are Activity, Quiz, Unit Test (`unit_test`), Assignment, and Exam. Weights are percentages totaling 100. Older four-category requests default Unit Test to 0%. Create Unit Test assessments using the assessment type selector; existing quizzes and exams are not automatically reclassified. Deploy the updated `semester-grades` function before using the new category in Flutter. The UI starts with zero weights and
 requires the instructor to enter syllabus weights. It does not invent an SSU
 default. Categories with no work should have zero weight; a nonzero empty
 category produces INC. One low-point task is not weighted equally with a

@@ -1,3 +1,5 @@
+import '../shared/grading_ui.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
@@ -573,7 +575,7 @@ class _InstructorModuleDetailScreenState
     await Navigator.push(
       context,
 
-      MaterialPageRoute(
+      GradeRoute(
         builder: (context) =>
             InstructorAssessmentGradingScreen(assessmentId: assessmentId),
       ),

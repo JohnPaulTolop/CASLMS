@@ -260,10 +260,24 @@ class _NavigationItem extends StatelessWidget {
                     scale: selected ? 1.08 : 1,
                     duration: const Duration(milliseconds: 220),
                     curve: Curves.easeOutBack,
-                    child: Icon(
-                      selected ? destination.activeIcon : destination.icon,
-                      size: 23,
-                      color: foreground,
+                    child: AnimatedContainer(
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: destination.index >= 7
+                            ? accentColor.withValues(
+                                alpha: selected ? .16 : .08,
+                              )
+                            : Colors.transparent,
+                      ),
+                      child: Icon(
+                        selected ? destination.activeIcon : destination.icon,
+                        size: 23,
+                        color: foreground,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -415,7 +429,7 @@ class _MoreDestinationCard extends StatelessWidget {
                   color: selected
                       ? accentColor
                       : accentColor.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(14),
+                  shape: BoxShape.circle,
                 ),
                 child: Icon(
                   selected ? destination.activeIcon : destination.icon,

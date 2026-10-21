@@ -58,6 +58,7 @@ void main() {
       expect(find.textContaining('1.75'), findsNothing);
       expect(find.byKey(const ValueKey('reveal-own-course')), findsOneWidget);
       expect(find.byKey(const ValueKey('reveal-other-course')), findsNothing);
+      await tester.ensureVisible(find.text('Reveal Grade'));
       await tester.tap(find.text('Reveal Grade'));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -88,6 +89,25 @@ void main() {
       await tester.tap(find.text('Verify & Reveal'));
       await tester.pumpAndSettle();
       expect(find.text('Grade: 1.75 · Passed'), findsOneWidget);
+      await tester.ensureVisible(find.text('Hide Grade'));
+      await tester.tap(find.text('Hide Grade'));
+      await tester.pump();
+      expect(find.textContaining('1.75'), findsNothing);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Reveal Grade'));
+      await tester.tap(find.text('Reveal Grade'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('reveal-student-id')),
+        '12345',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('reveal-password')),
+        'correct-password',
+      );
+      await tester.tap(find.text('Verify & Reveal'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1.75'), findsOneWidget);
       await tester.tap(find.byTooltip('Refresh and hide grades'));
       await tester.pumpAndSettle();
       expect(find.textContaining('1.75'), findsNothing);

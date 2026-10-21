@@ -4,28 +4,46 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>CAS LMS • Live classroom</title>
+  <title>CAS LMS · Live classroom</title>
   <link rel="stylesheet" href="live-class.css">
 </head>
-<body>
-  <header>
-    <div><span class="live-dot"></span><strong id="title">Live classroom</strong><span id="state" role="status">Connecting…</span></div>
-    <button id="people-toggle" aria-expanded="false">Participants <span id="count">0 / 31</span></button>
+<body data-connection="connecting">
+  <header class="room-header">
+    <div class="room-identity">
+      <div class="room-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="3"/><path d="m15 10 6-3v10l-6-3z"/></svg></div>
+      <div class="room-heading"><span class="eyebrow">SSU / LIVE LEARNING</span><strong id="title">Live classroom</strong></div>
+    </div>
+    <div class="header-actions">
+      <span class="connection"><span class="live-dot" aria-hidden="true"></span><span id="state" role="status">Connecting...</span></span>
+      <button id="people-toggle" class="people-button" aria-expanded="false" aria-controls="people" title="Show participants"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><circle cx="9" cy="7" r="4"/></svg><span class="people-label">Participants</span><span id="count">0 / 31</span></button>
+    </div>
   </header>
   <main>
     <section id="classroom" aria-label="Classroom video">
+      <div class="stage-heading"><h1>Classroom</h1><span>Your space to listen, learn & connect</span></div>
       <div id="notice" role="status">Connecting to your class. Your camera and microphone are off.</div>
       <div id="screens" aria-label="Shared screen"></div>
-      <div id="grid"></div>
+      <div id="empty" class="empty-stage"><div class="waiting-rings" aria-hidden="true"><span></span><span></span><span></span></div><h2 id="empty-title">Getting your classroom ready</h2><p id="empty-description">You will appear here with your camera and microphone off.</p></div>
+      <div id="grid" aria-label="Participants video grid"></div>
     </section>
-    <aside id="people" hidden><h2>Participants</h2><p>30 student places + 1 instructor</p><ul id="roster"></ul></aside>
+    <aside id="people" hidden aria-labelledby="people-heading">
+      <div class="panel-heading"><h2 id="people-heading">Participants</h2><button id="people-close" class="close-button" aria-label="Close participants" title="Close participants">×</button></div>
+      <p class="panel-description">30 student places + 1 instructor</p>
+      <label class="search-box"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="people-search" type="search" placeholder="Find a participant" aria-label="Search participants" autocomplete="off"></label>
+      <ul id="roster" aria-label="Class participants"></ul>
+      <p id="no-people" hidden>No participants match your search.</p>
+    </aside>
   </main>
   <footer>
-    <button id="mic" disabled aria-pressed="false">Turn mic on</button>
-    <button id="camera" disabled aria-pressed="false">Turn camera on</button>
-    <button id="share" hidden disabled aria-pressed="false">Share screen</button>
-    <button id="sound" disabled>Enable sound</button>
-    <button id="leave" class="danger">Leave class</button>
+    <span class="footer-note"><span class="privacy-dot" aria-hidden="true"></span>Recording is off</span>
+    <div class="call-controls" role="group" aria-label="Classroom controls">
+      <button id="mic" class="control" disabled aria-pressed="false"><span class="control-icon" aria-hidden="true"></span><span class="control-label">Mic off</span></button>
+      <button id="camera" class="control" disabled aria-pressed="false"><span class="control-icon" aria-hidden="true"></span><span class="control-label">Camera off</span></button>
+      <button id="share" class="control" hidden disabled aria-pressed="false"><span class="control-icon" aria-hidden="true"></span><span class="control-label">Share screen</span></button>
+      <button id="sound" class="control" disabled><span class="control-icon" aria-hidden="true"></span><span class="control-label">Enable sound</span></button>
+      <button id="leave" class="control danger"><span class="control-icon" aria-hidden="true"></span><span class="control-label">Leave class</span></button>
+    </div>
+    <span class="footer-note footer-tip">Use headphones for clearer audio</span>
   </footer>
   <div id="audio" aria-hidden="true"></div>
   <script src="vendor/livekit-client-2.23.0.min.js"></script>

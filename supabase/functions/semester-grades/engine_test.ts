@@ -10,7 +10,7 @@ import {
 } from "./engine.ts";
 import type { ComputeOptions, Row, Task } from "./engine.ts";
 const config: ComputeOptions = {
-  weights: { activity: 0, quiz: 100, assignment: 0, exam: 0 },
+  weights: { activity: 0, quiz: 100, assignment: 0, unit_test: 0, exam: 0 },
   missing: "incomplete",
   acceptLegacyQuizScores: false,
 };
@@ -86,7 +86,7 @@ Deno.test("zero scores, fractional scores and the requested 50-base formula", ()
 Deno.test("pool points within categories, then weight; never average item percentages blindly", () => {
   const policy = {
     ...config,
-    weights: { activity: 0, quiz: 40, assignment: 0, exam: 60 },
+    weights: { activity: 0, quiz: 40, assignment: 0, unit_test: 0, exam: 60 },
   };
   const computed = compute(
     [task("small", 10), task("large", 90), task("exam", 100, "exam")],
@@ -295,5 +295,66 @@ Deno.test("reveal is bound to caller UID and own Student ID; active verified pro
   assert.equal(
     ownReveal(profile, "self", "12345", { studentId: "self", posted: true }),
     true,
+  );
+});
+
+Deno.test("Unit Tests have their own weight, points pool, and missing-work checks", () => {
+  const unitTasks = taskDefinitions(
+    {
+      assessments: [{
+        id: "unit-1",
+        courseId: "course",
+        sectionId: "A",
+        status: "published",
+        assessmentType: "unit_test",
+        totalPoints: 100,
+      }],
+    },
+    "course",
+    "A",
+  );
+  assert.equal(unitTasks[0].category, "unit_test");
+  const options: ComputeOptions = {
+    ...config,
+    weights: weights({
+      activity: 0,
+      quiz: 25,
+      unit_test: 75,
+      assignment: 0,
+      exam: 0,
+    }),
+  };
+  const tasks = [task("quiz-1"), ...unitTasks];
+  const scores = [result("quiz-1", 50), result("unit-1", 100)];
+  const grade = compute(tasks, scores, "self", options);
+  assert.equal(grade.rawPercentage, 87.5);
+  assert.equal(grade.percentage, 93.75);
+  assert.equal(grade.grade, "1.50");
+  assert.equal(
+    grade.components.find((row) => row.category === "unit_test")?.earned,
+    100,
+  );
+  assert.equal(compute(tasks, [scores[0]], "self", options).grade, "INC");
+  assert.equal(
+    compute(tasks, [scores[0]], "self", { ...options, missing: "zero" })
+      .rawPercentage,
+    12.5,
+  );
+  assert.throws(() => weights({ ...options.weights, unit_test: -1 }));
+  assert.throws(() => weights({ ...options.weights, unit_test: NaN }));
+  assert.throws(() => weights({ ...options.weights, unit_test: 80 }));
+});
+
+Deno.test("older four-category clients allocate zero to Unit Tests", () => {
+  const legacy = { activity: 0, quiz: 100, assignment: 0, exam: 0 };
+  assert.equal(weights(legacy).unit_test, 0);
+  assert.equal(
+    compute(
+      [task("q"), task("unit", 100, "unit_test")],
+      [result("q", 100)],
+      "self",
+      { ...config, weights: weights(legacy) },
+    ).grade,
+    "1.00",
   );
 });

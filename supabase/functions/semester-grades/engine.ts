@@ -1,13 +1,19 @@
 export type Row = Record<string, any>;
-export const CATEGORIES = ["activity", "quiz", "assignment", "exam"] as const;
+export const CATEGORIES = [
+  "activity",
+  "quiz",
+  "unit_test",
+  "assignment",
+  "exam",
+] as const;
 export type Category = typeof CATEGORIES[number];
 export type Weights = Record<Category, number>;
-export const POLICY_VERSION = "ssu-configured-50-base-v1";
+export const POLICY_VERSION = "ssu-configured-50-base-v2";
 export function text(value: unknown) {
   return String(value ?? "").trim();
 }
 export function category(value: unknown): Category {
-  const type = text(value).toLowerCase();
+  const type = text(value).toLowerCase().replace(/[\s-]+/g, "_");
   if (type === "summative") return "exam";
   if (!CATEGORIES.includes(type as Category)) {
     throw new Error(
@@ -26,11 +32,15 @@ export function weights(value: unknown): Weights {
   }
   const result = {} as Weights;
   for (const key of CATEGORIES) {
+    // Older clients have four categories; their Unit Test allocation is zero.
+    const amount = key === "unit_test" && input[key] === undefined
+      ? 0
+      : input[key];
     if (
-      typeof input[key] !== "number" || !Number.isFinite(input[key]) ||
-      input[key] < 0 || input[key] > 100
+      typeof amount !== "number" || !Number.isFinite(amount) ||
+      amount < 0 || amount > 100
     ) throw new Error("Each category weight must be between 0 and 100.");
-    result[key] = input[key];
+    result[key] = amount;
   }
   if (
     Math.abs(Object.values(result).reduce((sum, n) => sum + n, 0) - 100) >

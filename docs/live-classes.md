@@ -12,6 +12,25 @@
   tokens permit camera/mic publishing only; hiding screen-share is not the sole
   enforcement. Recording and data-channel chat are disabled for this version.
 
+## Classroom interface
+
+The lobby shows the course and section, a live/starting/ending state, reserved
+student places, and a role-specific start or join action. A short preparation
+panel explains microphone/camera defaults, sound, and reconnecting. Its panels
+stack on smaller screens.
+
+Inside the room, circular labeled controls show microphone/camera state. The
+participant panel supports search, a close button, and Escape with focus returned
+to the participant toggle. The active speaker is highlighted; instructor tiles
+have a distinct background. Connection badges distinguish connecting,
+reconnecting, disconnected, and connected states. Screen sharing gives the
+presentation more space. Transitions respect reduced-motion preferences.
+
+Ending a session requires confirmation. The classroom route and any open
+confirmation close if the server reports the session has ended. Camera and
+microphone still start off; the room remains limited to 30 students plus one
+instructor. These interface changes require rebuilding the Flutter web preview;
+they do not require changes to the LiveKit backend configuration.
 ## Capacity and free usage
 
 There are **30 student places + one instructor** per section's live session.

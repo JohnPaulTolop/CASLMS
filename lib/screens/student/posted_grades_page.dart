@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/gradebook_models.dart';
 import '../../services/semester_grades_service.dart';
+import '../shared/grading_ui.dart';
 
 class PostedGradesScreen extends StatefulWidget {
   const PostedGradesScreen({super.key, this.api});
@@ -86,143 +87,275 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFFF7F9FC),
+    backgroundColor: gradeBackground,
     appBar: AppBar(
-      title: const Text('Posted Grades'),
+      title: const Text(
+        'Posted Grades',
+        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+      ),
       automaticallyImplyLeading: false,
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
       actions: [
-        IconButton(
-          tooltip: 'Refresh and hide grades',
-          onPressed: _loading ? null : () => _load(_termId),
-          icon: const Icon(Icons.refresh),
+        if (_revealed.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: RoundGradeAction(
+              icon: Icons.visibility_off_outlined,
+              label: 'Hide all grades',
+              accent: gradeBlue,
+              onTap: () => setState(_revealed.clear),
+            ),
+          ),
+        RoundGradeAction(
+          icon: Icons.refresh_rounded,
+          label: 'Refresh and hide grades',
+          accent: gradeBlue,
+          onTap: _loading ? null : () => _load(_termId),
         ),
+        const SizedBox(width: 16),
       ],
     ),
-    body: Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    body: RefreshIndicator(
+      onRefresh: () => _load(_termId),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
         children: [
-          const Text(
-            'Your semester grades',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          const GradeEntrance(
+            child: GradeHero(
+              title: 'Your grades, kept private.',
+              subtitle: 'Choose a semester, then verify your Student ID and password to reveal a posted grade. Refreshing or leaving the browser hides revealed grades.',
+              icon: Icons.lock_person_outlined,
+              eyebrow: 'YOUR SEMESTER',
+            ),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Grades stay hidden until you verify your Student ID and password. Refreshing or leaving the browser hides revealed grades.',
-          ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
+          if (!_loading && _error == null) ...[
+            GradeStats(
+              items: [
+                (
+                  label: 'Enrolled subjects',
+                  value: '${_subjects.length}',
+                  icon: Icons.menu_book_outlined,
+                  color: gradeBlue,
+                ),
+                (
+                  label: 'Grades posted',
+                  value:
+                      '${_subjects.where((subject) => subject.posted).length}',
+                  icon: Icons.verified_outlined,
+                  color: gradeTeal,
+                ),
+                (
+                  label: 'Grades hidden',
+                  value: '${_subjects.length - _revealed.length}',
+                  icon: Icons.lock_outline,
+                  color: const Color(0xFF8660C7),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
           if (_terms.isNotEmpty)
-            SizedBox(
-              width: 380,
+            GradeSurface(
               child: DropdownButtonFormField<String>(
                 key: ValueKey(_termId),
                 initialValue: _termId,
                 isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Academic year / semester',
-                  border: OutlineInputBorder(),
+                decoration: gradeInput(
+                  'Academic year / semester',
+                  icon: Icons.calendar_month_outlined,
                 ),
                 items: _terms
                     .map(
                       (row) => DropdownMenuItem(
                         value: row['id'] as String,
-                        child: Text(row['label'] as String),
+                        child: Text(
+                          row['label'] as String,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     )
                     .toList(),
                 onChanged: _loading ? null : (value) => _load(value),
               ),
             ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                ? Center(child: Text(_error!))
-                : _subjects.isEmpty
-                ? const Center(
-                    child: Text('No enrolled subjects for this semester.'),
-                  )
-                : ListView.separated(
-                    itemCount: _subjects.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      final subject = _subjects[index];
-                      final grade = _revealed[subject.courseId];
-                      return Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Wrap(
-                            alignment: WrapAlignment.spaceBetween,
-                            runSpacing: 14,
-                            spacing: 24,
-                            children: [
-                              SizedBox(
-                                width: 300,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      subject.code,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 17,
-                                      ),
-                                    ),
-                                    Text(subject.title),
-                                    const SizedBox(height: 12),
-                                    if (grade == null)
-                                      const Text(
-                                        'Grade: [ Hidden ]',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      )
-                                    else
-                                      Text(
-                                        'Grade: ${grade.grade} · ${grade.result}${grade.description.isEmpty || grade.description == grade.result ? '' : ' · ${grade.description}'}',
-                                        key: ValueKey(
-                                          'revealed-${subject.courseId}',
-                                        ),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 18,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                              if (!subject.posted)
-                                const Chip(label: Text('Not posted yet'))
-                              else if (grade == null)
-                                FilledButton.icon(
-                                  key: ValueKey('reveal-${subject.courseId}'),
-                                  onPressed: () => _reveal(subject),
-                                  icon: const Icon(Icons.lock_outline),
-                                  label: const Text('Reveal Grade'),
-                                )
-                              else
-                                OutlinedButton.icon(
-                                  onPressed: () => setState(
-                                    () => _revealed.remove(subject.courseId),
-                                  ),
-                                  icon: const Icon(
-                                    Icons.visibility_off_outlined,
-                                  ),
-                                  label: const Text('Hide Grade'),
-                                ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+          const SizedBox(height: 24),
+          const Text(
+            'Your subjects',
+            style: TextStyle(
+              color: gradeInk,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
           ),
+          const SizedBox(height: 14),
+          if (_loading)
+            const GradeSurface(
+              child: Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+            )
+          else if (_error != null)
+            GradeStateMessage(
+              title: 'Could not load grades',
+              message: _error!,
+              icon: Icons.cloud_off_outlined,
+              onRetry: () => _load(_termId),
+            )
+          else if (_subjects.isEmpty)
+            const GradeStateMessage(
+              title: 'No subjects yet',
+              message: 'No enrolled subjects for this semester.',
+            )
+          else
+            ..._subjects.map(_subjectCard),
         ],
       ),
     ),
   );
+  Widget _subjectCard(PostedSubject subject) {
+    final grade = _revealed[subject.courseId];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: GradeSurface(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const CircleAvatar(
+                  radius: 24,
+                  backgroundColor: Color(0xFFEDF3FF),
+                  child: Icon(Icons.menu_book_outlined, color: gradeBlue),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        subject.code,
+                        style: const TextStyle(
+                          color: gradeInk,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subject.title,
+                        style: const TextStyle(color: gradeMuted, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            AnimatedContainer(
+              duration: gradeMotion(context),
+              padding: const EdgeInsets.all(16),
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: grade == null
+                    ? const Color(0xFFF7F9FD)
+                    : gradeTeal.withValues(alpha: .06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: grade == null
+                      ? gradeBorder
+                      : gradeTeal.withValues(alpha: .2),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Replace sensitive text immediately; no outgoing animation may retain a grade.
+                  if (grade == null)
+                    const Row(
+                      children: [
+                        Icon(Icons.lock_outline, size: 18, color: gradeMuted),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Grade: [ Hidden ]',
+                            style: TextStyle(
+                              color: gradeMuted,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    GradeEntrance(
+                      key: ValueKey('grade-entrance-${subject.courseId}'),
+                      child: Text(
+                        'Grade: ${grade.grade} · ${grade.result}${grade.description.isEmpty || grade.description == grade.result ? '' : ' · ${grade.description}'}',
+                        key: ValueKey('revealed-${subject.courseId}'),
+                        style: const TextStyle(
+                          color: gradeTeal,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  Text(
+                    grade != null
+                        ? 'Visible until you hide it, refresh, or leave the browser.'
+                        : subject.posted
+                        ? 'Your instructor has posted this grade. Verify to view it.'
+                        : 'Your instructor has not posted a final grade yet.',
+                    style: const TextStyle(
+                      color: gradeMuted,
+                      fontSize: 12,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerRight,
+              child: !subject.posted
+                  ? const GradeBadge(
+                      'Not posted yet',
+                      color: gradeMuted,
+                      icon: Icons.schedule_outlined,
+                    )
+                  : grade == null
+                  ? FilledButton.icon(
+                      key: ValueKey('reveal-${subject.courseId}'),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: gradeBlue,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 22,
+                          vertical: 16,
+                        ),
+                      ),
+                      onPressed: () => _reveal(subject),
+                      icon: const Icon(Icons.lock_open_rounded, size: 18),
+                      label: const Text('Reveal Grade'),
+                    )
+                  : OutlinedButton.icon(
+                      onPressed: () =>
+                          setState(() => _revealed.remove(subject.courseId)),
+                      icon: const Icon(Icons.visibility_off_outlined, size: 18),
+                      label: const Text('Hide Grade'),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _RevealDialog extends StatefulWidget {
@@ -275,7 +408,23 @@ class _RevealDialogState extends State<_RevealDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Reveal your grade'),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    backgroundColor: Colors.white,
+    title: const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        CircleAvatar(
+          radius: 26,
+          backgroundColor: Color(0xFFEDF3FF),
+          child: Icon(Icons.lock_person_outlined, color: gradeBlue),
+        ),
+        SizedBox(height: 16),
+        Text(
+          'Reveal your grade',
+          style: TextStyle(fontWeight: FontWeight.w800),
+        ),
+      ],
+    ),
     content: SizedBox(
       width: 390,
       child: SingleChildScrollView(
@@ -288,11 +437,8 @@ class _RevealDialogState extends State<_RevealDialog> {
               key: const ValueKey('reveal-student-id'),
               controller: _id,
               enabled: !_busy,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Student ID',
-                border: OutlineInputBorder(),
-              ),
+              textInputAction: TextInputAction.next,
+              decoration: gradeInput('Student ID', icon: Icons.badge_outlined),
             ),
             const SizedBox(height: 14),
             TextField(
@@ -303,9 +449,9 @@ class _RevealDialogState extends State<_RevealDialog> {
               autocorrect: false,
               enableSuggestions: false,
               onSubmitted: (_) => _submit(),
-              decoration: const InputDecoration(
-                labelText: 'Account Password',
-                border: OutlineInputBorder(),
+              decoration: gradeInput(
+                'Account Password',
+                icon: Icons.lock_outline,
               ),
             ),
             if (_error != null)

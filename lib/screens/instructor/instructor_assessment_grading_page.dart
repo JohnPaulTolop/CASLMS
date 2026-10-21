@@ -1,3 +1,5 @@
+import '../shared/grading_ui.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -809,10 +811,10 @@ class _InstructorAssessmentGradingScreenState
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
         ),
         actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            onPressed: _isLoading ? null : _loadPage,
-            icon: const Icon(Icons.refresh_rounded),
+          RoundGradeAction(
+            icon: Icons.refresh_rounded,
+            label: 'Refresh assessment',
+            onTap: _isLoading ? null : _loadPage,
           ),
           const SizedBox(width: 8),
         ],
@@ -865,7 +867,30 @@ class _InstructorAssessmentGradingScreenState
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(22, 12, 22, 40),
         children: [
-          _buildHeader(),
+          GradeEntrance(child: _buildHeader()),
+          const SizedBox(height: 14),
+          const GradeSurface(
+            padding: EdgeInsets.all(16),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: Color(0xFFE5F5F2),
+                  child: Icon(Icons.route_outlined, color: gradeTeal),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '1. Find a student below.  2. Review their work.  3. Enter the score and save feedback.',
+                    style: TextStyle(
+                      color: gradeMuted,
+                      fontSize: 12,
+                      height: 1.6,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 22),
           Row(
             children: [

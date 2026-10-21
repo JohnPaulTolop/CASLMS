@@ -12,7 +12,7 @@ import {
 import { verifyCampusPassword } from "../campus-login/verify_password.ts";
 import {
   activeAccount,
-  CATEGORIES,
+  category,
   compute,
   ownReveal,
   POLICY_VERSION,
@@ -599,9 +599,9 @@ Deno.serve(async (request) => {
 function categoryFor(definition: Row | undefined, index: number) {
   const type = text(definition?.assessmentType) ||
     ["activity", "assignment", "quiz"][index];
-  return type === "summative"
-    ? "exam"
-    : CATEGORIES.includes(type as any)
-    ? type
-    : "activity";
+  try {
+    return category(type);
+  } catch {
+    return "activity";
+  }
 }

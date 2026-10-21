@@ -390,6 +390,10 @@ class _InstructorCreateAssessmentScreenState
                     items: const [
                       DropdownMenuItem(value: 'quiz', child: Text('Quiz')),
                       DropdownMenuItem(
+                        value: 'unit_test',
+                        child: Text('Unit Test'),
+                      ),
+                      DropdownMenuItem(
                         value: 'activity',
                         child: Text('Activity'),
                       ),

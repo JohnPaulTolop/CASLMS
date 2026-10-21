@@ -28,6 +28,7 @@ class AssessmentService {
 
   static const List<String> allowedAssessmentTypes = [
     'quiz',
+    'unit_test',
     'activity',
     'assignment',
     'exam',

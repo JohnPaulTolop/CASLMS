@@ -1,3 +1,5 @@
+import '../shared/grading_ui.dart';
+
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -350,7 +352,7 @@ class _InstructorSectionDetailsScreenState
     if (assessmentId.isEmpty) return;
 
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+      GradeRoute<void>(
         builder: (_) =>
             InstructorAssessmentGradingScreen(assessmentId: assessmentId),
       ),
@@ -1149,6 +1151,21 @@ class _InstructorSectionDetailsScreenState
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
       children: [
+        GradeShortcut(
+          icon: Icons.calculate_outlined,
+          title: 'Semester Grades',
+          subtitle:
+              'Set weights, preview results, and post grades for this section.',
+          onTap: () => Navigator.of(context).push(
+            GradeRoute<void>(
+              builder: (_) => InstructorSemesterGradesScreen(
+                courseId: widget.courseId,
+                sectionId: widget.sectionId,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
         _panel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1255,11 +1272,11 @@ class _InstructorSectionDetailsScreenState
               ),
               icon: const Icon(Icons.video_call_outlined, color: teal),
             ),
-            IconButton(
-              tooltip: 'Compute & Finalize Semester Grades',
-              icon: const Icon(Icons.calculate_outlined, color: teal),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
+            RoundGradeAction(
+              label: 'Compute & Finalize Semester Grades',
+              icon: Icons.calculate_outlined,
+              onTap: () => Navigator.of(context).push(
+                GradeRoute<void>(
                   builder: (_) => InstructorSemesterGradesScreen(
                     courseId: widget.courseId,
                     sectionId: widget.sectionId,
