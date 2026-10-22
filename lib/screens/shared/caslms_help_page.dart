@@ -4,125 +4,198 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CaslmsGuide {
-  const CaslmsGuide(this.title, this.steps, {this.planned = false});
+  const CaslmsGuide(
+    this.title, 
+    this.steps, {
+    this.planned = false,
+    this.imageAsset, // NEW: Added optional image asset path
+  });
 
   final String title;
   final List<String> steps;
   final bool planned;
+  final String? imageAsset; // NEW: Stores the path for the step's screenshot
 }
 
 class CaslmsGuides {
   static List<CaslmsGuide> forRole(String role) {
     if (role == 'instructor') {
       return const [
-        CaslmsGuide('Create a course', [
-          'Open My Courses from the instructor dashboard.',
-          'Select Create Course.',
-          'Enter the course code, title, description, and academic details.',
-          'Save the course, then open its details.',
-        ]),
-        CaslmsGuide('Add a section', [
-          'Open My Courses and choose a course.',
-          'Select Add Section.',
-          'Enter a section name and identifier, such as BSIT 1A.',
-          'Save. Each new section receives its own class code.',
-          'Add as many sections as needed; there is no fixed limit.',
-        ]),
-        CaslmsGuide('Enroll students', [
-          'Open the course and identify the correct section.',
-          'For new sections, share the section-specific class code.',
-          'Students use Join Section with Code.',
-          'For original classes, use the instructor invitation workflow.',
-          'Check the student roster before assigning activities.',
-        ]),
-        CaslmsGuide('Upload learning materials', [
-          'Open the course and select Course Tools & Materials.',
-          'Open or create the appropriate module.',
-          'Choose the option for adding learning materials.',
-          'Select a supported file or link, then save.',
-          'Verify that students can access the published material.',
-        ]),
-        CaslmsGuide('Create assessments', [
-          'Open the relevant course and module.',
-          'Choose Create Assessment.',
-          'Select the assessment type and enter instructions.',
-          'Set points, submission details, and the due date.',
-          'Review the assessment before publishing.',
-          'Section-specific assessment controls are being integrated.',
-        ]),
-        CaslmsGuide('Use the AI assistant', [
-          'Open the AI Assistant tab in the instructor area.',
-          'Choose a course context if the teaching assistant is available.',
-          'Ask for lesson plans, quizzes, assignments, or learning activities.',
-          'Review the result before copying it into your materials.',
-          'AI requires a working Firebase AI service and available quota.',
-        ]),
-        CaslmsGuide('Create grading rubrics', [
-          'Choose the essay assessment you want to grade.',
-          'Define criteria such as content, organization, and grammar.',
-          'Assign maximum points or weights to each criterion.',
-          'Review the rubric before it is used for grading.',
-          'The rubric editor is part of the ongoing essay-grading feature.',
-        ], planned: true),
-        CaslmsGuide('Check student submissions', [
-          'Open the instructor Grading area.',
-          'Select the course and assessment.',
-          'Review each available student submission.',
-          'Check the response, attachments, and submission status.',
-          'Section-specific submission separation is being integrated.',
-        ]),
-        CaslmsGuide('Review and publish grades', [
-          'Open an assessment submission in Grading.',
-          'Review the score and instructor feedback.',
-          'For AI-assisted essays, treat any AI score as a suggestion.',
-          'Correct the score and feedback before approving.',
-          'The full AI rubric approval workflow is still being developed.',
-        ], planned: true),
+        CaslmsGuide(
+          'Create a course', 
+          [
+            'Open My Courses from the instructor dashboard.',
+            'Select Create Course.',
+            'Enter the course code, title, description, and academic details.',
+            'Save the course, then open its details.',
+          ],
+          imageAsset: 'assets/images/instructor_create_course.png',
+        ),
+        CaslmsGuide(
+          'Add a section', 
+          [
+            'Open My Courses and choose a course.',
+            'Select Add Section.',
+            'Enter a section name and identifier, such as BSIT 1A.',
+            'Save. Each new section receives its own class code.',
+            'Add as many sections as needed; there is no fixed limit.',
+          ],
+          imageAsset: 'assets/images/instructor_add_section.png',
+        ),
+        CaslmsGuide(
+          'Enroll students', 
+          [
+            'Open the course and identify the correct section.',
+            'For new sections, share the section-specific class code.',
+            'Students use Join Section with Code.',
+            'For original classes, use the instructor invitation workflow.',
+            'Check the student roster before assigning activities.',
+          ],
+          imageAsset: 'assets/images/instructor_enroll_students.png',
+        ),
+        CaslmsGuide(
+          'Upload learning materials', 
+          [
+            'Open the course and select Course Tools & Materials.',
+            'Open or create the appropriate module.',
+            'Choose the option for adding learning materials.',
+            'Select a supported file or link, then save.',
+            'Verify that students can access the published material.',
+          ],
+          imageAsset: 'assets/images/instructor_upload_materials.png',
+        ),
+        CaslmsGuide(
+          'Create assessments', 
+          [
+            'Open the relevant course and module.',
+            'Choose Create Assessment.',
+            'Select the assessment type and enter instructions.',
+            'Set points, submission details, and the due date.',
+            'Review the assessment before publishing.',
+            'Section-specific assessment controls are being integrated.',
+          ],
+          imageAsset: 'assets/images/instructor_create_assessment.png',
+        ),
+        CaslmsGuide(
+          'Use the AI assistant', 
+          [
+            'Open the AI Assistant tab in the instructor area.',
+            'Choose a course context if the teaching assistant is available.',
+            'Ask for lesson plans, quizzes, assignments, or learning activities.',
+            'Review the result before copying it into your materials.',
+            'AI requires a working Firebase AI service and available quota.',
+          ],
+          imageAsset: 'assets/images/instructor_ai_assistant.png',
+        ),
+        CaslmsGuide(
+          'Create grading rubrics', 
+          [
+            'Choose the essay assessment you want to grade.',
+            'Define criteria such as content, organization, and grammar.',
+            'Assign maximum points or weights to each criterion.',
+            'Review the rubric before it is used for grading.',
+            'The rubric editor is part of the ongoing essay-grading feature.',
+          ], 
+          planned: true,
+          imageAsset: 'assets/images/instructor_grading_rubrics.png',
+        ),
+        CaslmsGuide(
+          'Check student submissions', 
+          [
+            'Open the instructor Grading area.',
+            'Select the course and assessment.',
+            'Review each available student submission.',
+            'Check the response, attachments, and submission status.',
+            'Section-specific submission separation is being integrated.',
+          ],
+          imageAsset: 'assets/images/instructor_check_submissions.png',
+        ),
+        CaslmsGuide(
+          'Review and publish grades', 
+          [
+            'Open an assessment submission in Grading.',
+            'Review the score and instructor feedback.',
+            'For AI-assisted essays, treat any AI score as a suggestion.',
+            'Correct the score and feedback before approving.',
+            'The full AI rubric approval workflow is still being developed.',
+          ], 
+          planned: true,
+          // Assuming you will add this image later, using the root assets/images path
+          imageAsset: 'assets/images/instructor_publish_grades.png', 
+        ),
       ];
     }
 
     if (role == 'student') {
       return const [
-        CaslmsGuide('Join a section', [
-          'Open the Student Dashboard.',
-          'Select Join Section with Code.',
-          'Enter the code provided by your instructor.',
-          'For an original class, check Course Invitations instead.',
-        ]),
-        CaslmsGuide('Find learning materials', [
-          'Open your enrolled classes.',
-          'Choose the course and look for its modules.',
-          'Open a module to view available learning materials.',
-        ]),
-        CaslmsGuide('Complete assessments', [
-          'Open Assignments or the assessment inside a course.',
-          'Read the instructions and due date.',
-          'Complete the activity and verify successful submission.',
-        ]),
-        CaslmsGuide('View grades and feedback', [
-          'Open your Progress or assessment results area.',
-          'Review published results and instructor feedback.',
-          'Contact your instructor about missing or incorrect results.',
-        ]),
+        CaslmsGuide(
+          'Join a section', 
+          [
+            'Open the Student Dashboard.',
+            'Select Join Section with Code.',
+            'Enter the code provided by your instructor.',
+            'For an original class, check Course Invitations instead.',
+          ],
+          imageAsset: 'assets/images/student_join_section.png',
+        ),
+        CaslmsGuide(
+          'Find learning materials', 
+          [
+            'Open your enrolled classes.',
+            'Choose the course and look for its modules.',
+            'Open a module to view available learning materials.',
+          ],
+          imageAsset: 'assets/images/student_find_materials.png',
+        ),
+        CaslmsGuide(
+          'Complete assessments', 
+          [
+            'Open Assignments or the assessment inside a course.',
+            'Read the instructions and due date.',
+            'Complete the activity and verify successful submission.',
+          ],
+          imageAsset: 'assets/images/student_complete_assessments.png',
+        ),
+        CaslmsGuide(
+          'View grades and feedback', 
+          [
+            'Open your Progress or assessment results area.',
+            'Review published results and instructor feedback.',
+            'Contact your instructor about missing or incorrect results.',
+          ],
+          imageAsset: 'assets/images/student_view_grades.png',
+        ),
       ];
     }
 
     return const [
-      CaslmsGuide('Get started', [
-        'Review the main dashboard.',
-        'Use the navigation menu to open your assigned features.',
-        'Check notifications for new actions or updates.',
-      ]),
-      CaslmsGuide('Use the system safely', [
-        'Only access records you are authorized to view.',
-        'Review information before saving important changes.',
-        'Sign out after using a shared computer.',
-      ]),
-      CaslmsGuide('Find help', [
-        'Open Help & User Guide.',
-        'Choose a topic that matches your task.',
-        'Replay the guided tour whenever you need a refresher.',
-      ]),
+      CaslmsGuide(
+        'Get started', 
+        [
+          'Review the main dashboard.',
+          'Use the navigation menu to open your assigned features.',
+          'Check notifications for new actions or updates.',
+        ],
+        imageAsset: 'assets/images/general_get_started.png',
+      ),
+      CaslmsGuide(
+        'Use the system safely', 
+        [
+          'Only access records you are authorized to view.',
+          'Review information before saving important changes.',
+          'Sign out after using a shared computer.',
+        ],
+        imageAsset: 'assets/images/general_use_safely.png',
+      ),
+      CaslmsGuide(
+        'Find help', 
+        [
+          'Open Help & User Guide.',
+          'Choose a topic that matches your task.',
+          'Replay the guided tour whenever you need a refresher.',
+        ],
+        imageAsset: 'assets/images/general_find_help.png',
+      ),
     ];
   }
 }
@@ -257,57 +330,26 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                 final bool isWide = constraints.maxWidth > 800;
 
                 // ==================================================
-                // SCREENSHOT PLACEHOLDER
+                // UPDATED SCREENSHOT DISPLAY
                 // ==================================================
                 final Widget imageSpace = AspectRatio(
                   aspectRatio: isWide ? 4 / 3 : 16 / 10,
                   child: Container(
                     width: double.infinity,
+                    clipBehavior: Clip.antiAlias,
                     decoration: BoxDecoration(
                       color: const Color(0xFFF7F9FC),
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(color: const Color(0xFFE6EAF0), width: 1.5),
                     ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(24),
-                          decoration: BoxDecoration(
-                            color: primaryTeal.withValues(alpha: 0.08),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.image_outlined,
-                            size: 64,
-                            color: primaryTeal.withValues(alpha: 0.7),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Text(
-                          'Screenshot space for:',
-                          style: TextStyle(
-                            color: const Color(0xFF68738A).withValues(alpha: 0.7),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Text(
-                            '"${entry.title}"',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Color(0xFF68738A),
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    child: (entry.imageAsset != null && entry.imageAsset!.isNotEmpty)
+                        ? Image.asset(
+                            entry.imageAsset!,
+                            // CHANGED: Use contain so the entire image fits inside the bounds without cropping
+                            fit: BoxFit.contain, 
+                            errorBuilder: (context, error, stackTrace) => _buildPlaceholder(entry),
+                          )
+                        : _buildPlaceholder(entry),
                   ),
                 );
 
@@ -499,6 +541,50 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
           ),
         ),
       ),
+    );
+  }
+
+  // Helper widget to retain the placeholder UI when an image is missing
+  Widget _buildPlaceholder(CaslmsGuide entry) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: primaryTeal.withValues(alpha: 0.08),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.image_outlined,
+            size: 64,
+            color: primaryTeal.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Screenshot space for:',
+          style: TextStyle(
+            color: const Color(0xFF68738A).withValues(alpha: 0.7),
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            '"${entry.title}"',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF68738A),
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
