@@ -391,24 +391,22 @@ class CampusAuthService {
       return null;
     }
 
-    return {...await _synchronizeVerifiedEmail(profile), 'uid': user.uid};
+    return {...profile, 'uid': user.uid};
   }
 
   Stream<Map<String, dynamic>?> watchProfile(String userId) {
-    return _firestore.collection('users').doc(userId).snapshots().asyncMap((
+    // A live read must not renew Auth tokens or perform profile writes.
+    // Synchronization is explicit after verification and during sign-in.
+    return _firestore.collection('users').doc(userId).snapshots().map((
       document,
-    ) async {
+    ) {
       final Map<String, dynamic>? profile = document.data();
 
       if (!document.exists || profile == null) {
         return null;
       }
 
-      final ownProfile = document.id == _auth.currentUser?.uid;
-      return {
-        ...ownProfile ? await _synchronizeVerifiedEmail(profile) : profile,
-        'uid': document.id,
-      };
+      return {...profile, 'uid': document.id};
     });
   }
 
@@ -443,7 +441,11 @@ class CampusAuthService {
     if (user == null) throw CampusAuthException('Please sign in again.');
     await user.reload();
     await _auth.currentUser?.getIdToken(true);
-    await getCurrentProfile();
+    final profile = await getCurrentProfile();
+    if (profile == null) {
+      throw CampusAuthException('Your profile is unavailable.');
+    }
+    await _synchronizeVerifiedEmail(profile);
   }
 
   Future<void> signOut() async {

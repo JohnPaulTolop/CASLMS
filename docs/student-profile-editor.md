@@ -35,8 +35,9 @@ It cannot activate suspended/pending accounts or change Student ID, role or
 status. Repeated synchronization is idempotent. Registration/activation remain
 unchanged.
 
-`CampusAuthService` synchronizes a verified changed address when loading the
-current student's profile or signing in. Own-profile reads remain possible
+`CampusAuthService` synchronizes a verified changed address only during an
+explicit Check email verification action or sign-in. Opening Profile and live
+profile listeners do not force token renewal or perform writes. Own-profile reads remain possible
 while the old Firestore email awaits synchronization. Reset Password continues
 to use the confirmed registered address, never an unsaved form value.
 
@@ -101,3 +102,33 @@ logout, class enrollment and grade access still work.
 - `supabase/functions/student-registration/policy_test.ts`
 - `scripts/deploy-student-profile.ps1`
 - `docs/student-profile-editor.md`
+
+## Session refresh loop repair
+
+Profile initialization previously requested `reload()`/`getIdToken(true)`.
+The token event rebuilt SessionGate and recreated its profile stream, briefly
+replacing the dashboard with a loading view. The remounted Profile requested
+another token, creating a feedback loop even while Profile was an offscreen
+child of the dashboard's IndexedStack.
+
+Profile initialization now performs ordinary Firestore reads. Both the Auth
+and per-UID profile streams are initialized once in widget state. Same-UID
+token events retain the mounted dashboard; changing UID disposes the old
+profile listener. Live account status and email-verification checks remain in
+place. Profile reads/listeners are read-only; email synchronization happens at
+explicit verification or sign-in.
+
+The repair changes `lib/screens/session_gate.dart`,
+`lib/services/campus_auth_service.dart`, and
+`lib/screens/student/student_profile_page.dart`. Regression tests in
+`test/session_gate_refresh_test.dart` exercise repeated token events, parent
+rebuilds, live suspension, old-listener cleanup and account switching. Test
+execution in the restricted runtime is blocked by the Flutter SDK cache
+lockfile; run locally:
+
+```powershell
+flutter test --no-pub test/session_gate_refresh_test.dart
+```
+
+This repair needs only a rebuilt web client. The supporting email-sync function
+does not need redeployment if it was deployed for the previous profile update.

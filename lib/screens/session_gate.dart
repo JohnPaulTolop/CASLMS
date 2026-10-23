@@ -9,16 +9,24 @@ import 'instructor/instructor_main_page.dart';
 import 'landing_page.dart';
 import 'student/student_main_page.dart';
 
-class SessionGate extends StatelessWidget {
-  const SessionGate({super.key, this.notificationId});
+class SessionGate extends StatefulWidget {
+  const SessionGate({super.key, this.notificationId, this.authService});
   final String? notificationId;
+  final CampusAuthService? authService;
 
-  static final CampusAuthService _authService = CampusAuthService();
+  @override
+  State<SessionGate> createState() => _SessionGateState();
+}
+
+class _SessionGateState extends State<SessionGate> {
+  late final CampusAuthService _authService =
+      widget.authService ?? CampusAuthService();
+  late final Stream<User?> _session = _authService.authStateChanges;
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: _authService.authStateChanges,
+      stream: _session,
       initialData: _authService.currentUser,
       builder: (context, authSnapshot) {
         if (authSnapshot.connectionState == ConnectionState.waiting &&
@@ -35,27 +43,43 @@ class SessionGate extends StatelessWidget {
         return _AuthenticatedRoleGate(
           key: ValueKey(user.uid),
           userId: user.uid,
-          notificationId: notificationId,
+          notificationId: widget.notificationId,
+          authService: _authService,
         );
       },
     );
   }
 }
 
-class _AuthenticatedRoleGate extends StatelessWidget {
-  const _AuthenticatedRoleGate({super.key, required this.userId, this.notificationId});
+class _AuthenticatedRoleGate extends StatefulWidget {
+  const _AuthenticatedRoleGate({
+    super.key,
+    required this.userId,
+    this.notificationId,
+    required this.authService,
+  });
   final String? notificationId;
-
   final String userId;
+  final CampusAuthService authService;
 
-  static final CampusAuthService _authService = CampusAuthService();
+  @override
+  State<_AuthenticatedRoleGate> createState() => _AuthenticatedRoleGateState();
+}
+
+class _AuthenticatedRoleGateState extends State<_AuthenticatedRoleGate> {
+  // This state is keyed by UID. Token renewal must reuse the same stream and
+  // preserve the mounted dashboard, current tab and unsaved profile form.
+  late final Stream<Map<String, dynamic>?> _profile = widget.authService
+      .watchProfile(widget.userId);
+  CampusAuthService get _authService => widget.authService;
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<Map<String, dynamic>?>(
-      stream: _authService.watchProfile(userId),
+      stream: _profile,
       builder: (context, profileSnapshot) {
-        if (profileSnapshot.connectionState == ConnectionState.waiting) {
+        if (profileSnapshot.connectionState == ConnectionState.waiting &&
+            !profileSnapshot.hasData) {
           return const _LoadingScreen();
         }
 
@@ -85,7 +109,7 @@ class _AuthenticatedRoleGate extends StatelessWidget {
 
         final String profileUid = (profile['uid'] ?? '').toString().trim();
 
-        if (profileUid.isNotEmpty && profileUid != userId) {
+        if (profileUid.isNotEmpty && profileUid != widget.userId) {
           return _AccountStateScreen(
             icon: Icons.security_rounded,
             iconColor: const Color(0xFFFF4B4B),
@@ -111,8 +135,7 @@ class _AuthenticatedRoleGate extends StatelessWidget {
             profile['emailVerificationRequired'] == true &&
             (status == 'pending_verification' ||
                 (status == 'active' &&
-                    FirebaseAuth.instance.currentUser?.emailVerified !=
-                        true))) {
+                    _authService.currentUser?.emailVerified != true))) {
           return EmailVerificationScreen(
             email: (profile['email'] ?? '').toString(),
           );
@@ -166,13 +189,13 @@ class _AuthenticatedRoleGate extends StatelessWidget {
 
         switch (role) {
           case 'student':
-            return StudentMainScreen(notificationId: notificationId);
+            return StudentMainScreen(notificationId: widget.notificationId);
 
           case 'instructor':
-            return InstructorMainScreen(notificationId: notificationId);
+            return InstructorMainScreen(notificationId: widget.notificationId);
 
           case 'admin':
-            return AdminMainScreen(notificationId: notificationId);
+            return AdminMainScreen(notificationId: widget.notificationId);
 
           default:
             return _AccountStateScreen(

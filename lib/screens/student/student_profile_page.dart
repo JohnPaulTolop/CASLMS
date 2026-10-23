@@ -1,4 +1,3 @@
-import '../../services/campus_auth_service.dart';
 import 'student_profile_editor.dart';
 import '../../services/activity_log_service.dart';
 
@@ -81,7 +80,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         throw Exception('You are not currently logged in.');
       }
 
-      await CampusAuthService().checkVerifiedProfileEmail();
       final DocumentSnapshot<Map<String, dynamic>> profileDocument =
           await _firestore.collection('users').doc(user.uid).get();
 
