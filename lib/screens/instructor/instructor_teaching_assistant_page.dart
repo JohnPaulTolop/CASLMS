@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/instructor_teaching_ai_service.dart';
 import '../shared/learner_assistant_page.dart';
+import '../shared/assistant_scope_banner.dart';
 
 class InstructorTeachingAssistantScreen extends StatefulWidget {
   const InstructorTeachingAssistantScreen({super.key});
@@ -209,8 +210,10 @@ class _InstructorTeachingAssistantScreenState
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) =>
-                    const LearnerAssistantScreen(role: 'instructor'),
+                builder: (_) => const LearnerAssistantScreen(
+                  role: 'instructor',
+                  initialStudyHelp: false,
+                ),
               ),
             ),
           ),
@@ -233,6 +236,10 @@ class _InstructorTeachingAssistantScreenState
             constraints: const BoxConstraints(maxWidth: 900),
             child: Column(
               children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 10, 16, 4),
+                  child: AssistantScopeBanner(color: teal),
+                ),
                 _buildContextSelector(),
                 if (_error != null) _buildErrorBanner(),
                 Expanded(
@@ -240,6 +247,11 @@ class _InstructorTeachingAssistantScreenState
                       ? _buildEmptyState()
                       : _buildChatList(),
                 ),
+                if (!_sending &&
+                    _error == null &&
+                    _messages.isNotEmpty &&
+                    !_messages.last.isUser)
+                  _buildFollowUps(),
                 _buildInputArea(),
               ],
             ),
@@ -252,6 +264,36 @@ class _InstructorTeachingAssistantScreenState
   // ============================================================
   // UI COMPONENTS
   // ============================================================
+
+  Widget _buildFollowUps() {
+    final limited =
+        _messages.last.text.startsWith("I'm limited to CAS LMS") ||
+        _messages.last.text.startsWith(
+          'I can help with CAS LMS and schoolwork.',
+        );
+    final questions = limited
+        ? ['Help me plan a lesson', 'How do I publish an activity in CAS LMS?']
+        : [
+            'Show a classroom example',
+            'Adapt this for beginners',
+            'Suggest a practice activity',
+          ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: SizedBox(
+        height: 42,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: questions.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemBuilder: (_, i) => ActionChip(
+            label: Text(questions[i]),
+            onPressed: () => _send(questions[i]),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildContextSelector() {
     return Container(
@@ -601,7 +643,7 @@ class _InstructorTeachingAssistantScreenState
                 ),
                 SizedBox(width: 12),
                 Text(
-                  'Analyzing course data...',
+                  'Preparing teaching guidance…',
                   style: TextStyle(
                     color: secondaryText,
                     fontSize: 13,

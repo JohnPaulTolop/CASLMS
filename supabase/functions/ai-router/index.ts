@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { caller, cors, db, RequestError } from "../_shared/firebase.ts";
-import { AiError, parseInput, providers, route } from "./engine.ts";
+import { AiError, parseInput, providers } from "./engine.ts";
 import type { Provider } from "./engine.ts";
+import { guardedRoute, isChat, taskAllowed } from "./chat_policy.ts";
 const env = (key: string) => Deno.env.get(key)?.trim();
 const number = (key: string, fallback: number, maximum: number) => {
   const value = Number(env(key) || fallback);
@@ -163,8 +164,11 @@ Deno.serve(async (request) => {
         (actor.email_verified !== true || actor.email !== profile.email)
     ) throw new RequestError("Only verified active accounts may use AI.", 403);
     const input = parseInput(await boundedBody(request));
-    if (profile.role === "student" && input.task !== "records_summary") {
-      throw new RequestError("This AI action is for instructors.", 403);
+    if (!taskAllowed(profile.role, input.task)) {
+      throw new RequestError(
+        "This AI action is unavailable for your role.",
+        403,
+      );
     }
     let available = providers(env, input.task);
     if (env("AI_NVIDIA_USAGE") === "prototype") {
@@ -201,8 +205,9 @@ Deno.serve(async (request) => {
           }
         }, 8000);
         try {
+          if (isChat(input)) send({ type: "status", stage: "checking_topic" });
           for await (
-            const event of route(input, available, health, abort.signal)
+            const event of guardedRoute(input, available, health, abort.signal)
           ) send(event);
         } catch (error) {
           if (!abort.signal.aborted) {

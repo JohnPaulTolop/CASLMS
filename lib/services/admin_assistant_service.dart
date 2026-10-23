@@ -5,31 +5,14 @@ import 'ai_router_service.dart';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_ai/firebase_ai.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AdminAssistantService {
-  AdminAssistantService({
-    FirebaseAuth? auth,
-    FirebaseFirestore? firestore,
-    GenerativeModel? model,
-  }) : _auth = auth ?? FirebaseAuth.instance,
-       _firestore = firestore ?? FirebaseFirestore.instance,
-       _model =
-           model ??
-           FirebaseAI.googleAI().generativeModel(
-             model: 'gemini-3.7-flash',
-             generationConfig: GenerationConfig(
-               maxOutputTokens: 600,
-               thinkingConfig: ThinkingConfig.withThinkingLevel(
-                 ThinkingLevel.low,
-               ),
-             ),
-           );
-
+  AdminAssistantService({FirebaseAuth? auth, FirebaseFirestore? firestore})
+    : _auth = auth ?? FirebaseAuth.instance,
+      _firestore = firestore ?? FirebaseFirestore.instance;
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
-  final GenerativeModel _model;
 
   _AdminAssistantData? _cachedData;
   DateTime? _cacheCreatedAt;
@@ -153,56 +136,14 @@ class AdminAssistantService {
     required _AdminAssistantData data,
   }) async {
     final Map<String, dynamic> context = data.aiContext(question);
-    final String encodedContext = jsonEncode(context);
-
-    final String prompt =
-        '''
-You are the CASLMS administrative records assistant.
-
-Answer the administrator's question using ONLY the supplied CASLMS record context.
-Never invent a student, subject, approval, requirement, grade, status, or personal detail.
-If the records do not contain enough information, clearly say what is unavailable.
-Treat a subject as registered only when its enrollment status is active.
-Treat an assessment requirement as completed only when the supplied record marks it completed.
-Do not expose internal document IDs, authentication email aliases, tokens, or security configuration.
-Use concise plain text with short headings and bullet points when useful.
-The context can be incomplete when the system has more records than the safety limit; mention that when relevant.
-
-ADMIN QUESTION:
-$question
-
-CASLMS RECORD CONTEXT:
-$encodedContext
-''';
-
+    final prompt = jsonEncode({'question': question, 'records': context});
     try {
-      if (AiRouterService.enabled) {
-        return await AiRouterService().complete(
-          task: 'records_summary',
-          messages: [
-            {'role': 'user', 'content': prompt},
-          ],
-        );
-      }
-      final GenerateContentResponse response = await _model
-          .generateContent(<Content>[Content.text(prompt)])
-          .timeout(const Duration(seconds: 35));
-      if (response.candidates.any(
-        (candidate) => candidate.finishReason == FinishReason.maxTokens,
-      )) {
-        throw const AdminAssistantException(
-          'The response reached its length limit. Ask a narrower question.',
-        );
-      }
-      final String answer = (response.text ?? '').trim();
-
-      if (answer.isEmpty) {
-        throw const AdminAssistantException(
-          'The assistant returned an empty response. Please try again.',
-        );
-      }
-
-      return answer;
+      return await AiRouterService().complete(
+        task: 'records_summary',
+        messages: [
+          {'role': 'user', 'content': prompt},
+        ],
+      );
     } on AdminAssistantException {
       rethrow;
     } catch (_) {

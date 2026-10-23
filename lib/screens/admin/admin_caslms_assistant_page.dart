@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/admin_assistant_service.dart';
+import '../shared/assistant_scope_banner.dart';
 
 class AdminCaslmsAssistantScreen extends StatefulWidget {
   const AdminCaslmsAssistantScreen({super.key});
@@ -198,6 +199,10 @@ class _AdminCaslmsAssistantScreenState
       ),
       body: Column(
         children: <Widget>[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: AssistantScopeBanner(color: primary),
+          ),
           _buildPrivacyNotice(),
           Expanded(child: _buildMessages()),
           _buildSuggestions(),
@@ -265,7 +270,7 @@ class _AdminCaslmsAssistantScreenState
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         itemCount: _suggestions.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (BuildContext context, int index) {
           final String suggestion = _suggestions[index];
 
