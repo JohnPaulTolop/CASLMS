@@ -47,7 +47,9 @@ class _AuthScreenState extends State<AuthScreen> {
 
   final TextEditingController _campusIdController = TextEditingController();
 
-  final TextEditingController _departmentController = TextEditingController();
+  final TextEditingController _departmentController = TextEditingController(
+    text: AcademicCatalog.department,
+  );
 
   final TextEditingController _courseController = TextEditingController();
 
@@ -112,7 +114,7 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() {
       _registrationAccountType = type;
       _facultyIdDocument = null;
-      _departmentController.clear();
+      _departmentController.text = AcademicCatalog.department;
       _courseController.clear();
     });
   }
@@ -717,66 +719,22 @@ class _AuthScreenState extends State<AuthScreen> {
                       const SizedBox(height: 18),
                       _label('Department / College'),
                       const SizedBox(height: 8),
-                      if (!_isInstructorRegistration)
-                        DropdownButtonFormField<String>(
-                          key: ValueKey(
-                            'department-${_departmentController.text}',
-                          ),
-                          initialValue:
-                              AcademicCatalog.programs.containsKey(
-                                _departmentController.text,
-                              )
-                              ? _departmentController.text
-                              : null,
-                          isExpanded: true,
-                          menuMaxHeight: 350,
-                          decoration: _inputDecoration(
-                            hintText: 'Select department / college',
-                            icon: Icons.account_balance_outlined,
-                          ),
-                          items: AcademicCatalog.programs.keys
-                              .map(
-                                (department) => DropdownMenuItem(
-                                  value: department,
-                                  child: Text(
-                                    department,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: _isLoading
-                              ? null
-                              : (department) => setState(() {
-                                  _departmentController.text = department ?? '';
-                                  _courseController.clear();
-                                }),
-                          validator: (value) => value == null
-                              ? 'Select your department / college.'
-                              : null,
-                        )
-                      else
-                        TextFormField(
-                          controller: _departmentController,
-                          enabled: !_isLoading,
-                          textCapitalization: TextCapitalization.words,
-                          textInputAction: TextInputAction.next,
-                          decoration: _inputDecoration(
-                            hintText: 'Enter your department',
-                            icon: Icons.account_balance_outlined,
-                          ),
-                          validator: (value) {
-                            if (!_isSignUpMode) {
-                              return null;
-                            }
-
-                            if ((value?.trim() ?? '').isEmpty) {
-                              return 'Please enter your department';
-                            }
-
-                            return null;
-                          },
-                        ),
+                      TextFormField(
+                        controller: _departmentController,
+                        readOnly: true,
+                        enableInteractiveSelection: false,
+                        decoration:
+                            _inputDecoration(
+                              hintText: AcademicCatalog.department,
+                              icon: Icons.account_balance_outlined,
+                            ).copyWith(
+                              suffixIcon: const Icon(
+                                Icons.lock_outline_rounded,
+                              ),
+                              helperText:
+                                  'Department is fixed for CAS registration.',
+                            ),
+                      ),
                       const SizedBox(height: 18),
                       _label(
                         _isInstructorRegistration
@@ -799,9 +757,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           isExpanded: true,
                           menuMaxHeight: 350,
                           decoration: _inputDecoration(
-                            hintText: _departmentController.text.isEmpty
-                                ? 'Select a department first'
-                                : 'Select course / program',
+                            hintText: 'Select course / program',
                             icon: Icons.school_outlined,
                           ),
                           items:
@@ -812,7 +768,7 @@ class _AuthScreenState extends State<AuthScreen> {
                                     (program) => DropdownMenuItem(
                                       value: program,
                                       child: Text(
-                                        program,
+                                        AcademicCatalog.programLabel(program),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),

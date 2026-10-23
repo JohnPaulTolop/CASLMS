@@ -1,3 +1,5 @@
+import '../shared/notification_inbox.dart';
+import '../shared/notification_destination_page.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -17,7 +19,8 @@ import 'activities_scores_page.dart';
 import 'posted_grades_page.dart';
 
 class StudentMainScreen extends StatefulWidget {
-  const StudentMainScreen({super.key});
+  const StudentMainScreen({super.key, this.notificationId});
+  final String? notificationId;
 
   @override
   State<StudentMainScreen> createState() => _StudentMainScreenState();
@@ -31,6 +34,13 @@ class _StudentMainScreenState extends State<StudentMainScreen>
     value: 1,
   );
   int _selectedIndex = 0;
+  int _destinationIndex = 0;
+  bool _destinationVisible = true;
+  final _notificationKey = GlobalKey();
+  late final Widget? _notificationDestination = widget.notificationId == null ? null
+      : NotificationDestinationScreen(key:_notificationKey, notificationId: widget.notificationId!, onTab: (index) {
+          if (mounted) setState(() { _selectedIndex = index; _destinationIndex = index; });
+        });
   final Set<int> _openedTabs = <int>{};
   late final List<Widget> _pages;
 
@@ -70,11 +80,12 @@ class _StudentMainScreenState extends State<StudentMainScreen>
     if (!mounted ||
         index < 0 ||
         index >= _pages.length ||
-        index == _selectedIndex) {
+        index == _selectedIndex && !(_destinationVisible && widget.notificationId != null)) {
       return;
     }
 
     setState(() {
+      _destinationVisible = false;
       _selectedIndex = index;
       _openedTabs.add(index);
     });
@@ -117,8 +128,6 @@ class _StudentMainScreenState extends State<StudentMainScreen>
 
               if (data['isRead'] == true) continue;
 
-              final type = data['type'];
-              if (type != 'grade' && type != 'feedback') continue;
 
               final title = (data['title'] ?? 'New notification').toString();
               final message = (data['message'] ?? '').toString();
@@ -133,6 +142,7 @@ class _StudentMainScreenState extends State<StudentMainScreen>
                       maxLines: 4,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    action: SnackBarAction(label:'Open',onPressed:() => NotificationNavigation.open(context,document.id)),
                     duration: const Duration(seconds: 6),
                     behavior: SnackBarBehavior.floating,
                   ),
@@ -162,8 +172,8 @@ class _StudentMainScreenState extends State<StudentMainScreen>
               index: _selectedIndex,
               children: List.generate(
                 _pages.length,
-                (index) => index < 5 || _openedTabs.contains(index)
-                    ? _pages[index]
+                (index) => index < 5 || _openedTabs.contains(index) || (_destinationVisible && _notificationDestination != null && index == _destinationIndex)
+                    ? (_destinationVisible && _notificationDestination != null && index == _destinationIndex ? _notificationDestination : _pages[index])
                     : const SizedBox.shrink(),
               ),
             ),

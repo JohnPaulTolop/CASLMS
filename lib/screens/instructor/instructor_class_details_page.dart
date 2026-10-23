@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'invite_student_dialog.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +19,7 @@ class InstructorClassDetailsScreen extends StatefulWidget {
   // ============================================================
 
   final String courseId;
+  final String? sectionId;
   final String courseCode;
   final String courseTitle;
   final String classCode;
@@ -32,6 +37,7 @@ class InstructorClassDetailsScreen extends StatefulWidget {
   const InstructorClassDetailsScreen({
     super.key,
     this.courseId = '',
+    this.sectionId,
     this.courseCode = '',
     this.courseTitle = '',
     this.classCode = '',
@@ -76,6 +82,10 @@ class _InstructorClassDetailsScreenState
   // STATE
   // ============================================================
 
+  final List<StreamSubscription> _changes = [];
+  String? _watchedCourseId;
+  Timer? _refreshTimer;
+  int _loadGeneration = 0;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -135,10 +145,15 @@ class _InstructorClassDetailsScreenState
     for (final document in snapshot.docs) {
       final Map<String, dynamic> data = document.data();
       final String code = (data['code'] ?? '').toString().trim().toLowerCase();
-      final String title = (data['title'] ?? '').toString().trim().toLowerCase();
+      final String title = (data['title'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
 
       if (requestedCode.isNotEmpty && code == requestedCode) return document.id;
-      if (requestedTitle.isNotEmpty && title == requestedTitle) return document.id;
+      if (requestedTitle.isNotEmpty && title == requestedTitle) {
+        return document.id;
+      }
     }
 
     throw Exception('The selected course could not be found in Firestore.');
@@ -148,8 +163,9 @@ class _InstructorClassDetailsScreenState
   // LOAD COURSE
   // ============================================================
 
-  Future<void> _loadCourseData() async {
-    if (mounted) {
+  Future<void> _loadCourseData({bool showLoading = true}) async {
+    final generation = ++_loadGeneration;
+    if (mounted && showLoading) {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
@@ -164,6 +180,8 @@ class _InstructorClassDetailsScreenState
       }
 
       final String courseId = await _resolveCourseId();
+      if (!mounted || generation != _loadGeneration) return;
+      _watchChanges(courseId);
 
       final DocumentSnapshot<Map<String, dynamic>> courseDocument =
           await _firestore.collection('courses').doc(courseId).get();
@@ -173,7 +191,9 @@ class _InstructorClassDetailsScreenState
       }
 
       final Map<String, dynamic> courseData = courseDocument.data()!;
-      final String ownerId = (courseData['instructorId'] ?? '').toString().trim();
+      final String ownerId = (courseData['instructorId'] ?? '')
+          .toString()
+          .trim();
 
       if (ownerId != instructorId) {
         throw Exception('You can only manage your own courses.');
@@ -186,11 +206,13 @@ class _InstructorClassDetailsScreenState
               .get();
 
       final List<Map<String, dynamic>> modules = moduleSnapshot.docs
-          .map((document) => {
-                ...document.data(),
-                'id': document.id,
-                'moduleId': document.id,
-              })
+          .map(
+            (document) => {
+              ...document.data(),
+              'id': document.id,
+              'moduleId': document.id,
+            },
+          )
           .toList();
 
       modules.sort((a, b) {
@@ -209,13 +231,16 @@ class _InstructorClassDetailsScreenState
 
       for (final enrollmentDocument in enrollmentSnapshot.docs) {
         final Map<String, dynamic> enrollment = enrollmentDocument.data();
-        final String enrollmentStatus =
-            (enrollment['status'] ?? '').toString().trim().toLowerCase();
+        final String enrollmentStatus = (enrollment['status'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (enrollmentStatus != 'active') continue;
 
-        final String studentId =
-            (enrollment['studentId'] ?? '').toString().trim();
+        final String studentId = (enrollment['studentId'] ?? '')
+            .toString()
+            .trim();
 
         if (studentId.isEmpty) continue;
 
@@ -230,7 +255,7 @@ class _InstructorClassDetailsScreenState
 
         students.add({
           ...enrollment,
-          if (userData != null) ...userData,
+          ...?userData,
           'studentId': studentId,
           'enrollmentId': enrollmentDocument.id,
         });
@@ -256,11 +281,13 @@ class _InstructorClassDetailsScreenState
               .get();
 
       final List<Map<String, dynamic>> assessments = assessmentSnapshot.docs
-          .map((document) => {
-                ...document.data(),
-                'id': document.id,
-                'assessmentId': document.id,
-              })
+          .map(
+            (document) => {
+              ...document.data(),
+              'id': document.id,
+              'assessmentId': document.id,
+            },
+          )
           .toList();
 
       final QuerySnapshot<Map<String, dynamic>> submissionSnapshot =
@@ -271,14 +298,16 @@ class _InstructorClassDetailsScreenState
 
       final List<Map<String, dynamic>> assessmentSubmissions =
           submissionSnapshot.docs
-              .map((document) => {
-                    ...document.data(),
-                    'id': document.id,
-                    'submissionId': document.id,
-                  })
+              .map(
+                (document) => {
+                  ...document.data(),
+                  'id': document.id,
+                  'submissionId': document.id,
+                },
+              )
               .toList();
 
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
 
       setState(() {
         _course = {
@@ -294,7 +323,7 @@ class _InstructorClassDetailsScreenState
         _isLoading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _isLoading = false;
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
@@ -314,19 +343,18 @@ class _InstructorClassDetailsScreenState
   String get _courseCode =>
       (_course?['code'] ?? widget.courseCode).toString().trim();
 
-  String get _courseTitle => (_course?['title'] ??
-          (widget.courseTitle.isNotEmpty ? widget.courseTitle : widget.title))
-      .toString()
-      .trim();
-
-  String get _classCode => (_course?['classCode'] ??
-          (widget.classCode.isNotEmpty ? widget.classCode : widget.section))
-      .toString()
-      .trim();
+  String get _courseTitle =>
+      (_course?['title'] ??
+              (widget.courseTitle.isNotEmpty
+                  ? widget.courseTitle
+                  : widget.title))
+          .toString()
+          .trim();
 
   String get _semester => (_course?['semester'] ?? '').toString().trim();
 
-  String get _academicYear => (_course?['academicYear'] ?? '').toString().trim();
+  String get _academicYear =>
+      (_course?['academicYear'] ?? '').toString().trim();
 
   String get _courseDescription =>
       (_course?['description'] ?? '').toString().trim();
@@ -362,11 +390,14 @@ class _InstructorClassDetailsScreenState
   }
 
   Future<void> _openModule(Map<String, dynamic> module) async {
-    final String moduleId =
-        (module['moduleId'] ?? module['id'] ?? '').toString().trim();
+    final String moduleId = (module['moduleId'] ?? module['id'] ?? '')
+        .toString()
+        .trim();
 
     if (moduleId.isEmpty || _courseId.isEmpty) {
-      _showError('Unable to open this module because its ID information is missing.');
+      _showError(
+        'Unable to open this module because its ID information is missing.',
+      );
       return;
     }
 
@@ -387,10 +418,12 @@ class _InstructorClassDetailsScreenState
   }
 
   Future<void> _openStudentChat(Map<String, dynamic> student) async {
-    final String studentId =
-        (student['studentId'] ?? student['uid'] ?? '').toString().trim();
-    final String studentName =
-        (student['name'] ?? student['studentName'] ?? '').toString().trim();
+    final String studentId = (student['studentId'] ?? student['uid'] ?? '')
+        .toString()
+        .trim();
+    final String studentName = (student['name'] ?? student['studentName'] ?? '')
+        .toString()
+        .trim();
     final String studentEmail = (student['email'] ?? '').toString().trim();
     final String? instructorId = _auth.currentUser?.uid;
 
@@ -431,56 +464,71 @@ class _InstructorClassDetailsScreenState
 
   Future<void> _inviteStudent() async {
     if (_isSendingInvitation || _courseId.isEmpty) return;
-
-    final String? campusId = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => const _InviteStudentDialog(),
-    );
-
-    if (!mounted || campusId == null || campusId.trim().isEmpty) return;
-
     setState(() => _isSendingInvitation = true);
-
-    try {
-      final invitation = await _invitationService.inviteStudentByCampusId(
-        courseId: _courseId,
-        campusId: campusId,
-      );
-
-      if (!mounted) return;
-
-      final String studentName =
-          (invitation['studentName'] ?? invitation['studentCampusId'] ?? '')
-              .toString()
-              .trim();
-
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              studentName.isEmpty
-                  ? 'Course invitation sent.'
-                  : 'Invitation sent to $studentName.',
-            ),
-            backgroundColor: green,
-            behavior: SnackBarBehavior.floating,
+    final sent = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) =>
+          InviteStudentDialog(courseId: _courseId, sectionId: widget.sectionId),
+    );
+    if (!mounted) return;
+    setState(() => _isSendingInvitation = false);
+    if (sent == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Invitation sent. The roster updates when the student accepts.',
           ),
-        );
-
-      await _loadCourseData();
-    } on CourseInvitationException catch (error) {
-      _showError(error.message);
-    } catch (_) {
-      _showError('Unable to send the course invitation.');
-    } finally {
-      if (mounted) setState(() => _isSendingInvitation = false);
+        ),
+      );
     }
+  }
+
+  void _watchChanges(String courseId) {
+    if (_watchedCourseId == courseId) return;
+    _watchedCourseId = courseId;
+    for (final change in _changes) {
+      change.cancel();
+    }
+    _changes.clear();
+    for (final collection in ['enrollments', 'courseInvitations']) {
+      _changes.add(
+        _firestore
+            .collection(collection)
+            .where('courseId', isEqualTo: courseId)
+            .snapshots()
+            .listen(
+              (_) {
+                _refreshTimer?.cancel();
+                _refreshTimer = Timer(const Duration(milliseconds: 180), () {
+                  if (mounted) _loadCourseData(showLoading: false);
+                });
+              },
+              onError: (Object error) {
+                if (mounted) {
+                  _showError('Unable to sync the roster. Please refresh.');
+                }
+              },
+            ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadGeneration++;
+    _refreshTimer?.cancel();
+    for (final change in _changes) {
+      change.cancel();
+    }
+    super.dispose();
   }
 
   Future<void> _cancelInvitation(Map<String, dynamic> invitation) async {
     final String invitationId =
-        (invitation['invitationId'] ?? invitation['id'] ?? '').toString().trim();
+        (invitation['invitationId'] ?? invitation['id'] ?? '')
+            .toString()
+            .trim();
     if (invitationId.isEmpty || _busyInvitationIds.contains(invitationId)) {
       return;
     }
@@ -564,11 +612,7 @@ class _InstructorClassDetailsScreenState
     );
   }
 
-  Widget _sectionHeading(
-    String title,
-    String subtitle, {
-    Widget? trailing,
-  }) {
+  Widget _sectionHeading(String title, String subtitle, {Widget? trailing}) {
     return Row(
       children: [
         Expanded(
@@ -595,43 +639,8 @@ class _InstructorClassDetailsScreenState
             ],
           ),
         ),
-        if (trailing != null) ...[
-          const SizedBox(width: 12),
-          trailing,
-        ],
+        if (trailing != null) ...[const SizedBox(width: 12), trailing],
       ],
-    );
-  }
-
-  Widget _pill(
-    String label, {
-    Color color = teal,
-    Color? backgroundColor,
-    IconData? icon,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: backgroundColor ?? color.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 13, color: color),
-            const SizedBox(width: 5),
-          ],
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -697,7 +706,11 @@ class _InstructorClassDetailsScreenState
     );
   }
 
-  Widget _leadingAvatar(String name, IconData fallbackIcon, {Color color = teal}) {
+  Widget _leadingAvatar(
+    String name,
+    IconData fallbackIcon, {
+    Color color = teal,
+  }) {
     final displayName = name.trim();
 
     if (displayName.isEmpty) {
@@ -792,10 +805,7 @@ class _InstructorClassDetailsScreenState
                     ],
                   ),
                 ),
-                if (trailing != null) ...[
-                  const SizedBox(width: 8),
-                  trailing,
-                ],
+                if (trailing != null) ...[const SizedBox(width: 8), trailing],
               ],
             ),
           ),
@@ -902,7 +912,9 @@ class _InstructorClassDetailsScreenState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _courseTitle.isEmpty ? 'Class workspace' : _courseTitle,
+                          _courseTitle.isEmpty
+                              ? 'Class workspace'
+                              : _courseTitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -939,7 +951,9 @@ class _InstructorClassDetailsScreenState
                       borderRadius: BorderRadius.circular(30),
                     ),
                     child: Text(
-                      _courseStatus.isEmpty ? 'Unknown' : _courseStatus.toUpperCase(),
+                      _courseStatus.isEmpty
+                          ? 'Unknown'
+                          : _courseStatus.toUpperCase(),
                       style: TextStyle(
                         color: isActive
                             ? const Color(0xFF13805D)
@@ -980,8 +994,6 @@ class _InstructorClassDetailsScreenState
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      if (_classCode.isNotEmpty)
-                        _overviewChip(Icons.key_rounded, _classCode),
                       if (_semester.isNotEmpty)
                         _overviewChip(Icons.calendar_today_outlined, _semester),
                       if (_academicYear.isNotEmpty)
@@ -1033,10 +1045,7 @@ class _InstructorClassDetailsScreenState
                 ],
               ),
             ),
-            secondChild: const SizedBox(
-              width: double.infinity,
-              height: 0,
-            ),
+            secondChild: const SizedBox(width: double.infinity, height: 0),
           ),
         ],
       ),
@@ -1062,10 +1071,7 @@ class _InstructorClassDetailsScreenState
           leading: IconButton(
             tooltip: 'Back',
             onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(
-              Icons.arrow_back_rounded,
-              color: heading,
-            ),
+            icon: const Icon(Icons.arrow_back_rounded, color: heading),
           ),
           title: const Text(
             'Course Details',
@@ -1176,8 +1182,11 @@ class _InstructorClassDetailsScreenState
 
   Widget _buildRosterTab() {
     final List<Map<String, dynamic>> pendingInvitations = _courseInvitations
-        .where((invitation) =>
-            (invitation['status'] ?? '').toString().toLowerCase() == 'pending')
+        .where(
+          (invitation) =>
+              (invitation['status'] ?? '').toString().toLowerCase() ==
+              'pending',
+        )
         .toList();
 
     return ListView(
@@ -1225,24 +1234,30 @@ class _InstructorClassDetailsScreenState
                 _emptyState(
                   icon: Icons.group_outlined,
                   title: 'No students enrolled',
-                  message:
-                      'Invite students using their registered Campus ID. They will appear here after accepting.',
+                  message: 'Invite students using their registered Campus ID. They will appear here after accepting.',
                 )
               else
                 ..._students.map((student) {
                   final String name =
-                      (student['name'] ?? student['studentName'] ?? '').toString().trim();
-                  final String email = (student['email'] ?? '').toString().trim();
-                  final String universityId =
-                      (student['universityId'] ?? '').toString().trim();
-                  final String displayName = name.isNotEmpty ? name : universityId;
+                      (student['name'] ?? student['studentName'] ?? '')
+                          .toString()
+                          .trim();
+                  final String email = (student['email'] ?? '')
+                      .toString()
+                      .trim();
+                  final String universityId = (student['universityId'] ?? '')
+                      .toString()
+                      .trim();
+                  final String displayName = name.isNotEmpty
+                      ? name
+                      : universityId;
 
                   return _contentCard(
                     leading: _leadingAvatar(displayName, Icons.person_outline),
                     title: displayName.isNotEmpty ? displayName : email,
                     subtitle: [
                       if (email.isNotEmpty) email,
-                      if (universityId.isNotEmpty) 'Campus ID: $universityId'
+                      if (universityId.isNotEmpty) 'Campus ID: $universityId',
                     ].join('\n'),
                     trailing: IconButton(
                       tooltip: 'Message student',
@@ -1291,11 +1306,15 @@ class _InstructorClassDetailsScreenState
           const SizedBox(height: 10),
           ...invitations.map((invitation) {
             final String invitationId =
-                (invitation['invitationId'] ?? invitation['id'] ?? '').toString().trim();
-            final String studentName =
-                (invitation['studentName'] ?? 'Student').toString().trim();
-            final String campusId =
-                (invitation['studentCampusId'] ?? '').toString().trim();
+                (invitation['invitationId'] ?? invitation['id'] ?? '')
+                    .toString()
+                    .trim();
+            final String studentName = (invitation['studentName'] ?? 'Student')
+                .toString()
+                .trim();
+            final String campusId = (invitation['studentCampusId'] ?? '')
+                .toString()
+                .trim();
             final bool busy = _busyInvitationIds.contains(invitationId);
 
             return _contentCard(
@@ -1305,10 +1324,15 @@ class _InstructorClassDetailsScreenState
                 child: Icon(Icons.schedule_rounded, color: orange, size: 17),
               ),
               title: studentName.isEmpty ? campusId : studentName,
-              subtitle: campusId.isNotEmpty ? 'Campus ID: $campusId' : 'Pending response',
+              subtitle: campusId.isNotEmpty
+                  ? 'Campus ID: $campusId'
+                  : 'Pending response',
               trailing: TextButton(
                 onPressed: busy ? null : () => _cancelInvitation(invitation),
-                child: Text(busy ? 'Cancelling...' : 'Cancel', style: const TextStyle(color: red)),
+                child: Text(
+                  busy ? 'Cancelling...' : 'Cancel',
+                  style: const TextStyle(color: red),
+                ),
               ),
             );
           }),
@@ -1354,21 +1378,24 @@ class _InstructorClassDetailsScreenState
                 )
               else
                 ..._modules.map((module) {
-                  final String title = (module['title'] ?? '').toString().trim();
-                  final String description =
-                      (module['description'] ?? '').toString().trim();
-                  final String status =
-                      (module['status'] ?? 'draft').toString().trim().toLowerCase();
+                  final String title = (module['title'] ?? '')
+                      .toString()
+                      .trim();
+                  final String description = (module['description'] ?? '')
+                      .toString()
+                      .trim();
+                  final String status = (module['status'] ?? 'draft')
+                      .toString()
+                      .trim()
+                      .toLowerCase();
                   final int order = (module['order'] as num?)?.toInt() ?? 0;
                   final String moduleId =
                       (module['moduleId'] ?? module['id'] ?? '').toString();
 
                   final int assessmentCount = _assessments.where((assessment) {
-                    return (assessment['moduleId'] ?? '').toString() == moduleId;
+                    return (assessment['moduleId'] ?? '').toString() ==
+                        moduleId;
                   }).length;
-
-                  final bool published = status == 'published';
-                  final Color statusColor = published ? green : orange;
 
                   return _contentCard(
                     leading: _leadingAvatar('', Icons.menu_book_rounded),
@@ -1377,7 +1404,7 @@ class _InstructorClassDetailsScreenState
                         : (title.isEmpty ? 'Untitled' : title),
                     subtitle: [
                       if (description.isNotEmpty) description,
-                      'Assessments: $assessmentCount • Status: ${status.toUpperCase()}'
+                      'Assessments: $assessmentCount • Status: ${status.toUpperCase()}',
                     ].join('\n'),
                     trailing: const Icon(
                       Icons.chevron_right_rounded,
@@ -1395,7 +1422,9 @@ class _InstructorClassDetailsScreenState
 
   Widget _buildGradesTab() {
     final int submitted = _assessmentSubmissions.where((submission) {
-      final String status = (submission['status'] ?? '').toString().toLowerCase();
+      final String status = (submission['status'] ?? '')
+          .toString()
+          .toLowerCase();
       return status == 'submitted';
     }).length;
 
@@ -1404,7 +1433,8 @@ class _InstructorClassDetailsScreenState
     }).length;
 
     final int published = _assessments.where((assessment) {
-      return (assessment['status'] ?? '').toString().toLowerCase() == 'published';
+      return (assessment['status'] ?? '').toString().toLowerCase() ==
+          'published';
     }).length;
 
     return ListView(
@@ -1454,25 +1484,26 @@ class _InstructorClassDetailsScreenState
                 _emptyState(
                   icon: Icons.grade_outlined,
                   title: 'No assessment submissions yet',
-                  message:
-                      'Student submissions will appear here after the student external-assessment workflow is connected.',
+                  message: 'Student submissions will appear here after the student external-assessment workflow is connected.',
                 )
               else
                 ..._assessmentSubmissions.map((submission) {
-                  final String studentName =
-                      (submission['studentName'] ?? '').toString();
-                  final String status =
-                      (submission['status'] ?? 'submitted').toString().toLowerCase();
+                  final String studentName = (submission['studentName'] ?? '')
+                      .toString();
+                  final String status = (submission['status'] ?? 'submitted')
+                      .toString()
+                      .toLowerCase();
                   final dynamic score = submission['score'];
                   final bool isGraded = status == 'graded';
 
                   return _contentCard(
                     leading: _leadingAvatar(
-                        studentName,
-                        isGraded
-                            ? Icons.check_circle_outline_rounded
-                            : Icons.pending_actions_rounded,
-                        color: isGraded ? green : orange),
+                      studentName,
+                      isGraded
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.pending_actions_rounded,
+                      color: isGraded ? green : orange,
+                    ),
                     title: studentName,
                     subtitle: 'Status: ${status.toUpperCase()}',
                     trailing: Text(
@@ -1520,9 +1551,9 @@ class _InstructorClassDetailsScreenState
                     ),
                     const Divider(height: 1, color: borderColor),
                     _buildSettingTile(
-                      icon: Icons.key_rounded,
-                      title: 'Class Code',
-                      value: _classCode,
+                      icon: Icons.mail_outline_rounded,
+                      title: 'Enrollment',
+                      value: 'By instructor invitation',
                     ),
                     const Divider(height: 1, color: borderColor),
                     _buildSettingTile(
@@ -1628,101 +1659,6 @@ class _InstructorClassDetailsScreenState
           ),
         ],
       ),
-    );
-  }
-}
-
-class _InviteStudentDialog extends StatefulWidget {
-  const _InviteStudentDialog();
-
-  @override
-  State<_InviteStudentDialog> createState() => _InviteStudentDialogState();
-}
-
-class _InviteStudentDialogState extends State<_InviteStudentDialog> {
-  static const Color teal = Color(0xFF00897B);
-
-  final TextEditingController _campusIdController = TextEditingController();
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-
-  @override
-  void dispose() {
-    _campusIdController.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    if (_formKey.currentState?.validate() != true) return;
-    Navigator.of(context)
-        .pop(_campusIdController.text.trim().replaceAll(RegExp(r'\s+'), ''));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.person_add_alt_1_rounded, color: teal),
-          SizedBox(width: 10),
-          Expanded(child: Text('Invite Student')),
-        ],
-      ),
-      content: SizedBox(
-        width: 420,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Enter the Campus ID registered to the student’s CASLMS account.',
-              ),
-              const SizedBox(height: 17),
-              TextFormField(
-                controller: _campusIdController,
-                autofocus: true,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.done,
-                onFieldSubmitted: (_) => _submit(),
-                decoration: const InputDecoration(
-                  labelText: 'Student Campus ID',
-                  hintText: 'Enter 5–12 digits',
-                  prefixIcon: Icon(Icons.badge_outlined),
-                ),
-                validator: (value) {
-                  final campusId = (value ?? '').trim().replaceAll(
-                    RegExp(r'\s+'),
-                    '',
-                  );
-                  if (campusId.isEmpty) return 'Enter the student Campus ID.';
-                  if (!RegExp(r'^\d{5,12}$').hasMatch(campusId)) {
-                    return 'Campus ID must contain 5–12 numeric digits.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'The student must accept the invitation before enrollment becomes active.',
-                style: TextStyle(color: Color(0xFF6B7C93), fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton.icon(
-          onPressed: _submit,
-          icon: const Icon(Icons.send_rounded),
-          label: const Text('Send Invitation'),
-          style: FilledButton.styleFrom(backgroundColor: teal),
-        ),
-      ],
     );
   }
 }

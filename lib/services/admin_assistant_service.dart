@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'ai_router_service.dart';
+
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -13,7 +17,15 @@ class AdminAssistantService {
        _firestore = firestore ?? FirebaseFirestore.instance,
        _model =
            model ??
-           FirebaseAI.googleAI().generativeModel(model: 'gemini-3.7-flash');
+           FirebaseAI.googleAI().generativeModel(
+             model: 'gemini-3.7-flash',
+             generationConfig: GenerationConfig(
+               maxOutputTokens: 600,
+               thinkingConfig: ThinkingConfig.withThinkingLevel(
+                 ThinkingLevel.low,
+               ),
+             ),
+           );
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
@@ -164,9 +176,24 @@ $encodedContext
 ''';
 
     try {
-      final GenerateContentResponse response = await _model.generateContent(
-        <Content>[Content.text(prompt)],
-      );
+      if (AiRouterService.enabled) {
+        return await AiRouterService().complete(
+          task: 'records_summary',
+          messages: [
+            {'role': 'user', 'content': prompt},
+          ],
+        );
+      }
+      final GenerateContentResponse response = await _model
+          .generateContent(<Content>[Content.text(prompt)])
+          .timeout(const Duration(seconds: 35));
+      if (response.candidates.any(
+        (candidate) => candidate.finishReason == FinishReason.maxTokens,
+      )) {
+        throw const AdminAssistantException(
+          'The response reached its length limit. Ask a narrower question.',
+        );
+      }
       final String answer = (response.text ?? '').trim();
 
       if (answer.isEmpty) {

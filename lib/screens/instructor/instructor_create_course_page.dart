@@ -487,7 +487,7 @@ class _InstructorCreateCourseScreenState
 
           Expanded(
             child: Text(
-              'A unique class code will be generated automatically after the course is created. Share that code with students so they can join the class.',
+              'After creating a course, open a section and invite students using their registered Campus ID. Only invited students can join.',
 
               style: TextStyle(color: textGrey, fontSize: 11, height: 1.5),
             ),

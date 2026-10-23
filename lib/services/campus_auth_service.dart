@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'activity_log_service.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
@@ -69,8 +73,10 @@ class CampusAuthService {
       throw CampusAuthException('Enter a valid campus ID number.');
     }
 
-    if (cleanDepartment.isEmpty) {
-      throw CampusAuthException('Department is required.');
+    if (cleanDepartment != AcademicCatalog.department) {
+      throw CampusAuthException(
+        'Registration is for College of Arts and Sciences (CAS).',
+      );
     }
 
     if (cleanCourse.isEmpty) {
@@ -293,6 +299,13 @@ class CampusAuthService {
         throw CampusAuthException('Your CASLMS account is currently inactive.');
       }
 
+      unawaited(
+        ActivityLogService(
+          auth: _auth,
+          firestore: _firestore,
+        ).session('login', profile: profile),
+      );
+
       // Updating login time should not prevent a valid
       // user from entering if this optional write fails.
       try {
@@ -394,7 +407,7 @@ class CampusAuthService {
   }
 
   Future<void> signOut() async {
-    await _auth.signOut();
+    await ActivityLogService(auth: _auth, firestore: _firestore).signOut();
   }
 
   Future<void> _registrationRequest(Map<String, dynamic> body) async {

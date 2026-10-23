@@ -1,3 +1,8 @@
+import 'dart:async';
+
+import '../../services/admin_catalog.dart';
+import '../../models/admin_records.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,8 +11,7 @@ class AdminCoursesScreen extends StatefulWidget {
   const AdminCoursesScreen({super.key});
 
   @override
-  State<AdminCoursesScreen> createState() =>
-      _AdminCoursesScreenState();
+  State<AdminCoursesScreen> createState() => _AdminCoursesScreenState();
 }
 
 class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
@@ -20,8 +24,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
   static const Color orange = Color(0xFFFF9418);
   static const Color red = Color(0xFFFF4B4B);
 
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   bool _isLoading = true;
   bool _isBusy = false;
@@ -30,22 +33,99 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
   String _searchQuery = '';
   String _selectedStatusFilter = 'Active';
 
-  final List<String> _statusOptions = const [
-    'All',
-    'Active',
-    'Archived',
-  ];
+  final List<String> _statusOptions = const ['All', 'Active', 'Archived'];
 
   List<Map<String, dynamic>> _courses = [];
   List<Map<String, dynamic>> _instructors = [];
 
+  AdminCatalog? _catalog;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _enrollmentChanges;
+  List<Map<String, dynamic>> _enrollmentRows = [];
+  bool _rosterReady = false, _started = false;
+  String? _rosterError;
+
   @override
-  void initState() {
-    super.initState();
-    _loadCourses();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _catalog = context
+        .dependOnInheritedWidgetOfExactType<AdminScope>()
+        ?.notifier;
+    if (_catalog != null) {
+      if (_enrollmentChanges == null) _watchEnrollments();
+      _syncDirectory();
+    } else if (!_started) {
+      _started = true;
+      _loadCourses();
+    }
+  }
+
+  void _watchEnrollments() {
+    _enrollmentChanges?.cancel();
+    _rosterReady = false;
+    _rosterError = null;
+    _enrollmentChanges = _firestore
+        .collection('enrollments')
+        .snapshots()
+        .listen(
+          (snapshot) {
+            if (!mounted) return;
+            _enrollmentRows = snapshot.docs
+                .map((d) => <String, dynamic>{...d.data(), 'id': d.id})
+                .toList();
+            _rosterReady = true;
+            _rosterError = null;
+            setState(_syncDirectory);
+          },
+          onError: (Object error) {
+            if (!mounted) return;
+            _rosterReady = true;
+            _rosterError = 'Unable to sync enrollment counts. Please retry.';
+            setState(_syncDirectory);
+          },
+        );
+  }
+
+  void _syncDirectory() {
+    final catalog = _catalog!;
+    final counts = adminEnrollmentCounts(_enrollmentRows);
+    _courses =
+        catalog.courses.entries
+            .map(
+              (entry) => <String, dynamic>{
+                ...entry.value,
+                'id': entry.key,
+                'courseId': entry.key,
+                'studentCount': counts[entry.key] ?? 0,
+                if (catalog.users[adminText(
+                      entry.value['instructorId'],
+                    )]?['name'] !=
+                    null)
+                  'instructorName': catalog
+                      .users[adminText(entry.value['instructorId'])]!['name'],
+              },
+            )
+            .toList()
+          ..sort((a, b) => _courseCode(a).compareTo(_courseCode(b)));
+    _instructors = catalog.users.values
+        .where((u) => u['role'] == 'instructor' && u['status'] == 'active')
+        .toList();
+    _isLoading = catalog.loading || !_rosterReady;
+    _errorMessage = catalog.error ?? _rosterError;
+  }
+
+  @override
+  void dispose() {
+    _enrollmentChanges?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadCourses() async {
+    if (_catalog != null) {
+      if (_catalog!.error != null) await _catalog!.start();
+      if (_rosterError != null) _watchEnrollments();
+      if (mounted) setState(_syncDirectory);
+      return;
+    }
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -54,8 +134,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
     }
 
     try {
-      final courseSnapshot =
-          await _firestore.collection('courses').get();
+      final courseSnapshot = await _firestore.collection('courses').get();
 
       final instructorSnapshot = await _firestore
           .collection('users')
@@ -71,10 +150,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
           )
           .where(
             (user) =>
-                (user['status'] ?? 'active')
-                    .toString()
-                    .trim()
-                    .toLowerCase() ==
+                (user['status'] ?? 'active').toString().trim().toLowerCase() ==
                 'active',
           )
           .toList();
@@ -91,16 +167,14 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
 
         final Set<String> activeStudents = {};
 
-        for (final enrollmentDocument
-            in enrollmentSnapshot.docs) {
+        for (final enrollmentDocument in enrollmentSnapshot.docs) {
           final enrollment = enrollmentDocument.data();
           final status = (enrollment['status'] ?? '')
               .toString()
               .trim()
               .toLowerCase();
 
-          final studentId =
-              (enrollment['studentId'] ?? '').toString().trim();
+          final studentId = (enrollment['studentId'] ?? '').toString().trim();
 
           if (status == 'active' && studentId.isNotEmpty) {
             activeStudents.add(studentId);
@@ -115,10 +189,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
         });
       }
 
-      courses.sort(
-        (a, b) =>
-            _courseCode(a).compareTo(_courseCode(b)),
-      );
+      courses.sort((a, b) => _courseCode(a).compareTo(_courseCode(b)));
 
       if (!mounted) return;
 
@@ -132,16 +203,14 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e.message ?? 'Unable to load courses.';
+        _errorMessage = e.message ?? 'Unable to load courses.';
       });
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -154,7 +223,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
 
       final statusMatches =
           _selectedStatusFilter == 'All' ||
-              status == _selectedStatusFilter.toLowerCase();
+          status == _selectedStatusFilter.toLowerCase();
 
       if (!statusMatches) return false;
 
@@ -166,24 +235,18 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
     }).toList();
   }
 
-  int get _activeCourseCount => _courses
-      .where((course) => _courseStatus(course) == 'active')
-      .length;
+  int get _activeCourseCount =>
+      _courses.where((course) => _courseStatus(course) == 'active').length;
 
-  int get _archivedCourseCount => _courses
-      .where((course) => _courseStatus(course) == 'archived')
-      .length;
+  int get _archivedCourseCount =>
+      _courses.where((course) => _courseStatus(course) == 'archived').length;
 
   int get _totalEnrollments => _courses.fold<int>(
-        0,
-        (total, course) =>
-            total +
-            ((course['studentCount'] as num?)?.toInt() ?? 0),
-      );
+    0,
+    (total, course) => total + ((course['studentCount'] as num?)?.toInt() ?? 0),
+  );
 
-  Future<void> _toggleCourseStatus(
-    Map<String, dynamic> course,
-  ) async {
+  Future<void> _toggleCourseStatus(Map<String, dynamic> course) async {
     if (_isBusy) return;
 
     final courseId = _courseId(course);
@@ -197,9 +260,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
       builder: (dialogContext) {
         return AlertDialog(
           title: Text(
-            next == 'archived'
-                ? 'Archive Course?'
-                : 'Reactivate Course?',
+            next == 'archived' ? 'Archive Course?' : 'Reactivate Course?',
           ),
           content: Text(
             next == 'archived'
@@ -214,13 +275,10 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
             ElevatedButton(
               onPressed: () => Navigator.pop(dialogContext, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    next == 'archived' ? orange : green,
+                backgroundColor: next == 'archived' ? orange : green,
                 foregroundColor: Colors.white,
               ),
-              child: Text(
-                next == 'archived' ? 'Archive' : 'Reactivate',
-              ),
+              child: Text(next == 'archived' ? 'Archive' : 'Reactivate'),
             ),
           ],
         );
@@ -243,9 +301,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
 
       if (!mounted) return;
 
-      _showMessage(
-        '${_courseCode(course)} is now ${_capitalize(next)}.',
-      );
+      _showMessage('${_courseCode(course)} is now ${_capitalize(next)}.');
     } on FirebaseException catch (e) {
       if (!mounted) return;
       _showError(e.message ?? 'Unable to update course status.');
@@ -258,9 +314,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
     }
   }
 
-  Future<void> _editCourse(
-    Map<String, dynamic> course,
-  ) async {
+  Future<void> _editCourse(Map<String, dynamic> course) async {
     if (_isBusy) return;
 
     final result = await showDialog<Map<String, String>>(
@@ -268,40 +322,29 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
       builder: (_) => _AdminCourseEditDialog(
         initialCode: _courseCode(course),
         initialTitle: _courseTitle(course),
-        initialClassCode:
-            (course['classCode'] ?? '').toString(),
-        initialInstructorId:
-            (course['instructorId'] ?? '').toString(),
+        initialClassCode: (course['classCode'] ?? '').toString(),
+        initialInstructorId: (course['instructorId'] ?? '').toString(),
         instructors: _instructors,
       ),
     );
 
     if (result == null) return;
 
-    final code =
-        (result['code'] ?? '').trim().toUpperCase();
+    final code = (result['code'] ?? '').trim().toUpperCase();
     final title = (result['title'] ?? '').trim();
-    final classCode =
-        (result['classCode'] ?? '').trim().toUpperCase();
-    final instructorId =
-        (result['instructorId'] ?? '').trim();
+    final classCode = (result['classCode'] ?? '').trim().toUpperCase();
+    final instructorId = (result['instructorId'] ?? '').trim();
 
-    if (code.isEmpty ||
-        title.isEmpty ||
-        instructorId.isEmpty) {
-      _showError(
-        'Course code, title, and instructor are required.',
-      );
+    if (code.isEmpty || title.isEmpty || instructorId.isEmpty) {
+      _showError('Course code, title, and instructor are required.');
       return;
     }
 
     String instructorName = '';
 
     for (final instructor in _instructors) {
-      if ((instructor['uid'] ?? '').toString() ==
-          instructorId) {
-        instructorName =
-            (instructor['name'] ?? '').toString();
+      if ((instructor['uid'] ?? '').toString() == instructorId) {
+        instructorName = (instructor['name'] ?? '').toString();
         break;
       }
     }
@@ -311,10 +354,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
     });
 
     try {
-      await _firestore
-          .collection('courses')
-          .doc(_courseId(course))
-          .update({
+      await _firestore.collection('courses').doc(_courseId(course)).update({
         'code': code,
         'title': title,
         'classCode': classCode,
@@ -361,9 +401,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
       );
     }
 
-    await Clipboard.setData(
-      ClipboardData(text: csv.toString()),
-    );
+    await Clipboard.setData(ClipboardData(text: csv.toString()));
 
     if (!mounted) return;
 
@@ -429,9 +467,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: adminTheme),
-      );
+      return const Center(child: CircularProgressIndicator(color: adminTheme));
     }
 
     if (_errorMessage != null) {
@@ -530,12 +566,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
     );
   }
 
-  Widget _metricCard(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _metricCard(String label, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
@@ -586,9 +617,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
               borderRadius: BorderRadius.circular(14),
               borderSide: const BorderSide(color: borderColor),
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
         const SizedBox(height: 11),
@@ -596,16 +625,14 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: _statusOptions.map((status) {
-              final selected =
-                  _selectedStatusFilter == status;
+              final selected = _selectedStatusFilter == status;
 
               return Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
                   selected: selected,
                   label: Text(status),
-                  selectedColor:
-                      adminTheme.withValues(alpha: 0.12),
+                  selectedColor: adminTheme.withValues(alpha: 0.12),
                   labelStyle: TextStyle(
                     color: selected ? adminTheme : textGrey,
                     fontWeight: FontWeight.w700,
@@ -636,17 +663,13 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
         border: Border.all(color: borderColor),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 9,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
         leading: Container(
           width: 48,
           height: 48,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: (active ? adminTheme : Colors.grey)
-                .withValues(alpha: 0.10),
+            color: (active ? adminTheme : Colors.grey).withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(13),
           ),
           child: Text(
@@ -676,13 +699,9 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
               ),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 7,
-                vertical: 3,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
-                color:
-                    (active ? green : orange).withValues(alpha: 0.10),
+                color: (active ? green : orange).withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -702,11 +721,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
             '${_courseCode(course)} • ${_instructorName(course)}\n'
             'Class code: ${(course['classCode'] ?? 'Not set')} • '
             '${(course['studentCount'] as num?)?.toInt() ?? 0} active student(s)',
-            style: const TextStyle(
-              color: textGrey,
-              fontSize: 11,
-              height: 1.4,
-            ),
+            style: const TextStyle(color: textGrey, fontSize: 11, height: 1.4),
           ),
         ),
         trailing: PopupMenuButton<String>(
@@ -719,15 +734,10 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
             }
           },
           itemBuilder: (_) => [
-            const PopupMenuItem(
-              value: 'edit',
-              child: Text('Edit Course'),
-            ),
+            const PopupMenuItem(value: 'edit', child: Text('Edit Course')),
             PopupMenuItem(
               value: 'status',
-              child: Text(
-                active ? 'Archive Course' : 'Reactivate Course',
-              ),
+              child: Text(active ? 'Archive Course' : 'Reactivate Course'),
             ),
           ],
         ),
@@ -736,9 +746,7 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
   }
 
   String _courseId(Map<String, dynamic> course) {
-    return (course['courseId'] ?? course['id'] ?? '')
-        .toString()
-        .trim();
+    return (course['courseId'] ?? course['id'] ?? '').toString().trim();
   }
 
   String _courseCode(Map<String, dynamic> course) {
@@ -752,24 +760,23 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
   }
 
   String _courseStatus(Map<String, dynamic> course) {
-    final value =
-        (course['status'] ?? 'active').toString().trim().toLowerCase();
+    final value = (course['status'] ?? 'active')
+        .toString()
+        .trim()
+        .toLowerCase();
 
     return value.isEmpty ? 'active' : value;
   }
 
   String _instructorName(Map<String, dynamic> course) {
-    final direct =
-        (course['instructorName'] ?? '').toString().trim();
+    final direct = (course['instructorName'] ?? '').toString().trim();
 
     if (direct.isNotEmpty) return direct;
 
-    final instructorId =
-        (course['instructorId'] ?? '').toString();
+    final instructorId = (course['instructorId'] ?? '').toString();
 
     for (final instructor in _instructors) {
-      if ((instructor['uid'] ?? '').toString() ==
-          instructorId) {
+      if ((instructor['uid'] ?? '').toString() == instructorId) {
         return (instructor['name'] ?? 'Instructor').toString();
       }
     }

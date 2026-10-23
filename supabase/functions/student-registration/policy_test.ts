@@ -18,9 +18,18 @@ Deno.test("every supplied department/program pairing is accepted, cross-departme
     "Unknown college accepted",
   );
   check(
-    catalog["College of Industrial Technology (CIT)"].length === 10,
-    "CIT majors missing",
+    Object.keys(catalog).length === 1 &&
+      catalog["College of Arts and Sciences (CAS)"].length === 4,
+    "Registration must offer only the four CAS programs",
   );
+  for (const [department, program] of [
+    ["College of Education (COED)", "BEEd"],
+    ["College of Engineering (COENG)", "BSCE"],
+    ["College of Nursing and Health Sciences (CONHS)", "BSN"],
+    ["College of Industrial Technology (CIT)", "BS in Architecture"],
+  ]) {
+    check(!validProgram(department, program), "Non-CAS registration accepted");
+  }
 });
 Deno.test("activation requires real email ownership and the dedicated pending student state", () => {
   const profile = {

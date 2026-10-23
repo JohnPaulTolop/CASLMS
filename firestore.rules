@@ -46,6 +46,16 @@ service cloud.firestore {
         currentUser().role == 'instructor';
     }
 
+    function validInvitedSection(courseId, sectionId) {
+      let course = get(/databases/$(database)/documents/courses/$(courseId)).data;
+      return course.status == 'active' && sectionId is string && sectionId != '' &&
+        (sectionId == course.classCode ||
+          (exists(/databases/$(database)/documents/courseSections/$(sectionId)) &&
+           get(/databases/$(database)/documents/courseSections/$(sectionId)).data.courseId == courseId &&
+           get(/databases/$(database)/documents/courseSections/$(sectionId)).data.instructorId == course.instructorId &&
+           get(/databases/$(database)/documents/courseSections/$(sectionId)).data.status == 'active'));
+    }
+
     function isAdmin() {
       return isActive() &&
         currentUser().role == 'admin';
@@ -246,6 +256,8 @@ service cloud.firestore {
             'studentCampusId',
             'studentName',
             'studentEmail',
+            'sectionId',
+            'sectionName',
             'status',
             'createdAt',
             'updatedAt',
@@ -267,7 +279,8 @@ service cloud.firestore {
           student.uid == data.studentId &&
           student.role == 'student' &&
           student.status == 'active' &&
-          student.universityId == data.studentCampusId;
+          student.universityId == data.studentCampusId &&
+          validInvitedSection(data.courseId, data.get('sectionId', course.classCode));
       }
 
       function invitationIdentityIsUnchanged() {
@@ -296,6 +309,7 @@ service cloud.firestore {
           enrollment.invitationId == invitationId &&
           enrollment.invitedBy == resource.data.instructorId &&
           enrollment.enrollmentSource == 'instructor_invitation' &&
+          enrollment.sectionId == resource.data.get('sectionId', get(/databases/$(database)/documents/courses/$(resource.data.courseId)).data.classCode) &&
           enrollment.status == 'active';
       }
 
@@ -353,7 +367,9 @@ service cloud.firestore {
               'status',
               'createdAt',
               'updatedAt',
-              'respondedAt'
+              'respondedAt',
+              'sectionId',
+              'sectionName'
             ]) &&
           request.resource.data.updatedAt == request.time &&
           (
@@ -378,6 +394,7 @@ service cloud.firestore {
           resource.data.studentId == request.auth.uid &&
           resource.data.status == 'pending' &&
           invitationIdentityIsUnchanged() &&
+          request.resource.data.get('sectionId', '') == resource.data.get('sectionId', '') &&
           request.resource.data.createdAt == resource.data.createdAt &&
           request.resource.data.updatedAt == request.time &&
           request.resource.data.respondedAt == request.time &&
@@ -419,8 +436,7 @@ service cloud.firestore {
           );
       }
 
-      // An enrolled student may need to resolve a class code
-      // before joining. Only section metadata is stored here.
+      // Students can resolve active section metadata for invitations.
       // Students cannot list all section documents.
 
       allow get: if
@@ -538,13 +554,17 @@ service cloud.firestore {
 
         return
           existsAfter(invitationPath) &&
+          get(invitationPath).data.status == 'pending' &&
           invitation.status == 'accepted' &&
           invitation.courseId == data.courseId &&
           invitation.studentId == request.auth.uid &&
           invitation.studentCampusId == currentUser().universityId &&
           data.invitationId == enrollmentId &&
           data.invitedBy == invitation.instructorId &&
-          data.enrollmentSource == 'instructor_invitation';
+          data.enrollmentSource == 'instructor_invitation' &&
+          get(/databases/$(database)/documents/courses/$(data.courseId)).data.instructorId == invitation.instructorId &&
+          data.sectionId == invitation.get('sectionId', get(/databases/$(database)/documents/courses/$(data.courseId)).data.classCode) &&
+          validInvitedSection(data.courseId, data.sectionId);
       }
 
       function validAcceptedEnrollment(data) {
@@ -567,65 +587,14 @@ service cloud.firestore {
           data.studentName is string &&
           data.studentCampusId == currentUser().universityId &&
           data.status == 'active' &&
-          data.get('sectionId', get(
-            /databases/$(database)/documents/courses/$(data.courseId)
-          ).data.classCode) == get(
-            /databases/$(database)/documents/courses/$(data.courseId)
-          ).data.classCode &&
-          data.enrolledAt == request.time &&
+          (data.enrolledAt == request.time ||
+            (resource != null && resource.data.status == 'active' && data.enrolledAt == resource.data.enrolledAt)) &&
           data.acceptedAt == request.time &&
           enrollmentId == data.courseId + "_" + request.auth.uid &&
           acceptedInvitation(data);
       }
 
-      // New section-code enrollment.
-      // Legacy sections retain their invitation workflow.
-      function validSectionCodeEnrollment(data) {
-        let coursePath =
-          /databases/$(database)/documents/courses/$(data.courseId);
-
-        let sectionPath =
-          /databases/$(database)/documents/courseSections/$(data.sectionId);
-
-        return
-          data.keys().hasOnly([
-            'courseId',
-            'studentId',
-            'studentName',
-            'studentCampusId',
-            'sectionId',
-            'status',
-            'enrollmentSource',
-            'enrolledAt'
-          ]) &&
-          data.keys().hasAll([
-            'courseId',
-            'studentId',
-            'studentName',
-            'studentCampusId',
-            'sectionId',
-            'status',
-            'enrollmentSource',
-            'enrolledAt'
-          ]) &&
-          data.courseId is string &&
-          data.sectionId is string &&
-          data.studentId == request.auth.uid &&
-          data.studentName is string &&
-          data.studentName.size() > 0 &&
-          data.studentCampusId == currentUser().universityId &&
-          data.status == 'active' &&
-          data.enrollmentSource == 'section_code' &&
-          data.enrolledAt == request.time &&
-          enrollmentId == data.courseId + "_" + request.auth.uid &&
-          exists(coursePath) &&
-          get(coursePath).data.status == 'active' &&
-          exists(sectionPath) &&
-          get(sectionPath).data.courseId == data.courseId &&
-          get(sectionPath).data.classCode == data.sectionId &&
-          get(sectionPath).data.status == 'active' &&
-          get(sectionPath).data.legacy == false;
-      }
+      // Student enrollment requires an instructor invitation.
       allow get: if
         isAdmin()
         ||
@@ -663,11 +632,7 @@ service cloud.firestore {
         ||
         (
           isStudent() &&
-          (
-            validAcceptedEnrollment(request.resource.data)
-            ||
-            validSectionCodeEnrollment(request.resource.data)
-          )
+          validAcceptedEnrollment(request.resource.data)
         );
 
       allow update: if
@@ -685,6 +650,7 @@ service cloud.firestore {
           resource.data.studentId == request.auth.uid &&
           request.resource.data.courseId == resource.data.courseId &&
           request.resource.data.studentId == resource.data.studentId &&
+          (resource.data.status != 'active' || request.resource.data.sectionId == resource.data.get('sectionId', get(/databases/$(database)/documents/courses/$(resource.data.courseId)).data.classCode)) &&
           validAcceptedEnrollment(request.resource.data)
         );
 
@@ -1593,6 +1559,9 @@ service cloud.firestore {
                   )
           ) &&
           activeEnrollee(data) &&
+          (source.get('sectionId', '') == '' ||
+            get(/databases/$(database)/documents/enrollments/$(data.authorizationCourseId + '_' + data.userId)).data.get('sectionId',
+              get(/databases/$(database)/documents/courses/$(data.authorizationCourseId)).data.get('classCode', '')) == source.sectionId) &&
           (
             // AI quiz notification section isolation.
             // Ordinary course notifications retain their existing access.
@@ -1685,7 +1654,12 @@ service cloud.firestore {
 
       function validSource(data) {
         return
-          data.sourceType == 'module'
+          data.sourceType == 'course'
+            ? (data.type == 'course' && data.sourceId == data.courseId &&
+                data.courseId == data.authorizationCourseId && data.moduleId == '' &&
+                get(/databases/$(database)/documents/courses/$(data.sourceId)).data.status == 'active' &&
+                activeEnrollee(data))
+          : data.sourceType == 'module'
             ? publishedSource(
                 data,
                 'modules',
@@ -2062,8 +2036,59 @@ service cloud.firestore {
           request.auth.uid
       );
 
+      function validConversationNotice(data) {
+        let conversation = getAfter(/databases/$(database)/documents/conversations/$(data.sourceId)).data;
+        let messagePath = /databases/$(database)/documents/conversations/$(data.sourceId)/messages/$(data.messageId);
+        let message = getAfter(messagePath).data;
+        return isActive() && data.get('sourceType', '') == 'conversation' &&
+          data.keys().hasOnly(['userId','type','sourceType','sourceId','messageId','actorId','title','message','courseId','isRead','readAt','createdAt']) &&
+          data.type == 'message' && data.actorId == request.auth.uid &&
+          notificationId == 'message_' + data.messageId + '_' + data.userId &&
+          !exists(messagePath) && message.senderId == request.auth.uid &&
+          message.receiverId == data.userId && message.sentAt == request.time &&
+          ((conversation.studentId == request.auth.uid && conversation.instructorId == data.userId) ||
+            (conversation.instructorId == request.auth.uid && conversation.studentId == data.userId)) &&
+          data.courseId == conversation.courseId && data.title == 'New message' &&
+          data.message == 'Open your conversation to read the message.' &&
+          data.isRead == false && data.readAt == null && data.createdAt == request.time;
+      }
+
+      function validEnrollmentNotice(data) {
+        let enrollment = getAfter(/databases/$(database)/documents/enrollments/$(data.sourceId)).data;
+        return isActive() && data.get('sourceType', '') == 'enrollment' &&
+          data.keys().hasOnly(['userId','type','sourceType','sourceId','actorId','title','message','courseId','isRead','readAt','createdAt']) &&
+          data.type == 'course_enrollment' && data.actorId == request.auth.uid &&
+          data.sourceId == data.courseId + '_' + data.userId &&
+          notificationId == 'enrollment_' + data.sourceId &&
+          enrollment.studentId == data.userId && enrollment.courseId == data.courseId && enrollment.status == 'active' &&
+          (request.auth.uid == data.userId || ownsCourse(data.courseId)) &&
+          data.title == 'Course enrollment confirmed' && data.message == 'Open your enrolled course.' &&
+          data.isRead == false && data.readAt == null && data.createdAt == request.time;
+      }
+
+      function validReceivedNotice(data, collection) {
+        let source = getAfter(/databases/$(database)/documents/$(collection)/$(data.sourceId)).data;
+        let course = get(/databases/$(database)/documents/courses/$(data.courseId)).data;
+        let assignment = get(/databases/$(database)/documents/assignments/$(source.assignmentId)).data;
+        let enrollment = get(/databases/$(database)/documents/enrollments/$(data.courseId + '_' + request.auth.uid)).data;
+        return isStudent() &&
+          data.keys().hasOnly(['userId','type','sourceType','sourceId','actorId','title','message','courseId','isRead','readAt','createdAt']) &&
+          notificationId == data.sourceType + '_' + data.sourceId + '_' + data.userId &&
+          data.actorId == request.auth.uid && source.studentId == request.auth.uid &&
+          source.courseId == data.courseId && course.instructorId == data.userId &&
+          assignment.courseId == data.courseId && enrollment.studentId == request.auth.uid &&
+          enrollment.courseId == data.courseId && enrollment.status == 'active' &&
+          source.status == 'submitted' && source.submittedAt == request.time &&
+          data.type == 'submission' && data.title == 'New assessment submission' &&
+          data.message == 'A student submitted work. Open this notification to review it.' &&
+          data.isRead == false && data.readAt == null && data.createdAt == request.time;
+      }
+
       allow create: if
         isAdmin()
+        || (request.resource.data.get('sourceType', '') == 'conversation' && validConversationNotice(request.resource.data))
+        || (request.resource.data.get('sourceType', '') == 'enrollment' && validEnrollmentNotice(request.resource.data))
+        || (request.resource.data.get('sourceType', '') == 'submissionReceived' && validReceivedNotice(request.resource.data, 'submissions'))
         ||
         (
           request.resource.data.sourceType ==
@@ -2384,6 +2409,44 @@ service cloud.firestore {
           resource.data.senderId ==
             request.auth.uid
         );
+    }
+
+    // ============================================================
+    // ADMIN ACTIVITY HISTORY
+    // Append-only, source-bound app events. No passwords or tokens are stored.
+    match /activityLogs/{logId} {
+      function validActor(data) {
+        return isActive() && data.actorId == request.auth.uid &&
+          data.actorRole == currentUser().role &&
+          data.actorName == currentUser().get('name', '') &&
+          data.createdAt == request.time;
+      }
+      function validSession(data) {
+        return data.keys().hasOnly(['type','actorId','actorName','actorRole','sessionAuthTime','createdAt']) &&
+          data.type in ['login','logout'] &&
+          data.sessionAuthTime is int && data.sessionAuthTime == request.auth.token.auth_time &&
+          logId == data.type + '_' + string(data.sessionAuthTime) + '_' + request.auth.uid;
+      }
+      function validSource(data) {
+        let collection = data.type == 'course_created' ? 'courses' : 'moduleResources';
+        let source = get(/databases/$(database)/documents/$(collection)/$(data.targetId)).data;
+        return (isInstructor() || isAdmin()) && data.keys().hasOnly(['type','actorId','actorName','actorRole','targetId','courseId','title','occurredAt','createdAt']) &&
+          data.type in ['course_created','material_uploaded'] &&
+          data.targetId is string && data.targetId.size() > 0 &&
+          logId == data.type + '_' + data.targetId &&
+          data.title == source.title && data.occurredAt == source.createdAt &&
+          (
+            (data.type == 'course_created' && data.courseId == data.targetId &&
+              (source.instructorId == request.auth.uid || isAdmin())) ||
+            (data.type == 'material_uploaded' && data.courseId == source.courseId &&
+              source.deliveryType == 'uploaded_file' && source.createdBy == request.auth.uid &&
+              (ownsCourse(source.courseId) || isAdmin()))
+          );
+      }
+      allow get, list: if isAdmin();
+      allow create: if validActor(request.resource.data) &&
+        (validSession(request.resource.data) || validSource(request.resource.data));
+      allow update, delete: if false;
     }
 
     // ============================================================

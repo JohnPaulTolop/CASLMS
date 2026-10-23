@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'instructor_ui.dart';
 
 import '../../services/roster_service.dart';
+import '../../services/instructor_course_service.dart';
 import 'instructor_course_sections_page.dart';
 import 'instructor_create_course_page.dart';
 
@@ -40,6 +43,8 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
 
   List<Map<String, dynamic>> _courses = [];
 
+  StreamSubscription<List<Map<String, dynamic>>>? _subscription;
+  int _generation = 0;
   bool _isLoading = true;
 
   String? _errorMessage;
@@ -54,7 +59,31 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
   void initState() {
     super.initState();
 
-    _loadCourses();
+    _subscription = InstructorCourseService().watchInstructorCourses().listen(
+      (courses) {
+        if (!mounted) return;
+        _generation++;
+        setState(() {
+          _courses = courses;
+          _isLoading = false;
+          _errorMessage = null;
+        });
+      },
+      onError: (Object error) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = 'Unable to sync courses. Please retry.';
+          });
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
   }
 
   // ============================================================
@@ -62,6 +91,7 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
   // ============================================================
 
   Future<void> _loadCourses() async {
+    final generation = ++_generation;
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -89,7 +119,7 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
         );
       });
 
-      if (!mounted) {
+      if (!mounted || generation != _generation) {
         return;
       }
 
@@ -98,7 +128,7 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
         _isLoading = false;
       });
     } on RosterServiceException catch (e) {
-      if (!mounted) {
+      if (!mounted || generation != _generation) {
         return;
       }
 
@@ -107,7 +137,7 @@ class _InstructorClassesScreenState extends State<InstructorClassesScreen> {
         _errorMessage = e.message;
       });
     } catch (_) {
-      if (!mounted) {
+      if (!mounted || generation != _generation) {
         return;
       }
 

@@ -1,7 +1,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../models/course_order.dart';
+import 'live_courses_service.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
 
 class EnrollmentService {
+  Stream<List<Map<String, dynamic>>> watchMyActiveCourses() {
+    final uid = _auth.currentUser?.uid;
+    return uid == null
+        ? Stream.value([])
+        : LiveCoursesService.watch(_firestore, uid);
+  }
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -108,153 +119,9 @@ class EnrollmentService {
   // ============================================================
 
   Future<Map<String, dynamic>> joinClass({required String classCode}) async {
-    try {
-      final student = await getCurrentStudentProfile();
-      final studentId = (student['id'] ?? '').toString().trim();
-      final studentName =
-          (student['name'] ?? student['displayName'] ?? 'Student')
-              .toString()
-              .trim();
-      final campusId = (student['universityId'] ?? '').toString().trim();
-
-      final cleanCode = normalizeClassCode(classCode);
-
-      if (cleanCode.isEmpty) {
-        throw EnrollmentServiceException('Enter a class code.');
-      }
-
-      if (campusId.isEmpty) {
-        throw EnrollmentServiceException(
-          'Your student profile is missing its Campus ID.',
-        );
-      }
-
-      // Resolve a section using its unique class code.
-      final sectionDocument = await _firestore
-          .collection('courseSections')
-          .doc(cleanCode)
-          .get();
-
-      final section = sectionDocument.data();
-
-      if (section == null) {
-        // Preserve older courses and instructor invitations.
-        final legacyCourse = await findCourseByClassCode(cleanCode);
-
-        if (legacyCourse != null) {
-          throw EnrollmentServiceException(
-            'This original class uses instructor invitations. '
-            'Ask your instructor to invite you.',
-          );
-        }
-
-        throw EnrollmentServiceException(
-          'No section was found with this class code.',
-        );
-      }
-
-      if (section['legacy'] != false) {
-        throw EnrollmentServiceException(
-          'The original section uses instructor invitations.',
-        );
-      }
-
-      if (section['status'] != 'active') {
-        throw EnrollmentServiceException(
-          'This section is not accepting students.',
-        );
-      }
-
-      if (normalizeClassCode((section['classCode'] ?? '').toString()) !=
-          cleanCode) {
-        throw EnrollmentServiceException('Invalid section class code.');
-      }
-
-      final courseId = (section['courseId'] ?? '').toString().trim();
-
-      if (courseId.isEmpty) {
-        throw EnrollmentServiceException(
-          'Section course information is missing.',
-        );
-      }
-
-      final courseDocument = await _firestore
-          .collection('courses')
-          .doc(courseId)
-          .get();
-
-      final course = courseDocument.data();
-
-      if (course == null || course['status'] != 'active') {
-        throw EnrollmentServiceException(
-          'This course is currently unavailable.',
-        );
-      }
-
-      if (course['instructorId'] != section['instructorId']) {
-        throw EnrollmentServiceException(
-          'Section instructor information does not match.',
-        );
-      }
-
-      // Preserve existing enrollment document IDs.
-      // One active section membership per student per course.
-      final enrollmentId = '${courseId}_$studentId';
-
-      final enrollmentReference = _firestore
-          .collection('enrollments')
-          .doc(enrollmentId);
-
-      final existing = await enrollmentReference.get();
-
-      if (existing.exists) {
-        if (existing.data()?['status'] == 'active') {
-          throw EnrollmentServiceException(
-            'You are already enrolled in this course. '
-            'Contact your instructor to transfer sections.',
-          );
-        }
-
-        throw EnrollmentServiceException(
-          'You have a previous enrollment in this course. '
-          'Contact your instructor to reactivate or transfer it.',
-        );
-      }
-
-      // Fields must match validSectionCodeEnrollment()
-      // in Firestore security rules.
-      await enrollmentReference.set({
-        'courseId': courseId,
-        'studentId': studentId,
-        'studentName': studentName,
-        'studentCampusId': campusId,
-        'sectionId': cleanCode,
-        'status': 'active',
-        'enrollmentSource': 'section_code',
-        'enrolledAt': FieldValue.serverTimestamp(),
-      });
-
-      return {
-        ...course,
-        'id': courseId,
-        'courseId': courseId,
-        'sectionId': cleanCode,
-        'sectionName': section['name'],
-        'sectionIdentifier': section['identifier'],
-        'enrollmentId': enrollmentId,
-      };
-    } on EnrollmentServiceException {
-      rethrow;
-    } on FirebaseException catch (error) {
-      throw EnrollmentServiceException(
-        error.code == 'permission-denied'
-            ? 'This section cannot be accessed or joined. '
-                  'Check the class code or contact your instructor.'
-            : error.message ?? 'Unable to join this section.',
-      );
-    } catch (_) {
-      throw EnrollmentServiceException('Unable to join this section.');
-    }
+    throw EnrollmentServiceException(
+      'Classes are invitation-only. Accept an invitation from your instructor.',
+    );
   }
 
   // ============================================================
@@ -326,18 +193,13 @@ class EnrollmentService {
           'courseId': courseId,
 
           'enrollmentId': enrollmentDocument.id,
+          'joinedAt': enrollment['enrolledAt'] ?? enrollment['acceptedAt'],
           'sectionId': (enrollment['sectionId'] ?? course['classCode'] ?? '')
               .toString(),
         });
       }
 
-      courses.sort((a, b) {
-        final String codeA = (a['code'] ?? '').toString().toUpperCase();
-
-        final String codeB = (b['code'] ?? '').toString().toUpperCase();
-
-        return codeA.compareTo(codeB);
-      });
+      courses.sort(compareJoinedCourses);
 
       return courses;
     } on EnrollmentServiceException {

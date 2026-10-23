@@ -31,7 +31,7 @@ class RoleNavigationBar extends StatelessWidget {
     ),
     _RoleDestination(
       index: 1,
-      label: instructor ? 'My Courses' : 'Modules',
+      label: instructor ? 'My Courses' : 'My Classes',
       icon: instructor ? Icons.class_outlined : Icons.folder_outlined,
       activeIcon: instructor ? Icons.class_rounded : Icons.folder_rounded,
     ),

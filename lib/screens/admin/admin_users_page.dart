@@ -1,3 +1,5 @@
+import '../../services/admin_catalog.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -42,10 +44,36 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   List<Map<String, dynamic>> _users = [];
 
+  AdminCatalog? _catalog;
+  bool _started = false;
   @override
-  void initState() {
-    super.initState();
-    _loadUsers();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _catalog = context
+        .dependOnInheritedWidgetOfExactType<AdminScope>()
+        ?.notifier;
+    if (_catalog != null) {
+      _syncDirectory();
+    } else if (!_started) {
+      _started = true;
+      _loadUsers();
+    }
+  }
+
+  void _syncDirectory() {
+    final catalog = _catalog!;
+    _users =
+        catalog.users.values
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList()
+          ..sort(
+            (a, b) =>
+                _displayName(a)
+                    .toLowerCase()
+                    .compareTo(_displayName(b).toLowerCase()),
+          );
+    _isLoading = catalog.loading;
+    _errorMessage = catalog.error;
   }
 
   Future<void> _requireAdmin() async {
@@ -55,8 +83,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       throw Exception('No administrator is currently logged in.');
     }
 
-    final document =
-        await _firestore.collection('users').doc(user.uid).get();
+    final document = await _firestore.collection('users').doc(user.uid).get();
 
     if (!document.exists || document.data() == null) {
       throw Exception('Administrator profile could not be found.');
@@ -72,6 +99,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   Future<void> _loadUsers() async {
+    if (_catalog != null) {
+      if (_catalog!.error != null) await _catalog!.start();
+      if (mounted) setState(_syncDirectory);
+      return;
+    }
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -82,8 +114,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     try {
       await _requireAdmin();
 
-      final snapshot =
-          await _firestore.collection('users').get();
+      final snapshot = await _firestore.collection('users').get();
 
       final users = snapshot.docs
           .map(
@@ -95,9 +126,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           .toList();
 
       users.sort(
-        (a, b) => _displayName(a)
-            .toLowerCase()
-            .compareTo(_displayName(b).toLowerCase()),
+        (a, b) =>
+            _displayName(a)
+                .toLowerCase()
+                .compareTo(_displayName(b).toLowerCase()),
       );
 
       if (!mounted) return;
@@ -118,8 +150,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -130,7 +161,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     return _users.where((user) {
       final role = _role(user);
 
-      final roleMatches = _selectedRoleFilter == 'All' ||
+      final roleMatches =
+          _selectedRoleFilter == 'All' ||
           role == _selectedRoleFilter.toLowerCase();
 
       if (!roleMatches) return false;
@@ -164,8 +196,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     }
 
     final currentStatus = _status(user);
-    final nextStatus =
-        currentStatus == 'active' ? 'suspended' : 'active';
+    final nextStatus = currentStatus == 'active' ? 'suspended' : 'active';
 
     setState(() {
       _isBusy = true;
@@ -183,9 +214,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
       if (!mounted) return;
 
-      _showMessage(
-        '${_displayName(user)} is now ${_capitalize(nextStatus)}.',
-      );
+      _showMessage('${_displayName(user)} is now ${_capitalize(nextStatus)}.');
     } on FirebaseException catch (e) {
       if (!mounted) return;
       _showError(e.message ?? 'Unable to update account status.');
@@ -208,22 +237,17 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
     String newName = _displayName(user);
     String newEmail = _contactEmailRaw(user);
-    String newDepartment =
-        (user['department'] ?? '').toString();
+    String newDepartment = (user['department'] ?? '').toString();
 
-    String newCourse =
-        (user['course'] ?? '').toString();
+    String newCourse = (user['course'] ?? '').toString();
 
-    final Map<String, String>? result =
-        await showDialog<Map<String, String>>(
+    final Map<String, String>? result = await showDialog<Map<String, String>>(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text(
             'Edit User',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w800),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -231,12 +255,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               children: [
                 TextFormField(
                   initialValue: newName,
-                  textCapitalization:
-                      TextCapitalization.words,
-                  decoration:
-                      const InputDecoration(
-                    labelText: 'Full Name',
-                  ),
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Full Name'),
                   onChanged: (String value) {
                     newName = value;
                   },
@@ -244,12 +264,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 const SizedBox(height: 12),
                 TextFormField(
                   initialValue: newEmail,
-                  keyboardType:
-                      TextInputType.emailAddress,
-                  decoration:
-                      const InputDecoration(
-                    labelText: 'Contact Email',
-                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Contact Email'),
                   onChanged: (String value) {
                     newEmail = value;
                   },
@@ -257,10 +273,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 const SizedBox(height: 12),
                 TextFormField(
                   initialValue: newDepartment,
-                  decoration:
-                      const InputDecoration(
-                    labelText: 'Department',
-                  ),
+                  decoration: const InputDecoration(labelText: 'Department'),
                   onChanged: (String value) {
                     newDepartment = value;
                   },
@@ -268,10 +281,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 const SizedBox(height: 12),
                 TextFormField(
                   initialValue: newCourse,
-                  decoration:
-                      const InputDecoration(
-                    labelText:
-                        'Course / Program',
+                  decoration: const InputDecoration(
+                    labelText: 'Course / Program',
                   ),
                   onChanged: (String value) {
                     newCourse = value;
@@ -279,15 +290,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 ),
                 const SizedBox(height: 12),
                 InputDecorator(
-                  decoration:
-                      const InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Campus ID',
-                    helperText:
-                        'Campus ID, role, and Firebase auth email are protected.',
+                    helperText: 'Campus ID, role, and Firebase auth email are protected.',
                   ),
-                  child: Text(
-                    _campusId(user),
-                  ),
+                  child: Text(_campusId(user)),
                 ),
               ],
             ),
@@ -295,37 +302,26 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                FocusScope.of(
-                  dialogContext,
-                ).unfocus();
+                FocusScope.of(dialogContext).unfocus();
 
-                Navigator.of(
-                  dialogContext,
-                ).pop();
+                Navigator.of(dialogContext).pop();
               },
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
-                FocusScope.of(
-                  dialogContext,
-                ).unfocus();
+                FocusScope.of(dialogContext).unfocus();
 
-                Navigator.of(
-                  dialogContext,
-                ).pop({
+                Navigator.of(dialogContext).pop({
                   'name': newName,
                   'email': newEmail,
-                  'department':
-                      newDepartment,
+                  'department': newDepartment,
                   'course': newCourse,
                 });
               },
-              style:
-                  ElevatedButton.styleFrom(
+              style: ElevatedButton.styleFrom(
                 backgroundColor: adminTheme,
-                foregroundColor:
-                    Colors.white,
+                foregroundColor: Colors.white,
               ),
               child: const Text('Save'),
             ),
@@ -338,38 +334,25 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       return;
     }
 
-    final String name =
-        (result['name'] ?? '').trim();
+    final String name = (result['name'] ?? '').trim();
 
-    final String email =
-        (result['email'] ?? '')
-            .trim()
-            .toLowerCase();
+    final String email = (result['email'] ?? '').trim().toLowerCase();
 
-    final String department =
-        (result['department'] ?? '')
-            .trim();
+    final String department = (result['department'] ?? '').trim();
 
-    final String course =
-        (result['course'] ?? '').trim();
+    final String course = (result['course'] ?? '').trim();
 
     if (name.length < 2) {
-      _showError(
-        'Enter the complete user name.',
-      );
+      _showError('Enter the complete user name.');
       return;
     }
 
-    if (email.isNotEmpty &&
-        !_isValidEmail(email)) {
-      _showError(
-        'Enter a valid contact email.',
-      );
+    if (email.isNotEmpty && !_isValidEmail(email)) {
+      _showError('Enter a valid contact email.');
       return;
     }
 
-    final String uid =
-        (user['uid'] ?? '').toString();
+    final String uid = (user['uid'] ?? '').toString();
 
     if (uid.isEmpty) {
       return;
@@ -382,16 +365,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     try {
       await _requireAdmin();
 
-      await _firestore
-          .collection('users')
-          .doc(uid)
-          .update({
+      await _firestore.collection('users').doc(uid).update({
         'name': name,
         'email': email,
         'department': department,
         'course': course,
-        'updatedAt':
-            FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
       if (!mounted) {
@@ -402,9 +381,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       // tearing down and rebuilding it after the dialog route closes.
       setState(() {
         final int index = _users.indexWhere(
-          (Map<String, dynamic> item) =>
-              (item['uid'] ?? '').toString() ==
-              uid,
+          (Map<String, dynamic> item) => (item['uid'] ?? '').toString() == uid,
         );
 
         if (index != -1) {
@@ -420,9 +397,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         _isBusy = false;
       });
 
-      _showMessage(
-        'User profile updated.',
-      );
+      _showMessage('User profile updated.');
     } on FirebaseException catch (e) {
       if (!mounted) {
         return;
@@ -432,10 +407,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         _isBusy = false;
       });
 
-      _showError(
-        e.message ??
-            'Unable to update user.',
-      );
+      _showError(e.message ?? 'Unable to update user.');
     } catch (e) {
       if (!mounted) {
         return;
@@ -445,12 +417,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         _isBusy = false;
       });
 
-      _showError(
-        e.toString().replaceFirst(
-          'Exception: ',
-          '',
-        ),
-      );
+      _showError(e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -466,8 +433,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
     String selectedRole = 'instructor';
 
-    final result =
-        await showModalBottomSheet<Map<String, String>>(
+    final result = await showModalBottomSheet<Map<String, String>>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -513,8 +479,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                     const SizedBox(height: 18),
                     TextField(
                       controller: nameController,
-                      decoration:
-                          const InputDecoration(labelText: 'Full Name'),
+                      decoration: const InputDecoration(labelText: 'Full Name'),
                     ),
                     const SizedBox(height: 11),
                     TextField(
@@ -529,26 +494,28 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                     TextField(
                       controller: emailController,
                       keyboardType: TextInputType.emailAddress,
-                      decoration:
-                          const InputDecoration(labelText: 'Contact Email'),
+                      decoration: const InputDecoration(
+                        labelText: 'Contact Email',
+                      ),
                     ),
                     const SizedBox(height: 11),
                     TextField(
                       controller: departmentController,
-                      decoration:
-                          const InputDecoration(labelText: 'Department'),
+                      decoration: const InputDecoration(
+                        labelText: 'Department',
+                      ),
                     ),
                     const SizedBox(height: 11),
                     TextField(
                       controller: courseController,
-                      decoration:
-                          const InputDecoration(labelText: 'Course / Program'),
+                      decoration: const InputDecoration(
+                        labelText: 'Course / Program',
+                      ),
                     ),
                     const SizedBox(height: 11),
                     DropdownButtonFormField<String>(
-                      value: selectedRole,
-                      decoration:
-                          const InputDecoration(labelText: 'Role'),
+                      initialValue: selectedRole,
+                      decoration: const InputDecoration(labelText: 'Role'),
                       items: const [
                         DropdownMenuItem(
                           value: 'student',
@@ -558,10 +525,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                           value: 'instructor',
                           child: Text('Instructor'),
                         ),
-                        DropdownMenuItem(
-                          value: 'admin',
-                          child: Text('Admin'),
-                        ),
+                        DropdownMenuItem(value: 'admin', child: Text('Admin')),
                       ],
                       onChanged: (value) {
                         if (value == null) return;
@@ -586,18 +550,15 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                       height: 52,
                       child: ElevatedButton(
                         onPressed: () {
-                          Navigator.pop(
-                            sheetContext,
-                            <String, String>{
-                              'name': nameController.text,
-                              'campusId': campusIdController.text,
-                              'email': emailController.text,
-                              'department': departmentController.text,
-                              'course': courseController.text,
-                              'password': passwordController.text,
-                              'role': selectedRole,
-                            },
-                          );
+                          Navigator.pop(sheetContext, <String, String>{
+                            'name': nameController.text,
+                            'campusId': campusIdController.text,
+                            'email': emailController.text,
+                            'department': departmentController.text,
+                            'course': courseController.text,
+                            'password': passwordController.text,
+                            'role': selectedRole,
+                          });
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: adminTheme,
@@ -649,11 +610,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }) async {
     final cleanName = fullName.trim();
 
-    final cleanCampusId =
-        campusId.trim().replaceAll(RegExp(r'\s+'), '');
+    final cleanCampusId = campusId.trim().replaceAll(RegExp(r'\s+'), '');
 
-    final cleanContactEmail =
-        contactEmail.trim().toLowerCase();
+    final cleanContactEmail = contactEmail.trim().toLowerCase();
 
     final cleanRole = role.trim().toLowerCase();
 
@@ -678,9 +637,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     }
 
     if (password.length < 6) {
-      _showError(
-        'Temporary password must contain at least 6 characters.',
-      );
+      _showError('Temporary password must contain at least 6 characters.');
       return;
     }
 
@@ -696,17 +653,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
       final existing = await _firestore
           .collection('users')
-          .where(
-            'universityId',
-            isEqualTo: cleanCampusId,
-          )
+          .where('universityId', isEqualTo: cleanCampusId)
           .limit(1)
           .get();
 
       if (existing.docs.isNotEmpty) {
-        throw Exception(
-          'A CASLMS account already uses this Campus ID.',
-        );
+        throw Exception('A CASLMS account already uses this Campus ID.');
       }
 
       const appName = 'caslmsAdminProvisioning';
@@ -727,8 +679,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
       final authEmail = '$cleanCampusId@caslms.app';
 
-      final credential =
-          await secondaryAuth.createUserWithEmailAndPassword(
+      final credential = await secondaryAuth.createUserWithEmailAndPassword(
         email: authEmail,
         password: password,
       );
@@ -736,17 +687,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       createdUser = credential.user;
 
       if (createdUser == null) {
-        throw Exception(
-          'Firebase Authentication did not return the new user.',
-        );
+        throw Exception('Firebase Authentication did not return the new user.');
       }
 
       await createdUser.updateDisplayName(cleanName);
 
-      await _firestore
-          .collection('users')
-          .doc(createdUser.uid)
-          .set({
+      await _firestore.collection('users').doc(createdUser.uid).set({
         'uid': createdUser.uid,
         'name': cleanName,
         'universityId': cleanCampusId,
@@ -767,9 +713,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
       if (!mounted) return;
 
-      _showMessage(
-        '${_capitalize(cleanRole)} account created for $cleanName.',
-      );
+      _showMessage('${_capitalize(cleanRole)} account created for $cleanName.');
     } on FirebaseAuthException catch (e) {
       try {
         await createdUser?.delete();
@@ -778,8 +722,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       if (!mounted) return;
 
       _showError(
-        e.message ??
-            'Unable to create Firebase Authentication account.',
+        e.message ?? 'Unable to create Firebase Authentication account.',
       );
     } on FirebaseException catch (e) {
       try {
@@ -788,9 +731,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
       if (!mounted) return;
 
-      _showError(
-        e.message ?? 'Unable to create CASLMS user profile.',
-      );
+      _showError(e.message ?? 'Unable to create CASLMS user profile.');
     } catch (e) {
       try {
         await createdUser?.delete();
@@ -798,9 +739,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
       if (!mounted) return;
 
-      _showError(
-        e.toString().replaceFirst('Exception: ', ''),
-      );
+      _showError(e.toString().replaceFirst('Exception: ', ''));
     } finally {
       try {
         await secondaryAuth?.signOut();
@@ -837,9 +776,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       );
     }
 
-    await Clipboard.setData(
-      ClipboardData(text: csv.toString()),
-    );
+    await Clipboard.setData(ClipboardData(text: csv.toString()));
 
     if (!mounted) return;
 
@@ -914,9 +851,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: adminTheme),
-      );
+      return const Center(child: CircularProgressIndicator(color: adminTheme));
     }
 
     if (_errorMessage != null) {
@@ -1024,12 +959,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     );
   }
 
-  Widget _metricCard(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _metricCard(String label, String value, IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -1080,9 +1010,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               borderRadius: BorderRadius.circular(14),
               borderSide: const BorderSide(color: borderColor),
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
         const SizedBox(height: 11),
@@ -1124,8 +1052,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     final Color roleColor = role == 'admin'
         ? Colors.deepPurple
         : role == 'instructor'
-            ? Colors.teal
-            : Colors.blue;
+        ? Colors.teal
+        : Colors.blue;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 11),
@@ -1135,10 +1063,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         border: Border.all(color: borderColor),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 8,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         leading: CircleAvatar(
           backgroundColor: roleColor.withValues(alpha: 0.10),
           child: Text(
@@ -1165,10 +1090,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               ),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 7,
-                vertical: 3,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
               decoration: BoxDecoration(
                 color: (active ? green : orange).withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(8),
@@ -1190,11 +1112,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             '${_capitalize(role)} • ${_campusId(user)}\n'
             '${_contactEmail(user)}\n'
             'Last login: ${_formatTimestamp(user['lastLoginAt'])}',
-            style: const TextStyle(
-              color: textGrey,
-              fontSize: 11,
-              height: 1.4,
-            ),
+            style: const TextStyle(color: textGrey, fontSize: 11, height: 1.4),
           ),
         ),
         trailing: PopupMenuButton<String>(
@@ -1207,15 +1125,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             }
           },
           itemBuilder: (_) => [
-            const PopupMenuItem(
-              value: 'edit',
-              child: Text('Edit User'),
-            ),
+            const PopupMenuItem(value: 'edit', child: Text('Edit User')),
             PopupMenuItem(
               value: 'status',
-              child: Text(
-                active ? 'Suspend Account' : 'Reactivate Account',
-              ),
+              child: Text(active ? 'Suspend Account' : 'Reactivate Account'),
             ),
           ],
         ),
@@ -1247,10 +1160,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   String _status(Map<String, dynamic> user) {
-    return (user['status'] ?? 'active')
-        .toString()
-        .trim()
-        .toLowerCase();
+    return (user['status'] ?? 'active').toString().trim().toLowerCase();
   }
 
   String _initials(String name) {
@@ -1266,9 +1176,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   bool _isValidEmail(String value) {
-    return RegExp(
-      r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-    ).hasMatch(value);
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value);
   }
 
   String _formatTimestamp(dynamic value) {
@@ -1282,8 +1190,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
     if (date == null) return 'Never';
 
-    final difference =
-        DateTime.now().difference(date.toLocal());
+    final difference = DateTime.now().difference(date.toLocal());
 
     if (difference.inMinutes < 1) return 'Just now';
     if (difference.inMinutes < 60) {

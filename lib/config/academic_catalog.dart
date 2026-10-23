@@ -1,35 +1,16 @@
-/// Registration choices supplied by the school. Keep in sync with academic_catalog.json.
+/// CAS registration choices. Stored program codes match academic_catalog.json.
 class AcademicCatalog {
-  static const Map<String, List<String>> programs = {
-    "College of Arts and Sciences (CAS)": ["BSIT", "BSIS", "BSPsych", "BSStat"],
-    "College of Education (COED)": [
-      "BEEd",
-      "BSEd English",
-      "BSEd Math",
-      "BSEd Science",
-      "BSEd Social Studies",
-      "BPEd",
-      "BECEd",
-    ],
-    "College of Engineering (COENG)": ["BSCE", "BSEE", "BSCpE", "BSECE"],
-    "College of Nursing and Health Sciences (CONHS)": [
-      "BSN",
-      "BSND",
-      "BSPharm",
-    ],
-    "College of Industrial Technology (CIT)": [
-      "Bachelor of Industrial Technology - Automotive",
-      "Bachelor of Industrial Technology - Culinary",
-      "Bachelor of Industrial Technology - Electrical",
-      "Bachelor of Industrial Technology - Electronics",
-      "Bachelor of Industrial Technology - Architectural Drafting",
-      "Bachelor of Industrial Technology - Mechanical",
-      "Bachelor of Industrial Technology - HVAC & Refrigeration",
-      "Bachelor of Industrial Technology - Beauty Care & Wellness",
-      "Bachelor of Industrial Technology - Apparel & Fashion",
-      "BS in Architecture",
-    ],
+  static const String department = 'College of Arts and Sciences (CAS)';
+  static const Map<String, String> programLabels = {
+    'BSIT': 'Bachelor of Science in Information Technology (BSIT)',
+    'BSIS': 'Bachelor of Science in Information Systems (BSIS)',
+    'BSPsych': 'Bachelor of Science in Psychology (BSPsych)',
+    'BSStat': 'Bachelor of Science in Statistics (BSStat)',
   };
+  static const Map<String, List<String>> programs = {
+    department: ['BSIT', 'BSIS', 'BSPsych', 'BSStat'],
+  };
+  static String programLabel(String code) => programLabels[code] ?? code;
   static bool contains(String department, String program) =>
       programs[department]?.contains(program) ?? false;
 }

@@ -10,7 +10,8 @@ import 'landing_page.dart';
 import 'student/student_main_page.dart';
 
 class SessionGate extends StatelessWidget {
-  const SessionGate({super.key});
+  const SessionGate({super.key, this.notificationId});
+  final String? notificationId;
 
   static final CampusAuthService _authService = CampusAuthService();
 
@@ -34,6 +35,7 @@ class SessionGate extends StatelessWidget {
         return _AuthenticatedRoleGate(
           key: ValueKey(user.uid),
           userId: user.uid,
+          notificationId: notificationId,
         );
       },
     );
@@ -41,7 +43,8 @@ class SessionGate extends StatelessWidget {
 }
 
 class _AuthenticatedRoleGate extends StatelessWidget {
-  const _AuthenticatedRoleGate({super.key, required this.userId});
+  const _AuthenticatedRoleGate({super.key, required this.userId, this.notificationId});
+  final String? notificationId;
 
   final String userId;
 
@@ -163,13 +166,13 @@ class _AuthenticatedRoleGate extends StatelessWidget {
 
         switch (role) {
           case 'student':
-            return const StudentMainScreen();
+            return StudentMainScreen(notificationId: notificationId);
 
           case 'instructor':
-            return const InstructorMainScreen();
+            return InstructorMainScreen(notificationId: notificationId);
 
           case 'admin':
-            return const AdminMainScreen();
+            return AdminMainScreen(notificationId: notificationId);
 
           default:
             return _AccountStateScreen(

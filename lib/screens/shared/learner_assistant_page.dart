@@ -86,17 +86,36 @@ class _LearnerAssistantScreenState extends State<LearnerAssistantScreen> {
       _messages.add(_Message(question, isUser: true));
     });
     _toBottom();
+    int? streamingIndex;
     try {
       final reply = await _service.ask(
         role: widget.role,
         question: question,
         studentId: _selected,
+        onDelta: (text) {
+          if (!mounted || generation != _generation) return;
+          setState(() {
+            streamingIndex ??= _messages.length;
+            if (streamingIndex == _messages.length) {
+              _messages.add(_Message(text));
+            } else {
+              _messages[streamingIndex!] = _Message(text);
+            }
+          });
+          _toBottom();
+        },
       );
       if (!mounted || generation != _generation) return;
       setState(() {
-        _messages.add(
-          _Message(reply.text, records: reply.usedAi ? reply.records : null),
+        final message = _Message(
+          reply.text,
+          records: reply.usedAi ? reply.records : null,
         );
+        if (streamingIndex == null) {
+          _messages.add(message);
+        } else {
+          _messages[streamingIndex!] = message;
+        }
       });
     } catch (error) {
       if (!mounted || generation != _generation) return;
@@ -248,11 +267,12 @@ class _LearnerAssistantScreenState extends State<LearnerAssistantScreen> {
                       padding: const EdgeInsets.all(16),
                       itemCount: _messages.length + (_sending ? 1 : 0),
                       itemBuilder: (context, index) {
-                        if (index == _messages.length)
+                        if (index == _messages.length) {
                           return const Padding(
                             padding: EdgeInsets.all(12),
                             child: Text('Checking current records…'),
                           );
+                        }
                         final message = _messages[index];
                         return Align(
                           alignment: message.isUser

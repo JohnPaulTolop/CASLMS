@@ -1,3 +1,5 @@
+import 'ai_router_service.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -40,8 +42,9 @@ class LearnerAssistantService {
 
   Future<AssistantRow> _account(String role) async {
     final user = _auth.currentUser;
-    if (user == null)
+    if (user == null) {
       throw const LearnerAssistantException('Please sign in again.');
+    }
     final doc = await _db
         .collection('users')
         .doc(user.uid)
@@ -170,8 +173,9 @@ class LearnerAssistantService {
             .doc(id)
             .get(const GetOptions(source: Source.server));
         final data = doc.data();
-        if (data != null && data['status'] == 'active')
+        if (data != null && data['status'] == 'active') {
           courses.add({...data, 'id': id});
+        }
       }
     } else {
       for (final course in await _ownedCourses(uid)) {
@@ -265,8 +269,9 @@ class LearnerAssistantService {
           }
           if (task['status'] != 'published') continue;
           final moduleId = assistantText(task['moduleId']);
-          if (moduleId.isNotEmpty && !publishedModules.contains(moduleId))
+          if (moduleId.isNotEmpty && !publishedModules.contains(moduleId)) {
             continue;
+          }
           final results = loaded[1]
               .where((r) => r['${source}Id'] == task['id'])
               .toList();
@@ -299,6 +304,7 @@ class LearnerAssistantService {
     required String role,
     required String question,
     String? studentId,
+    void Function(String text)? onDelta,
   }) async {
     final clean = question.trim();
     if (clean.isEmpty || clean.length > 1500) {
@@ -328,8 +334,9 @@ class LearnerAssistantService {
         'profile',
         'overview',
       ];
-      if (standard.any(q.contains))
+      if (standard.any(q.contains)) {
         return LearnerAssistantReply(report.describe(clean), records);
+      }
       final context = report.toContext();
       // Contact information stays in deterministic record views.
       context['student'] = {...report.profile}..remove('email');
@@ -347,6 +354,10 @@ class LearnerAssistantService {
             'CASLMS_ASSISTANT_MODEL',
             defaultValue: 'gemini-3.7-flash',
           ),
+          generationConfig: GenerationConfig(
+            maxOutputTokens: 600,
+            thinkingConfig: ThinkingConfig.withThinkingLevel(ThinkingLevel.low),
+          ),
           systemInstruction: Content.text(
             'You are the CASLMS learning assistant. '
             'Answer only from the supplied selected-student record snapshot. '
@@ -359,20 +370,48 @@ class LearnerAssistantService {
             'Use concise plain text; distinguish suggestions from recorded facts.',
           ),
         );
-        final response = await model
-            .generateContent([
-              Content.text(jsonEncode({'question': clean, 'records': context})),
-            ])
-            .timeout(const Duration(seconds: 35));
-        if (uid == null)
-          throw const LearnerAssistantException('Please sign in again.');
-        _checkSession(uid);
-        if ((response.text ?? '').trim().isNotEmpty) {
-          return LearnerAssistantReply(
-            response.text!.trim(),
-            records,
-            usedAi: true,
+        var answer = '';
+        final prompt = jsonEncode({'question': clean, 'records': context});
+        if (AiRouterService.enabled) {
+          answer = await AiRouterService().complete(
+            task: 'records_summary',
+            messages: [
+              {'role': 'user', 'content': prompt},
+            ],
+            onDelta: onDelta,
           );
+        } else {
+          final watch = Stopwatch()..start();
+          await for (final response
+              in model
+                  .generateContentStream([Content.text(prompt)])
+                  .timeout(const Duration(seconds: 20))) {
+            if (uid == null) {
+              throw const LearnerAssistantException('Please sign in again.');
+            }
+            _checkSession(uid);
+            if (watch.elapsed > const Duration(seconds: 35)) {
+              throw const LearnerAssistantException(
+                'AI processing took too long. Please retry.',
+              );
+            }
+            answer += response.text ?? '';
+            if (answer.isNotEmpty) onDelta?.call(answer);
+            if (response.candidates.any(
+              (candidate) => candidate.finishReason == FinishReason.maxTokens,
+            )) {
+              throw const LearnerAssistantException(
+                'The response reached its length limit. Ask for a shorter answer.',
+              );
+            }
+          }
+        }
+        if (uid == null) {
+          throw const LearnerAssistantException('Please sign in again.');
+        }
+        _checkSession(uid);
+        if (answer.trim().isNotEmpty) {
+          return LearnerAssistantReply(answer.trim(), records, usedAi: true);
         }
       } on LearnerAssistantException {
         rethrow;

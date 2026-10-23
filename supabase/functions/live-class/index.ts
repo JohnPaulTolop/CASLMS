@@ -238,6 +238,30 @@ Deno.serve(async (request) => {
           throw error;
         }
       }
+      if (created) {
+        try {
+          const enrollments = await db.collection("enrollments").where("courseId","==",courseId).get();
+          const audience = enrollments.docs.filter(doc => {
+            const e = doc.data();
+            return e.status === "active" && typeof e.studentId === "string" &&
+              doc.id === `${courseId}_${e.studentId}` &&
+              (String(e.sectionId ?? "").trim() || initial.course.classCode) === initial.sectionId;
+          });
+          for (let offset=0; offset<audience.length; offset+=400) {
+            const batch=db.batch();
+            for (const recipient of audience.slice(offset,offset+400)) {
+              const uid=recipient.data().studentId;
+              batch.create(db.collection("notifications").doc(`liveClass_${sessionId}_${uid}`), {
+                userId:uid,type:"live_class",sourceType:"liveClass",sourceId:ref.id,sessionId,
+                courseId,sectionId:initial.sectionId,actorId:actor.uid,
+                title:"Live class started",message:"Your instructor has started a live class.",
+                isRead:false,readAt:null,createdAt:FieldValue.serverTimestamp(),
+              });
+            }
+            await batch.commit();
+          }
+        } catch (error) { console.error("Live-class notification delivery failed",error); }
+      }
       return json({
         success: true,
         session: publicState((await ref.get()).data()),

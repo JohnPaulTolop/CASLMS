@@ -98,17 +98,40 @@ class _InstructorTeachingAssistantScreenState
 
     _scrollDown();
 
+    int? streamingIndex;
     try {
       final answer = await _service.ask(
         question: question,
         history: history,
         courseId: _courseId.isEmpty ? null : _courseId,
+        onDelta: (text) {
+          if (!mounted) return;
+          setState(() {
+            streamingIndex ??= _messages.length;
+            if (streamingIndex == _messages.length) {
+              _messages.add(TeachingAiTurn(text: text, isUser: false));
+            } else {
+              _messages[streamingIndex!] = TeachingAiTurn(
+                text: text,
+                isUser: false,
+              );
+            }
+          });
+          _scrollDown();
+        },
       );
 
       if (!mounted) return;
 
       setState(() {
-        _messages.add(TeachingAiTurn(text: answer, isUser: false));
+        if (streamingIndex == null) {
+          _messages.add(TeachingAiTurn(text: answer, isUser: false));
+        } else {
+          _messages[streamingIndex!] = TeachingAiTurn(
+            text: answer,
+            isUser: false,
+          );
+        }
       });
     } catch (error) {
       if (!mounted) return;
@@ -186,7 +209,8 @@ class _InstructorTeachingAssistantScreenState
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => const LearnerAssistantScreen(role: 'instructor'),
+                builder: (_) =>
+                    const LearnerAssistantScreen(role: 'instructor'),
               ),
             ),
           ),
@@ -368,11 +392,7 @@ class _InstructorTeachingAssistantScreenState
         const Text(
           'Plan lessons, generate quizzes, build rubrics, and\norganize learning activities instantly.',
           textAlign: TextAlign.center,
-          style: TextStyle(
-            color: secondaryText,
-            fontSize: 13,
-            height: 1.5,
-          ),
+          style: TextStyle(color: secondaryText, fontSize: 13, height: 1.5),
         ),
         const SizedBox(height: 40),
         ...prompts.map((prompt) => _buildPromptCard(prompt)),
@@ -397,7 +417,11 @@ class _InstructorTeachingAssistantScreenState
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-        leading: const Icon(Icons.lightbulb_outline_rounded, color: teal, size: 22),
+        leading: const Icon(
+          Icons.lightbulb_outline_rounded,
+          color: teal,
+          size: 22,
+        ),
         title: Text(
           prompt,
           style: const TextStyle(
@@ -437,15 +461,20 @@ class _InstructorTeachingAssistantScreenState
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: Row(
-        mainAxisAlignment:
-            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: isUser
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isUser) ...[
             const CircleAvatar(
               radius: 16,
               backgroundColor: teal,
-              child: Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 16),
+              child: Icon(
+                Icons.auto_awesome_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
             ),
             const SizedBox(width: 10),
           ],
@@ -504,7 +533,11 @@ class _InstructorTeachingAssistantScreenState
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.copy_rounded, size: 14, color: secondaryText),
+                              Icon(
+                                Icons.copy_rounded,
+                                size: 14,
+                                color: secondaryText,
+                              ),
                               const SizedBox(width: 6),
                               const Text(
                                 'Copy',
@@ -539,7 +572,11 @@ class _InstructorTeachingAssistantScreenState
           const CircleAvatar(
             radius: 16,
             backgroundColor: teal,
-            child: Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 16),
+            child: Icon(
+              Icons.auto_awesome_rounded,
+              color: Colors.white,
+              size: 16,
+            ),
           ),
           const SizedBox(width: 10),
           Container(
@@ -636,7 +673,11 @@ class _InstructorTeachingAssistantScreenState
                   : () {
                       if (_input.text.trim().isNotEmpty) _send();
                     },
-              icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+              icon: const Icon(
+                Icons.send_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
             ),
           ),
         ],

@@ -235,7 +235,15 @@ class CASLMSApp extends StatelessWidget {
       // ========================================================
       // ROUTING
       // ========================================================
-      initialRoute: '/',
+      initialRoute: WidgetsBinding.instance.platformDispatcher.defaultRouteName,
+      onGenerateRoute: (settings) {
+        final uri = Uri.tryParse(settings.name ?? '');
+        if (uri?.path == '/notification') {
+          return MaterialPageRoute<void>(settings: settings,
+            builder: (_) => SessionGate(notificationId: uri!.queryParameters['id']));
+        }
+        return null;
+      },
       routes: {
         // SessionGate decides whether to display the landing,
         // student, instructor, or administrator interface.

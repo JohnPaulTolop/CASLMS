@@ -1,3 +1,4 @@
+import { submissionNotice } from "../_shared/notification_payload.ts";
 import {
   cert,
   getApps,
@@ -1042,6 +1043,7 @@ async function submitAiQuiz(
         );
       }
 
+      const noticeCourse = await transaction.get(firestore.collection("courses").doc(courseId));
       const answerKeyDoc =
         await transaction.get(answerKeyRef);
 
@@ -1235,6 +1237,10 @@ async function submitAiQuiz(
         updatedAt: FieldValue.serverTimestamp(),
       });
 
+      const noticeInstructor = clean(noticeCourse.data()?.instructorId);
+      if (noticeInstructor) transaction.set(firestore.collection("notifications").doc(
+        `assessmentReceived_${submissionId}_${noticeInstructor}`),
+        submissionNotice(submissionId, {courseId,moduleId,studentId:user.uid}, noticeInstructor, FieldValue.serverTimestamp()));
       transaction.set(notificationRef, {
         userId: user.uid,
         type: "grade",
@@ -1582,10 +1588,14 @@ async function submitAssessment(
   };
 
   try {
-    await submissionReference
-      .set(
-        submissionData,
-      );
+    const noticeCourse = await firestore.collection("courses").doc(context.courseId).get();
+    const noticeInstructor = clean(noticeCourse.data()?.instructorId);
+    const submissionBatch = firestore.batch();
+    submissionBatch.set(submissionReference, submissionData);
+    if (noticeInstructor) submissionBatch.set(firestore.collection("notifications").doc(
+      `assessmentReceived_${submissionId}_${noticeInstructor}`),
+      submissionNotice(submissionId, submissionData, noticeInstructor, FieldValue.serverTimestamp()));
+    await submissionBatch.commit();
   } catch (error) {
     if (storagePath) {
       await supabase
@@ -1843,6 +1853,11 @@ async function recordGoogleFormSubmission(
           clean(latest.data()?.googleFormResponseId) === responseId) return;
       throw new RequestError("This student already has a recorded submission.", 409);
     }
+    const noticeCourse = await transaction.get(firestore.collection("courses").doc(courseId));
+    const noticeInstructor = clean(noticeCourse.data()?.instructorId);
+    if (noticeInstructor) transaction.set(firestore.collection("notifications").doc(
+      `assessmentReceived_${submissionId}_${noticeInstructor}`),
+      submissionNotice(submissionId, {courseId,moduleId,studentId:firebaseUser.uid}, noticeInstructor, FieldValue.serverTimestamp()));
     transaction.set(submissionReference, {
     assessmentId,
     courseId,

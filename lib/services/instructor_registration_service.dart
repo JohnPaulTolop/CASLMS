@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart'
     hide User;
 
 import 'campus_auth_service.dart';
+import '../config/academic_catalog.dart';
 
 class FacultyIdDocument {
   const FacultyIdDocument({
@@ -156,9 +157,9 @@ class InstructorRegistrationService {
       );
     }
 
-    if (cleanDepartment.isEmpty) {
+    if (cleanDepartment != AcademicCatalog.department) {
       throw CampusAuthException(
-        'Department is required.',
+        'Registration is for College of Arts and Sciences (CAS).',
       );
     }
 

@@ -1,3 +1,5 @@
+import '../../services/activity_log_service.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -9,8 +11,7 @@ class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
 
   @override
-  State<AdminSettingsScreen> createState() =>
-      _AdminSettingsScreenState();
+  State<AdminSettingsScreen> createState() => _AdminSettingsScreenState();
 }
 
 class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
@@ -23,12 +24,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   static const Color red = Color(0xFFFF4B4B);
   static const Color purple = Colors.deepPurple;
 
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
-  final FirebaseAuth _auth =
-      FirebaseAuth.instance;
-  final ProfilePictureService _profilePictureService =
-      ProfilePictureService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final ProfilePictureService _profilePictureService = ProfilePictureService();
 
   bool _isLoading = true;
   bool _isSaving = false;
@@ -58,30 +56,25 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       final User? user = _auth.currentUser;
 
       if (user == null) {
-        throw Exception(
-          'No administrator is currently logged in.',
-        );
+        throw Exception('No administrator is currently logged in.');
       }
 
       _authConnected = true;
 
-      final profileDocument =
-          await _firestore.collection('users').doc(user.uid).get();
+      final profileDocument = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .get();
 
-      if (!profileDocument.exists ||
-          profileDocument.data() == null) {
-        throw Exception(
-          'Administrator profile could not be found.',
-        );
+      if (!profileDocument.exists || profileDocument.data() == null) {
+        throw Exception('Administrator profile could not be found.');
       }
 
       final profile = profileDocument.data()!;
 
-      final role =
-          (profile['role'] ?? '').toString().trim().toLowerCase();
+      final role = (profile['role'] ?? '').toString().trim().toLowerCase();
 
-      final status =
-          (profile['status'] ?? '').toString().trim().toLowerCase();
+      final status = (profile['status'] ?? '').toString().trim().toLowerCase();
 
       if (role != 'admin' || status != 'active') {
         throw Exception(
@@ -97,10 +90,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       if (!mounted) return;
 
       setState(() {
-        _adminProfile = {
-          ...profile,
-          'uid': user.uid,
-        };
+        _adminProfile = {...profile, 'uid': user.uid};
         _isLoading = false;
       });
     } on FirebaseException catch (e) {
@@ -109,70 +99,49 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       setState(() {
         _isLoading = false;
         _firestoreConnected = false;
-        _errorMessage =
-            e.message ?? 'Unable to load platform settings.';
+        _errorMessage = e.message ?? 'Unable to load platform settings.';
       });
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
 
   String get _name {
     final String value =
-        (_adminProfile?['name'] ??
-                _auth.currentUser?.displayName ??
-                '')
+        (_adminProfile?['name'] ?? _auth.currentUser?.displayName ?? '')
             .toString()
             .trim();
 
-    return value.isEmpty
-        ? 'Administrator'
-        : value;
+    return value.isEmpty ? 'Administrator' : value;
   }
 
   String get _email {
-    final String value =
-        (_adminProfile?['email'] ?? '')
-            .toString()
-            .trim();
+    final String value = (_adminProfile?['email'] ?? '').toString().trim();
 
-    return value.isEmpty
-        ? 'No contact email'
-        : value;
+    return value.isEmpty ? 'No contact email' : value;
   }
 
   String get _campusId {
-    final String value =
-        (_adminProfile?['universityId'] ?? '')
-            .toString()
-            .trim();
+    final String value = (_adminProfile?['universityId'] ?? '')
+        .toString()
+        .trim();
 
-    return value.isEmpty
-        ? 'No ID'
-        : value;
+    return value.isEmpty ? 'No ID' : value;
   }
 
   String get _department {
-    final String value =
-        (_adminProfile?['department'] ?? '')
-            .toString()
-            .trim();
+    final String value = (_adminProfile?['department'] ?? '').toString().trim();
 
-    return value.isEmpty
-        ? 'Department not specified'
-        : value;
+    return value.isEmpty ? 'Department not specified' : value;
   }
 
   String get _photoUrl {
-    return (_adminProfile?['photoUrl'] ?? '')
-        .toString()
-        .trim();
+    return (_adminProfile?['photoUrl'] ?? '').toString().trim();
   }
 
   Future<void> _showEditAdminProfileDialog() async {
@@ -181,29 +150,20 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     }
 
     String newName = _name;
-    String newEmail =
-        (_adminProfile?['email'] ?? '')
-            .toString();
+    String newEmail = (_adminProfile?['email'] ?? '').toString();
 
-    String newDepartment =
-        (_adminProfile?['department'] ?? '')
-            .toString();
+    String newDepartment = (_adminProfile?['department'] ?? '').toString();
 
-    final Map<String, String>? result =
-        await showDialog<Map<String, String>>(
+    final Map<String, String>? result = await showDialog<Map<String, String>>(
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(20),
           ),
           title: const Text(
             'Administrator Profile',
-            style: TextStyle(
-              color: textDark,
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(color: textDark, fontWeight: FontWeight.w800),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -211,14 +171,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               children: [
                 TextFormField(
                   initialValue: newName,
-                  textCapitalization:
-                      TextCapitalization.words,
-                  decoration:
-                      const InputDecoration(
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
                     labelText: 'Full Name',
-                    prefixIcon: Icon(
-                      Icons.person_outline_rounded,
-                    ),
+                    prefixIcon: Icon(Icons.person_outline_rounded),
                   ),
                   onChanged: (String value) {
                     newName = value;
@@ -227,14 +183,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 const SizedBox(height: 14),
                 TextFormField(
                   initialValue: newEmail,
-                  keyboardType:
-                      TextInputType.emailAddress,
-                  decoration:
-                      const InputDecoration(
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
                     labelText: 'Contact Email',
-                    prefixIcon: Icon(
-                      Icons.email_outlined,
-                    ),
+                    prefixIcon: Icon(Icons.email_outlined),
                   ),
                   onChanged: (String value) {
                     newEmail = value;
@@ -243,14 +195,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 const SizedBox(height: 14),
                 TextFormField(
                   initialValue: newDepartment,
-                  textCapitalization:
-                      TextCapitalization.words,
-                  decoration:
-                      const InputDecoration(
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
                     labelText: 'Department',
-                    prefixIcon: Icon(
-                      Icons.apartment_rounded,
-                    ),
+                    prefixIcon: Icon(Icons.apartment_rounded),
                   ),
                   onChanged: (String value) {
                     newDepartment = value;
@@ -258,12 +206,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 ),
                 const SizedBox(height: 14),
                 InputDecorator(
-                  decoration:
-                      const InputDecoration(
+                  decoration: const InputDecoration(
                     labelText: 'Campus ID',
-                    prefixIcon: Icon(
-                      Icons.badge_outlined,
-                    ),
+                    prefixIcon: Icon(Icons.badge_outlined),
                     helperText:
                         'Campus ID and administrator role are protected.',
                   ),
@@ -271,8 +216,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                     _campusId,
                     style: const TextStyle(
                       color: textDark,
-                      fontWeight:
-                          FontWeight.w600,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
@@ -282,40 +226,27 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                FocusScope.of(
-                  dialogContext,
-                ).unfocus();
+                FocusScope.of(dialogContext).unfocus();
 
-                Navigator.of(
-                  dialogContext,
-                ).pop();
+                Navigator.of(dialogContext).pop();
               },
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
-                FocusScope.of(
-                  dialogContext,
-                ).unfocus();
+                FocusScope.of(dialogContext).unfocus();
 
-                Navigator.of(
-                  dialogContext,
-                ).pop({
+                Navigator.of(dialogContext).pop({
                   'name': newName,
                   'email': newEmail,
-                  'department':
-                      newDepartment,
+                  'department': newDepartment,
                 });
               },
-              style:
-                  ElevatedButton.styleFrom(
+              style: ElevatedButton.styleFrom(
                 backgroundColor: adminTheme,
-                foregroundColor:
-                    Colors.white,
+                foregroundColor: Colors.white,
               ),
-              child: const Text(
-                'Save Changes',
-              ),
+              child: const Text('Save Changes'),
             ),
           ],
         );
@@ -326,37 +257,27 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       return;
     }
 
-    final String cleanName =
-        (result['name'] ?? '').trim();
+    final String cleanName = (result['name'] ?? '').trim();
 
-    final String cleanEmail =
-        (result['email'] ?? '').trim();
+    final String cleanEmail = (result['email'] ?? '').trim();
 
-    final String cleanDepartment =
-        (result['department'] ?? '').trim();
+    final String cleanDepartment = (result['department'] ?? '').trim();
 
     if (cleanName.isEmpty) {
-      _showError(
-        'Full name cannot be empty.',
-      );
+      _showError('Full name cannot be empty.');
       return;
     }
 
     if (cleanEmail.isNotEmpty &&
-        (!cleanEmail.contains('@') ||
-            !cleanEmail.contains('.'))) {
-      _showError(
-        'Enter a valid contact email address.',
-      );
+        (!cleanEmail.contains('@') || !cleanEmail.contains('.'))) {
+      _showError('Enter a valid contact email address.');
       return;
     }
 
     final User? user = _auth.currentUser;
 
     if (user == null) {
-      _showError(
-        'You are no longer logged in.',
-      );
+      _showError('You are no longer logged in.');
       return;
     }
 
@@ -365,21 +286,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     });
 
     try {
-      await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .update({
+      await _firestore.collection('users').doc(user.uid).update({
         'name': cleanName,
         'email': cleanEmail,
         'department': cleanDepartment,
-        'updatedAt':
-            FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
       });
 
       try {
-        await user.updateDisplayName(
-          cleanName,
-        );
+        await user.updateDisplayName(cleanName);
       } catch (_) {
         // Firestore is the source of truth.
       }
@@ -400,9 +315,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _isSaving = false;
       });
 
-      _showMessage(
-        'Administrator profile updated.',
-      );
+      _showMessage('Administrator profile updated.');
     } on FirebaseException catch (e) {
       if (!mounted) {
         return;
@@ -412,10 +325,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _isSaving = false;
       });
 
-      _showError(
-        e.message ??
-            'Unable to update your profile.',
-      );
+      _showError(e.message ?? 'Unable to update your profile.');
     } catch (_) {
       if (!mounted) {
         return;
@@ -425,9 +335,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _isSaving = false;
       });
 
-      _showError(
-        'Unable to update your profile.',
-      );
+      _showError('Unable to update your profile.');
     }
   }
 
@@ -441,9 +349,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     });
 
     try {
-      final ProfilePictureResult? result =
-          await _profilePictureService
-              .pickAndUploadProfilePicture();
+      final ProfilePictureResult? result = await _profilePictureService
+          .pickAndUploadProfilePicture();
 
       if (!mounted) {
         return;
@@ -465,9 +372,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _isUploadingPhoto = false;
       });
 
-      _showMessage(
-        'Administrator profile picture updated.',
-      );
+      _showMessage('Administrator profile picture updated.');
     } on ProfilePictureServiceException catch (e) {
       if (!mounted) {
         return;
@@ -487,30 +392,22 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _isUploadingPhoto = false;
       });
 
-      _showError(
-        'Unable to update your profile picture.',
-      );
+      _showError('Unable to update your profile picture.');
     }
   }
 
   Future<void> _removeProfilePicture() async {
-    if (_photoUrl.isEmpty ||
-        _isUploadingPhoto) {
+    if (_photoUrl.isEmpty || _isUploadingPhoto) {
       return;
     }
 
-    final bool? confirmed =
-        await showDialog<bool>(
+    final bool? confirmed = await showDialog<bool>(
       context: context,
-      builder: (
-        BuildContext dialogContext,
-      ) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: const Text(
             'Remove Profile Picture',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w800),
           ),
           content: const Text(
             'Your administrator initials will be shown instead.',
@@ -518,23 +415,17 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(
-                  dialogContext,
-                ).pop(false);
+                Navigator.of(dialogContext).pop(false);
               },
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.of(
-                  dialogContext,
-                ).pop(true);
+                Navigator.of(dialogContext).pop(true);
               },
-              style:
-                  ElevatedButton.styleFrom(
+              style: ElevatedButton.styleFrom(
                 backgroundColor: red,
-                foregroundColor:
-                    Colors.white,
+                foregroundColor: Colors.white,
               ),
               child: const Text('Remove'),
             ),
@@ -552,17 +443,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     });
 
     try {
-      await _profilePictureService
-          .removeProfilePicture();
+      await _profilePictureService.removeProfilePicture();
 
       if (!mounted) {
         return;
       }
 
-      final Map<String, dynamic>
-          updatedProfile = {
-        ...?_adminProfile,
-      };
+      final Map<String, dynamic> updatedProfile = {...?_adminProfile};
 
       updatedProfile.remove('photoUrl');
       updatedProfile.remove('photoPath');
@@ -572,9 +459,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _isUploadingPhoto = false;
       });
 
-      _showMessage(
-        'Administrator profile picture removed.',
-      );
+      _showMessage('Administrator profile picture removed.');
     } on ProfilePictureServiceException catch (e) {
       if (!mounted) {
         return;
@@ -594,9 +479,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _isUploadingPhoto = false;
       });
 
-      _showError(
-        'Unable to remove your profile picture.',
-      );
+      _showError('Unable to remove your profile picture.');
     }
   }
 
@@ -609,9 +492,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             'Log Out Administrator',
             style: TextStyle(fontWeight: FontWeight.w800),
           ),
-          content: const Text(
-            'End this secure administrator session?',
-          ),
+          content: const Text('End this secure administrator session?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
@@ -633,22 +514,17 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     if (confirmed != true) return;
 
     try {
-      await _auth.signOut();
+      await ActivityLogService(auth: _auth).signOut();
 
       if (!mounted) return;
 
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/',
-        (route) => false,
-      );
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            e.message ?? 'Unable to log out.',
-          ),
+          content: Text(e.message ?? 'Unable to log out.'),
           backgroundColor: red,
           behavior: SnackBarBehavior.floating,
         ),
@@ -690,10 +566,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           IconButton(
             onPressed: _isLoading ? null : _loadSettings,
             tooltip: 'Refresh',
-            icon: const Icon(
-              Icons.refresh_rounded,
-              color: textDark,
-            ),
+            icon: const Icon(Icons.refresh_rounded, color: textDark),
           ),
           const SizedBox(width: 8),
         ],
@@ -713,11 +586,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: adminTheme,
-        ),
-      );
+      return const Center(child: CircularProgressIndicator(color: adminTheme));
     }
 
     if (_errorMessage != null) {
@@ -727,19 +596,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.error_outline_rounded,
-                color: red,
-                size: 50,
-              ),
+              const Icon(Icons.error_outline_rounded, color: red, size: 50),
               const SizedBox(height: 14),
               Text(
                 _errorMessage!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: textGrey,
-                  height: 1.45,
-                ),
+                style: const TextStyle(color: textGrey, height: 1.45),
               ),
               const SizedBox(height: 18),
               ElevatedButton.icon(
@@ -770,36 +632,27 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           const SizedBox(height: 18),
           _buildActionTile(
             title: 'Edit Administrator Profile',
-            subtitle:
-                'Update your name, email, and department.',
-            icon:
-                Icons.manage_accounts_outlined,
+            subtitle: 'Update your name, email, and department.',
+            icon: Icons.manage_accounts_outlined,
             color: adminTheme,
-            onTap:
-                _showEditAdminProfileDialog,
+            onTap: _showEditAdminProfileDialog,
           ),
           _buildActionTile(
             title: _photoUrl.isEmpty
                 ? 'Upload Profile Picture'
                 : 'Change Profile Picture',
-            subtitle:
-                'JPG, JPEG, PNG, or WEBP up to 5 MB.',
-            icon:
-                Icons.photo_camera_outlined,
+            subtitle: 'JPG, JPEG, PNG, or WEBP up to 5 MB.',
+            icon: Icons.photo_camera_outlined,
             color: adminTheme,
             onTap: _changeProfilePicture,
           ),
           if (_photoUrl.isNotEmpty)
             _buildActionTile(
-              title:
-                  'Remove Profile Picture',
-              subtitle:
-                  'Show your administrator initials instead.',
-              icon:
-                  Icons.delete_outline_rounded,
+              title: 'Remove Profile Picture',
+              subtitle: 'Show your administrator initials instead.',
+              icon: Icons.delete_outline_rounded,
               color: red,
-              onTap:
-                  _removeProfilePicture,
+              onTap: _removeProfilePicture,
             ),
           const SizedBox(height: 18),
           const Text(
@@ -830,16 +683,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           const SizedBox(height: 18),
           _buildActionTile(
             title: 'Firebase AI Logic',
-            subtitle:
-                'Open real AI processing status and material activity.',
+            subtitle: 'Open real AI processing status and material activity.',
             icon: Icons.auto_awesome_rounded,
             color: purple,
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) => const AdminAIGatewayScreen(),
-                ),
+                MaterialPageRoute(builder: (_) => const AdminAIGatewayScreen()),
               );
             },
           ),
@@ -856,8 +706,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           const SizedBox(height: 12),
           _buildActionTile(
             title: 'Log Out Administrator',
-            subtitle:
-                'End the current Firebase Authentication session.',
+            subtitle: 'End the current Firebase Authentication session.',
             icon: Icons.logout_rounded,
             color: red,
             onTap: _logoutAdmin,
@@ -868,9 +717,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   }
 
   Widget _buildAdminAccount() {
-    final String status =
-        (_adminProfile?['status'] ?? 'active')
-            .toString();
+    final String status = (_adminProfile?['status'] ?? 'active').toString();
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -889,30 +736,22 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 color: adminTheme,
                 shape: const CircleBorder(),
                 child: InkWell(
-                  onTap: _isUploadingPhoto
-                      ? null
-                      : _changeProfilePicture,
-                  customBorder:
-                      const CircleBorder(),
+                  onTap: _isUploadingPhoto ? null : _changeProfilePicture,
+                  customBorder: const CircleBorder(),
                   child: SizedBox(
                     width: 28,
                     height: 28,
                     child: _isUploadingPhoto
                         ? const Padding(
-                            padding:
-                                EdgeInsets.all(7),
-                            child:
-                                CircularProgressIndicator(
-                              color:
-                                  Colors.white,
+                            padding: EdgeInsets.all(7),
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
                               strokeWidth: 2,
                             ),
                           )
                         : const Icon(
-                            Icons
-                                .camera_alt_rounded,
-                            color:
-                                Colors.white,
+                            Icons.camera_alt_rounded,
+                            color: Colors.white,
                             size: 14,
                           ),
                   ),
@@ -938,30 +777,20 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                   '$_campusId • $_email',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: textGrey,
-                    fontSize: 11,
-                  ),
+                  style: const TextStyle(color: textGrey, fontSize: 11),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   _department,
                   maxLines: 1,
-                  overflow:
-                      TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: textGrey,
-                    fontSize: 10.5,
-                  ),
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: textGrey, fontSize: 10.5),
                 ),
               ],
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 4,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: green.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(8),
@@ -988,13 +817,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           width: 52,
           height: 52,
           fit: BoxFit.cover,
-          errorBuilder: (
-            BuildContext context,
-            Object error,
-            StackTrace? stackTrace,
-          ) {
-            return _buildAdminInitialAvatar();
-          },
+          errorBuilder:
+              (BuildContext context, Object error, StackTrace? stackTrace) {
+                return _buildAdminInitialAvatar();
+              },
         ),
       );
     }
@@ -1005,14 +831,10 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   Widget _buildAdminInitialAvatar() {
     return CircleAvatar(
       radius: 26,
-      backgroundColor:
-          adminTheme.withValues(alpha: 0.10),
+      backgroundColor: adminTheme.withValues(alpha: 0.10),
       child: Text(
         _initials(_name),
-        style: const TextStyle(
-          color: adminTheme,
-          fontWeight: FontWeight.w800,
-        ),
+        style: const TextStyle(color: adminTheme, fontWeight: FontWeight.w800),
       ),
     );
   }
@@ -1059,18 +881,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 const SizedBox(height: 3),
                 Text(
                   subtitle,
-                  style: const TextStyle(
-                    color: textGrey,
-                    fontSize: 10.5,
-                  ),
+                  style: const TextStyle(color: textGrey, fontSize: 10.5),
                 ),
               ],
             ),
           ),
           Icon(
-            connected
-                ? Icons.check_circle_rounded
-                : Icons.error_rounded,
+            connected ? Icons.check_circle_rounded : Icons.error_rounded,
             color: color,
             size: 20,
           ),
@@ -1103,33 +920,27 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             horizontal: 15,
             vertical: 5,
           ),
-        leading: Container(
-          padding: const EdgeInsets.all(9),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(10),
+          leading: Container(
+            padding: const EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 20),
           ),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: textDark,
-            fontWeight: FontWeight.w800,
-            fontSize: 13,
+          title: Text(
+            title,
+            style: const TextStyle(
+              color: textDark,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+            ),
           ),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: const TextStyle(
-            color: textGrey,
-            fontSize: 10.5,
+          subtitle: Text(
+            subtitle,
+            style: const TextStyle(color: textGrey, fontSize: 10.5),
           ),
-        ),
-        trailing: const Icon(
-          Icons.chevron_right_rounded,
-          color: textGrey,
-        ),
+          trailing: const Icon(Icons.chevron_right_rounded, color: textGrey),
         ),
       ),
     );
@@ -1146,20 +957,12 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.lock_outline_rounded,
-            color: purple,
-            size: 19,
-          ),
+          Icon(Icons.lock_outline_rounded, color: purple, size: 19),
           SizedBox(width: 10),
           Expanded(
             child: Text(
               'API keys and Firebase service credentials are intentionally not editable in the Flutter app. Secret configuration belongs in Firebase / Google Cloud, not in client-side UI.',
-              style: TextStyle(
-                color: textDark,
-                fontSize: 10.8,
-                height: 1.45,
-              ),
+              style: TextStyle(color: textDark, fontSize: 10.8, height: 1.45),
             ),
           ),
         ],
@@ -1172,16 +975,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: adminTheme,
-        behavior:
-            SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -1191,16 +991,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: red,
-        behavior:
-            SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }

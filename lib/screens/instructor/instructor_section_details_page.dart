@@ -1,3 +1,5 @@
+import '../../services/course_invitation_service.dart';
+import 'invite_student_dialog.dart';
 import '../shared/grading_ui.dart';
 
 import 'dart:async';
@@ -63,6 +65,11 @@ class _InstructorSectionDetailsScreenState
 
   late Future<_SectionViewData> _future;
 
+  late final _invitationStream = _db
+      .collection('courseInvitations')
+      .where('courseId', isEqualTo: widget.courseId)
+      .snapshots();
+  final Set<String> _cancellingInvitations = {};
   bool _transferring = false;
   bool _overviewExpanded = false;
   final List<StreamSubscription> _changes = [];
@@ -80,7 +87,6 @@ class _InstructorSectionDetailsScreenState
             .collection(collection)
             .where('courseId', isEqualTo: widget.courseId)
             .snapshots()
-            .skip(1)
             .listen(
               (_) {
                 _refreshTimer?.cancel();
@@ -366,6 +372,7 @@ class _InstructorSectionDetailsScreenState
       MaterialPageRoute<void>(
         builder: (_) => InstructorClassDetailsScreen(
           courseId: widget.courseId,
+          sectionId: widget.sectionId,
           courseCode: _text(data.course['code']),
           courseTitle: _text(data.course['title']),
         ),
@@ -685,7 +692,6 @@ class _InstructorSectionDetailsScreenState
     final sectionName = _text(data.section['name']);
     final identifier = _text(data.section['identifier']);
     final status = _text(data.section['status']);
-    final classCode = _text(data.section['classCode']);
     final isActive = status.toLowerCase() == 'active';
 
     return Container(
@@ -828,8 +834,6 @@ class _InstructorSectionDetailsScreenState
                         Icons.assignment_outlined,
                         '${data.assessments.length} assessments',
                       ),
-                      if (classCode.isNotEmpty)
-                        _overviewChip(Icons.key_rounded, classCode),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -874,6 +878,107 @@ class _InstructorSectionDetailsScreenState
   // STUDENTS TAB
   // ============================================================
 
+  Widget _pendingInvitations(_SectionViewData data) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _invitationStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text(
+            'Unable to sync pending invitations. Reopen this section to retry.',
+          );
+        }
+        final pending =
+            snapshot.data?.docs
+                .where(
+                  (d) =>
+                      d.data()['status'] == 'pending' &&
+                      (d.data()['sectionId'] ?? data.course['classCode']) ==
+                          widget.sectionId,
+                )
+                .toList() ??
+            [];
+        if (pending.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pending invitations (${pending.length})',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            ...pending.map(
+              (invitation) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(
+                  Icons.mark_email_unread_outlined,
+                  color: teal,
+                ),
+                title: Text(
+                  (invitation.data()['studentName'] ?? 'Student').toString(),
+                ),
+                subtitle: Text(
+                  'Campus ID: ${invitation.data()['studentCampusId'] ?? ''}',
+                ),
+                trailing: TextButton(
+                  onPressed: _cancellingInvitations.contains(invitation.id)
+                      ? null
+                      : () async {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (dialogContext) => AlertDialog(
+                              title: const Text('Cancel invitation?'),
+                              content: const Text(
+                                'The student will no longer be able to accept this invitation.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogContext, false),
+                                  child: const Text('Keep'),
+                                ),
+                                FilledButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogContext, true),
+                                  child: const Text('Cancel invitation'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (!mounted || confirmed != true) return;
+                          setState(
+                            () => _cancellingInvitations.add(invitation.id),
+                          );
+                          try {
+                            await CourseInvitationService().cancelInvitation(
+                              invitation.id,
+                            );
+                          } on CourseInvitationException catch (error) {
+                            _notice(error.message);
+                          } finally {
+                            if (mounted) {
+                              setState(
+                                () => _cancellingInvitations.remove(
+                                  invitation.id,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  child: Text(
+                    _cancellingInvitations.contains(invitation.id)
+                        ? 'Cancelling…'
+                        : 'Cancel',
+                  ),
+                ),
+              ),
+            ),
+            const Divider(height: 24),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _studentsTab(_SectionViewData data) {
     final isActive = _text(data.section['status']).toLowerCase() == 'active';
 
@@ -915,7 +1020,36 @@ class _InstructorSectionDetailsScreenState
                   label: Text(_transferring ? 'Transferring' : 'Transfer'),
                 ),
               ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: !isActive
+                    ? null
+                    : () async {
+                        final sent = await showDialog<bool>(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (_) => InviteStudentDialog(
+                            courseId: widget.courseId,
+                            sectionId: widget.sectionId,
+                          ),
+                        );
+                        if (!mounted || sent != true) return;
+                        _notice(
+                          'Invitation sent. This roster updates when the student accepts.',
+                        );
+                      },
+                icon: const Icon(Icons.mail_outline_rounded),
+                label: const Text('Invite student'),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 10),
+                child: Text(
+                  'Invitation-only enrollment. Accepted students appear here automatically.',
+                  style: TextStyle(color: secondaryText, fontSize: 12),
+                ),
+              ),
               const SizedBox(height: 18),
+              _pendingInvitations(data),
               if (data.students.isEmpty)
                 _emptyState(
                   icon: Icons.people_outline_rounded,

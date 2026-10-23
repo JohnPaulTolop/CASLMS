@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'notification_service.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -16,6 +20,7 @@ class CourseInvitationService {
   Future<Map<String, dynamic>> inviteStudentByCampusId({
     required String courseId,
     required String campusId,
+    String? sectionId,
   }) async {
     final user = _auth.currentUser;
     final cleanCourseId = courseId.trim();
@@ -66,6 +71,34 @@ class CourseInvitationService {
         throw CourseInvitationException(
           'Students cannot be invited to an inactive course.',
         );
+      }
+
+      final targetSectionId = (sectionId ?? course['classCode'] ?? '')
+          .toString()
+          .trim();
+      String targetSectionName =
+          (course['legacySectionName'] ?? 'Original Section').toString();
+      if (targetSectionId.isEmpty) {
+        throw CourseInvitationException(
+          'Select a section before inviting a student.',
+        );
+      }
+      if (targetSectionId != course['classCode']) {
+        final target =
+            (await _firestore
+                    .collection('courseSections')
+                    .doc(targetSectionId)
+                    .get())
+                .data();
+        if (target == null ||
+            target['courseId'] != cleanCourseId ||
+            target['instructorId'] != user.uid ||
+            target['status'] != 'active') {
+          throw CourseInvitationException(
+            'This section is unavailable for invitations.',
+          );
+        }
+        targetSectionName = (target['name'] ?? 'Section').toString();
       }
 
       final studentSnapshot = await _firestore
@@ -131,6 +164,8 @@ class CourseInvitationService {
         }
         if (currentInvitation.exists) {
           transaction.update(invitationReference, {
+            'sectionId': targetSectionId,
+            'sectionName': targetSectionName,
             'status': 'pending',
             'createdAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
@@ -150,6 +185,8 @@ class CourseInvitationService {
             'studentCampusId': cleanCampusId,
             'studentName': (student['name'] ?? 'Student').toString().trim(),
             'studentEmail': (student['email'] ?? '').toString().trim(),
+            'sectionId': targetSectionId,
+            'sectionName': targetSectionName,
             'status': 'pending',
             'createdAt': FieldValue.serverTimestamp(),
             'updatedAt': FieldValue.serverTimestamp(),
@@ -162,6 +199,8 @@ class CourseInvitationService {
         'id': invitationId,
         'invitationId': invitationId,
         'courseId': cleanCourseId,
+        'sectionId': targetSectionId,
+        'sectionName': targetSectionName,
         'courseCode': (course['code'] ?? '').toString().trim(),
         'courseTitle': (course['title'] ?? 'Course').toString().trim(),
         'studentId': studentId,
@@ -216,6 +255,33 @@ class CourseInvitationService {
         error.message ?? 'Unable to load course invitations.',
       );
     }
+  }
+
+  Stream<List<Map<String, dynamic>>> watchMyPendingInvitations() {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value([]);
+    return _firestore
+        .collection('courseInvitations')
+        .where('studentId', isEqualTo: uid)
+        .snapshots()
+        .map((snapshot) {
+          final result = snapshot.docs
+              .where((d) => d.data()['status'] == 'pending')
+              .map(
+                (d) => <String, dynamic>{
+                  ...d.data(),
+                  'id': d.id,
+                  'invitationId': d.id,
+                },
+              )
+              .toList();
+          result.sort(
+            (a, b) => (_dateFrom(b['createdAt']) ?? DateTime(1970)).compareTo(
+              _dateFrom(a['createdAt']) ?? DateTime(1970),
+            ),
+          );
+          return result;
+        });
   }
 
   Future<List<Map<String, dynamic>>> getMyPendingInvitations() async {
@@ -287,7 +353,7 @@ class CourseInvitationService {
         .doc(cleanInvitationId);
 
     try {
-      return await _firestore.runTransaction<Map<String, dynamic>>((
+      final result = await _firestore.runTransaction<Map<String, dynamic>>((
         transaction,
       ) async {
         final invitationDocument = await transaction.get(invitationReference);
@@ -301,8 +367,10 @@ class CourseInvitationService {
             'This invitation belongs to another student.',
           );
         }
-        if ((invitation['status'] ?? '').toString().toLowerCase() !=
-            'pending') {
+        if (![
+          'pending',
+          if (accept) 'accepted',
+        ].contains((invitation['status'] ?? '').toString().toLowerCase())) {
           throw CourseInvitationException(
             'This invitation has already been answered.',
           );
@@ -344,7 +412,47 @@ class CourseInvitationService {
           );
         }
 
+        final targetSectionId =
+            (invitation['sectionId'] ?? course['classCode'] ?? '')
+                .toString()
+                .trim();
+        if (accept && targetSectionId != course['classCode']) {
+          final section = (await transaction.get(
+            _firestore.collection('courseSections').doc(targetSectionId),
+          )).data();
+          if (section == null ||
+              section['status'] != 'active' ||
+              section['courseId'] != courseId ||
+              section['instructorId'] != course['instructorId']) {
+            throw CourseInvitationException(
+              'This section is no longer accepting invitations.',
+            );
+          }
+        }
         if (accept) {
+          final previous = enrollmentDocument.data();
+          final alreadyActive = previous?['status'] == 'active';
+          final previousSection =
+              (previous?['sectionId'] ?? course['classCode'] ?? '').toString();
+          if (alreadyActive && previousSection != targetSectionId) {
+            throw CourseInvitationException(
+              'You are already enrolled in another section. Ask your instructor to transfer you.',
+            );
+          }
+          if (invitation['status'] == 'accepted') {
+            if (!alreadyActive) {
+              throw CourseInvitationException(
+                'This invitation was already used. Ask your instructor to send a new invitation.',
+              );
+            }
+            return {
+              ...invitation,
+              'id': cleanInvitationId,
+              'invitationId': cleanInvitationId,
+            };
+          }
+          // Enrollment is the essential transaction. A notification is optional
+          // and must never block a student's invitation acceptance.
           transaction.set(enrollmentReference, {
             'courseId': courseId,
             'studentId': user.uid,
@@ -354,12 +462,14 @@ class CourseInvitationService {
                 .trim(),
             'status': 'active',
             'enrollmentSource': 'instructor_invitation',
-            'sectionId': (course['classCode'] ?? '').toString().trim(),
+            'sectionId': targetSectionId,
             'invitationId': cleanInvitationId,
-            'invitedBy': (invitation['instructorId'] ?? '').toString(),
-            'enrolledAt': FieldValue.serverTimestamp(),
+            'invitedBy': invitation['instructorId'],
+            'enrolledAt': alreadyActive && previous?['enrolledAt'] is Timestamp
+                ? previous!['enrolledAt']
+                : FieldValue.serverTimestamp(),
             'acceptedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: enrollmentDocument.exists));
+          });
         }
 
         transaction.update(invitationReference, {
@@ -375,6 +485,8 @@ class CourseInvitationService {
           'status': accept ? 'accepted' : 'declined',
         };
       });
+      if (accept) unawaited(_sendEnrollmentReceipt(result, user.uid));
+      return result;
     } on CourseInvitationException {
       rethrow;
     } on FirebaseException catch (error) {
@@ -385,6 +497,27 @@ class CourseInvitationService {
       throw CourseInvitationException(
         'Unable to answer the course invitation.',
       );
+    }
+  }
+
+  Future<void> _sendEnrollmentReceipt(
+    Map<String, dynamic> invitation,
+    String uid,
+  ) async {
+    try {
+      final courseId = invitation['courseId'].toString();
+      await _firestore
+          .collection('notifications')
+          .doc('enrollment_${courseId}_$uid')
+          .set(
+            NotificationService.enrollmentNotice(
+              courseId: courseId,
+              studentId: uid,
+              actorId: uid,
+            ),
+          );
+    } on FirebaseException {
+      // A duplicate receipt or older notification rules cannot undo enrollment.
     }
   }
 

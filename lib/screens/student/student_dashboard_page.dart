@@ -1,3 +1,10 @@
+import 'student_course_modules_page.dart';
+
+import 'dart:async';
+
+import '../../services/course_invitation_service.dart';
+import '../shared/notification_inbox.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -5,7 +12,6 @@ import 'package:flutter/material.dart';
 import '../../services/enrollment_service.dart';
 import '../../services/student_assessment_query_service.dart';
 
-import '../instructor/notifications_page.dart';
 import 'student_course_invitations_page.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
@@ -59,9 +65,13 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   // STATE
   // ============================================================
 
+  StreamSubscription<List<Map<String, dynamic>>>? _classesSubscription;
+  StreamSubscription<List<Map<String, dynamic>>>? _invitationsSubscription;
+  int _pendingInvitations = 0;
   bool _isLoading = true;
 
   String? _errorMessage;
+  String? _summaryError;
 
   Map<String, dynamic>? _student;
 
@@ -72,8 +82,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   int _pendingTaskCount = 0;
 
   int _announcementCount = 0;
-
-  int _unreadNotificationCount = 0;
 
   // If two dashboard loads happen close together,
   // only the newest one may update the State.
@@ -87,14 +95,53 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   void initState() {
     super.initState();
 
-    _loadDashboard();
+    _classesSubscription = _enrollmentService.watchMyActiveCourses().listen(
+      (courses) {
+        if (!mounted) return;
+        setState(() {
+          _courses = courses;
+          _errorMessage = null;
+        });
+        _loadDashboard(showLoading: _student == null, activeCourses: courses);
+      },
+      onError: (Object error) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage =
+                'Unable to sync classes. Check your connection and retry.';
+          });
+        }
+      },
+    );
+    _invitationsSubscription = CourseInvitationService()
+        .watchMyPendingInvitations()
+        .listen(
+          (items) {
+            if (mounted) setState(() => _pendingInvitations = items.length);
+          },
+          onError: (Object error) {
+            /* The invitations screen provides retry and error details. */
+          },
+        );
+  }
+
+  @override
+  void dispose() {
+    _loadGeneration++;
+    _classesSubscription?.cancel();
+    _invitationsSubscription?.cancel();
+    super.dispose();
   }
 
   // ============================================================
   // LOAD DASHBOARD
   // ============================================================
 
-  Future<void> _loadDashboard({bool showLoading = true}) async {
+  Future<void> _loadDashboard({
+    bool showLoading = true,
+    List<Map<String, dynamic>>? activeCourses,
+  }) async {
     final int generation = ++_loadGeneration;
 
     if (showLoading && mounted) {
@@ -111,13 +158,18 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
       final Map<String, dynamic> student = await _enrollmentService
           .getCurrentStudentProfile();
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _student = student;
+        _isLoading = false;
+      });
 
       // --------------------------------------------------------
       // REAL ACTIVE COURSES
       // --------------------------------------------------------
 
-      final List<Map<String, dynamic>> courses = await _enrollmentService
-          .getMyActiveCourses();
+      final List<Map<String, dynamic>> courses =
+          activeCourses ?? await _enrollmentService.getMyActiveCourses();
 
       final String studentId = _auth.currentUser?.uid ?? '';
 
@@ -276,20 +328,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       // NOTIFICATIONS
       // --------------------------------------------------------
 
-      final QuerySnapshot<Map<String, dynamic>> notificationSnapshot =
-          await _firestore
-              .collection('notifications')
-              .where('userId', isEqualTo: studentId)
-              .get();
-
-      int unreadNotifications = 0;
-
-      for (final document in notificationSnapshot.docs) {
-        if (document.data()['isRead'] != true) {
-          unreadNotifications++;
-        }
-      }
-
       // A newer request already started.
       if (!mounted || generation != _loadGeneration) {
         return;
@@ -297,7 +335,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
       setState(() {
         _student = student;
-
+        _summaryError = null;
         _courses = courses;
 
         _pendingTaskCount = pendingAssessments.length;
@@ -305,8 +343,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         _upcomingAssessments = upcomingAssessments;
 
         _announcementCount = announcementCount;
-
-        _unreadNotificationCount = unreadNotifications;
 
         _isLoading = false;
 
@@ -320,7 +356,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       setState(() {
         _isLoading = false;
 
-        _errorMessage = e.message;
+        _recordLoadError(e.message);
       });
     } on FirebaseException catch (e) {
       if (!mounted || generation != _loadGeneration) {
@@ -330,7 +366,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       setState(() {
         _isLoading = false;
 
-        _errorMessage = e.message ?? 'Unable to load dashboard.';
+        _recordLoadError(e.message ?? 'Unable to load dashboard.');
       });
     } catch (_) {
       if (!mounted || generation != _loadGeneration) {
@@ -340,7 +376,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       setState(() {
         _isLoading = false;
 
-        _errorMessage = 'Unable to load student dashboard.';
+        _recordLoadError('Unable to load student dashboard.');
       });
     }
   }
@@ -348,6 +384,15 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   // ============================================================
   // STUDENT NAME
   // ============================================================
+
+  void _recordLoadError(String message) {
+    if (_student == null) {
+      _errorMessage = message;
+    } else {
+      _summaryError =
+          'Some dashboard totals could not be updated. Pull to refresh.';
+    }
+  }
 
   String get _studentName {
     final String name = (_student?['name'] ?? _student?['displayName'] ?? '')
@@ -454,42 +499,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   }
 
   // ============================================================
-  // JOIN SECTION BY CODE
-  // ============================================================
-
-  Future<void> _openJoinSection() async {
-    final joined = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _JoinClassSheet(enrollmentService: _enrollmentService),
-    );
-
-    if (!mounted || joined == null) {
-      return;
-    }
-
-    await _loadDashboard(showLoading: false);
-  }
-  // ============================================================
-  // NOTIFICATIONS
-  // ============================================================
-
-  Future<void> _openNotifications() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-    );
-
-    if (!mounted) {
-      return;
-    }
-
-    await _loadDashboard(showLoading: false);
-  }
-
-  // ============================================================
-  // ASSESSMENT ICON
+  // ASSESSMENT HELPERS
   // ============================================================
 
   IconData _assessmentIcon(String type) {
@@ -606,77 +616,44 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
         const SizedBox(height: 20),
 
-        _buildStatistics(),
-
-        const SizedBox(height: 28),
-
+        OutlinedButton.icon(
+          onPressed: _openCourseInvitations,
+          icon: Badge(
+            isLabelVisible: _pendingInvitations > 0,
+            label: Text('$_pendingInvitations'),
+            child: const Icon(Icons.mail_outline_rounded),
+          ),
+          label: Text(
+            _pendingInvitations > 0
+                ? 'Course invitations ($_pendingInvitations)'
+                : 'Course invitations',
+          ),
+        ),
+        const SizedBox(height: 20),
         _buildSectionHeader(
           title: 'My Classes',
-
           action: 'View all',
-
-          onTap: () {
-            widget.onNavigateToTab?.call(1);
-          },
+          onTap: () => widget.onNavigateToTab?.call(1),
         ),
-
-        const SizedBox(height: 12),
-
+        const Padding(
+          padding: EdgeInsets.only(top: 4, bottom: 12),
+          child: Text(
+            'Most recently joined first - Updates automatically',
+            style: TextStyle(color: textGrey, fontSize: 12),
+          ),
+        ),
         _buildClasses(),
-
-        const SizedBox(height: 18),
-
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: FilledButton.icon(
-            onPressed: _openJoinSection,
-            icon: const Icon(Icons.vpn_key_outlined),
-            label: const Text(
-              'Join Section with Code',
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-            style: FilledButton.styleFrom(
-              backgroundColor: primaryBlue,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
+        const SizedBox(height: 24),
+        if (_summaryError != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              _summaryError!,
+              style: const TextStyle(color: textGrey),
             ),
           ),
-        ),
-
-        const SizedBox(height: 10),
-
-        SizedBox(
-          width: double.infinity,
-
-          height: 52,
-
-          child: OutlinedButton.icon(
-            onPressed: _openCourseInvitations,
-
-            icon: const Icon(Icons.mark_email_unread_outlined),
-
-            label: const Text(
-              'View Course Invitations',
-
-              style: TextStyle(fontWeight: FontWeight.w800),
-            ),
-
-            style: OutlinedButton.styleFrom(
-              foregroundColor: primaryBlue,
-
-              side: const BorderSide(color: primaryBlue),
-
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 30),
-
+        _buildStatistics(),
+        const SizedBox(height: 24),
         _buildSectionHeader(
           title: 'Upcoming',
 
@@ -703,179 +680,26 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   Widget _buildWelcomeBanner() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1769FF), Color(0xFF5B8CFF)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: primaryBlue.withValues(alpha: 0.22),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        color: primaryBlue,
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Stack(
-        clipBehavior: Clip.none,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            right: -30,
-            top: -45,
-            child: Container(
-              width: 130,
-              height: 130,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          Positioned(
-            right: 44,
-            bottom: -64,
-            child: Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Hello, $_firstName!',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 25,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.7,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          _pendingTaskCount == 0
-                              ? 'You are all caught up. Keep learning!'
-                              : 'You have $_pendingTaskCount ${_pendingTaskCount == 1 ? 'task' : 'tasks'} waiting for you.',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.86),
-                            fontSize: 13,
-                            height: 1.4,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(17),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.18),
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.school_rounded,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _buildWelcomeChip(
-                    Icons.menu_book_rounded,
-                    '${_courses.length} ${_courses.length == 1 ? 'class' : 'classes'}',
-                  ),
-                  _buildWelcomeChip(
-                    Icons.notifications_active_rounded,
-                    '$_announcementCount updates',
-                  ),
-                  InkWell(
-                    onTap: () => widget.onNavigateToTab?.call(2),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 13,
-                        vertical: 9,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'View tasks',
-                            style: TextStyle(
-                              color: primaryBlue,
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          SizedBox(width: 5),
-                          Icon(
-                            Icons.arrow_forward_rounded,
-                            color: primaryBlue,
-                            size: 16,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWelcomeChip(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.13),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white, size: 15),
-          const SizedBox(width: 6),
           Text(
-            label,
+            'Welcome back, $_firstName',
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
+              fontSize: 23,
+              fontWeight: FontWeight.w800,
             ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Accept your invitations and open your classes below.',
+            style: TextStyle(color: Colors.white, height: 1.5),
           ),
         ],
       ),
@@ -919,62 +743,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
         const Spacer(),
 
-        Stack(
-          clipBehavior: Clip.none,
-
-          children: [
-            IconButton(
-              onPressed: _openNotifications,
-
-              icon: const Icon(
-                Icons.notifications_none_rounded,
-
-                color: textDark,
-
-                size: 27,
-              ),
-            ),
-
-            if (_unreadNotificationCount > 0)
-              Positioned(
-                right: 2,
-
-                top: 2,
-
-                child: Container(
-                  constraints: const BoxConstraints(
-                    minWidth: 18,
-
-                    minHeight: 18,
-                  ),
-
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-
-                  alignment: Alignment.center,
-
-                  decoration: const BoxDecoration(
-                    color: red,
-
-                    shape: BoxShape.circle,
-                  ),
-
-                  child: Text(
-                    _unreadNotificationCount > 9
-                        ? '9+'
-                        : '$_unreadNotificationCount',
-
-                    style: const TextStyle(
-                      color: Colors.white,
-
-                      fontSize: 9,
-
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
+        const NotificationBell(),
 
         const SizedBox(width: 6),
 
@@ -1232,9 +1001,17 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           return Column(
             children: [
               ListTile(
-                onTap: () {
-                  widget.onNavigateToTab?.call(1);
-                },
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => StudentCourseModulesScreen(
+                      courseId: (course['courseId'] ?? course['id']).toString(),
+                      courseTitle: courseTitle,
+                      courseCode: courseCode,
+                      instructorName: instructor,
+                    ),
+                  ),
+                ),
 
                 contentPadding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -1480,328 +1257,3 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 // Kept temporarily for compatibility with older compiled routes. New
 // enrollment is handled exclusively by StudentCourseInvitationsScreen.
 // ignore: unused_element
-class _JoinClassSheet extends StatefulWidget {
-  final EnrollmentService enrollmentService;
-
-  const _JoinClassSheet({required this.enrollmentService});
-
-  @override
-  State<_JoinClassSheet> createState() => _JoinClassSheetState();
-}
-
-class _JoinClassSheetState extends State<_JoinClassSheet> {
-  static const Color primaryBlue = Color(0xFF1769FF);
-
-  static const Color background = Color(0xFFF8FAFD);
-
-  static const Color textDark = Color(0xFF111827);
-
-  static const Color textGrey = Color(0xFF6B7280);
-
-  final TextEditingController _codeController = TextEditingController();
-
-  bool _isSubmitting = false;
-
-  String? _error;
-
-  // ============================================================
-  // DISPOSE
-  // ============================================================
-
-  @override
-  void dispose() {
-    _codeController.dispose();
-
-    super.dispose();
-  }
-
-  // ============================================================
-  // JOIN
-  // ============================================================
-
-  Future<void> _join() async {
-    if (_isSubmitting) {
-      return;
-    }
-
-    final String classCode = _codeController.text.trim();
-
-    if (classCode.isEmpty) {
-      setState(() {
-        _error = 'Enter the class code provided by your instructor.';
-      });
-
-      return;
-    }
-
-    FocusScope.of(context).unfocus();
-
-    setState(() {
-      _isSubmitting = true;
-
-      _error = null;
-    });
-
-    try {
-      final Map<String, dynamic> course = await widget.enrollmentService
-          .joinClass(classCode: classCode);
-
-      if (!mounted) {
-        return;
-      }
-
-      // IMPORTANT:
-      // Return the course only.
-      //
-      // The dashboard refresh happens outside this widget.
-      Navigator.of(context).pop(course);
-    } on EnrollmentServiceException catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _isSubmitting = false;
-
-        _error = e.message;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _isSubmitting = false;
-
-        _error = 'Unable to join this class.';
-      });
-    }
-  }
-
-  // ============================================================
-  // BUILD
-  // ============================================================
-
-  @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      canPop: !_isSubmitting,
-
-      child: Container(
-        padding: EdgeInsets.only(
-          left: 22,
-
-          right: 22,
-
-          top: 12,
-
-          bottom: MediaQuery.of(context).viewInsets.bottom + 25,
-        ),
-
-        decoration: const BoxDecoration(
-          color: Colors.white,
-
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(28),
-
-            topRight: Radius.circular(28),
-          ),
-        ),
-
-        child: SafeArea(
-          top: false,
-
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-
-              crossAxisAlignment: CrossAxisAlignment.start,
-
-              children: [
-                Center(
-                  child: Container(
-                    width: 42,
-
-                    height: 5,
-
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFD9DEE7),
-
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Join a Class',
-
-                        style: TextStyle(
-                          color: textDark,
-
-                          fontSize: 21,
-
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-
-                    IconButton(
-                      onPressed: _isSubmitting
-                          ? null
-                          : () {
-                              Navigator.of(context).pop();
-                            },
-
-                      icon: const Icon(Icons.close_rounded, color: textDark),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 8),
-
-                const Text(
-                  'Enter the class code provided by your instructor.',
-
-                  style: TextStyle(color: textGrey, fontSize: 13, height: 1.5),
-                ),
-
-                const SizedBox(height: 24),
-
-                TextField(
-                  controller: _codeController,
-
-                  enabled: !_isSubmitting,
-
-                  textCapitalization: TextCapitalization.characters,
-
-                  textInputAction: TextInputAction.done,
-
-                  onSubmitted: (_) {
-                    if (!_isSubmitting) {
-                      _join();
-                    }
-                  },
-
-                  decoration: InputDecoration(
-                    labelText: 'Class Code',
-
-                    hintText: 'Enter instructor class code',
-
-                    prefixIcon: const Icon(
-                      Icons.vpn_key_outlined,
-
-                      color: primaryBlue,
-                    ),
-
-                    errorText: _error,
-
-                    filled: true,
-
-                    fillColor: background,
-
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-
-                      vertical: 17,
-                    ),
-
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-
-                      borderSide: const BorderSide(color: Color(0xFFE1E5EC)),
-                    ),
-
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-
-                      borderSide: const BorderSide(
-                        color: primaryBlue,
-
-                        width: 1.5,
-                      ),
-                    ),
-
-                    errorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-
-                      borderSide: const BorderSide(color: Colors.redAccent),
-                    ),
-
-                    focusedErrorBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-
-                      borderSide: const BorderSide(
-                        color: Colors.redAccent,
-
-                        width: 1.5,
-                      ),
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                SizedBox(
-                  width: double.infinity,
-
-                  height: 54,
-
-                  child: ElevatedButton(
-                    onPressed: _isSubmitting ? null : _join,
-
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryBlue,
-
-                      disabledBackgroundColor: primaryBlue.withValues(
-                        alpha: 0.55,
-                      ),
-
-                      elevation: 0,
-
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                    ),
-
-                    child: _isSubmitting
-                        ? const SizedBox(
-                            width: 22,
-
-                            height: 22,
-
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-
-                              strokeWidth: 2.5,
-                            ),
-                          )
-                        : const Text(
-                            'Join Class',
-
-                            style: TextStyle(
-                              color: Colors.white,
-
-                              fontWeight: FontWeight.w800,
-
-                              fontSize: 15,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}

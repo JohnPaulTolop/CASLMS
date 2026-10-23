@@ -1,3 +1,5 @@
+import '../../services/activity_log_service.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -834,7 +836,7 @@ class _InstructorProfileScreenState extends State<InstructorProfileScreen> {
     }
 
     try {
-      await _auth.signOut();
+      await ActivityLogService(auth: _auth).signOut();
 
       if (!mounted) {
         return;

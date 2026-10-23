@@ -16,9 +16,11 @@ class InstructorAssessmentGradingScreen extends StatefulWidget {
   const InstructorAssessmentGradingScreen({
     super.key,
     required this.assessmentId,
+    this.focusSubmissionId = '',
   });
 
   final String assessmentId;
+  final String focusSubmissionId;
 
   @override
   State<InstructorAssessmentGradingScreen> createState() =>
@@ -292,7 +294,7 @@ class _InstructorAssessmentGradingScreenState
 
         _module = moduleDocument.data();
 
-        _submissions = submissions;
+        _submissions = widget.focusSubmissionId.isEmpty ? submissions : submissions.where((s) => (s['submissionId'] ?? s['id']) == widget.focusSubmissionId).toList();
 
         _isLoading = false;
       });

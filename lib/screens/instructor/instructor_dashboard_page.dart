@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import '../shared/notification_inbox.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -46,6 +50,10 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   // STATE
   // ============================================================
 
+  StreamSubscription<List<Map<String, dynamic>>>? _coursesSubscription;
+  int _loadGeneration = 0;
+  final Map<String, StreamSubscription> _submissionChanges = {};
+  final Map<String, int> _pendingAssessmentCounts = {};
   bool _isLoading = true;
   String? _errorMessage;
   Map<String, dynamic>? _instructor;
@@ -60,15 +68,46 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDashboard();
+    _coursesSubscription = _courseService.watchInstructorCourses().listen(
+      (courses) {
+        if (!mounted) return;
+        _watchAssessmentCounts(courses);
+        setState(() {
+          _courses = courses;
+          _errorMessage = null;
+        });
+        if (_instructor == null) {
+          _loadDashboard(showLoading: true);
+        }
+      },
+      onError: (Object error) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = 'Unable to sync courses. Please retry.';
+          });
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _loadGeneration++;
+    _coursesSubscription?.cancel();
+    for (final subscription in _submissionChanges.values) {
+      subscription.cancel();
+    }
+    super.dispose();
   }
 
   // ============================================================
   // LOAD DASHBOARD
   // ============================================================
 
-  Future<void> _loadDashboard() async {
-    if (mounted) {
+  Future<void> _loadDashboard({bool showLoading = true}) async {
+    final generation = ++_loadGeneration;
+    if (mounted && showLoading) {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
@@ -78,29 +117,25 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     try {
       final List<dynamic> results = await Future.wait<dynamic>([
         _courseService.getCurrentInstructorProfile(),
-        _courseService.getInstructorCourses(),
         _assignmentService.getInstructorPendingSubmissions(),
       ]);
 
       final Map<String, dynamic> instructor =
           results[0] as Map<String, dynamic>;
-      final List<Map<String, dynamic>> courses =
-          results[1] as List<Map<String, dynamic>>;
       final List<Map<String, dynamic>> pendingSubmissions =
-          results[2] as List<Map<String, dynamic>>;
+          results[1] as List<Map<String, dynamic>>;
 
-      if (!mounted) {
+      if (!mounted || generation != _loadGeneration) {
         return;
       }
 
       setState(() {
         _instructor = instructor;
-        _courses = courses;
         _pendingSubmissions = pendingSubmissions;
         _isLoading = false;
       });
     } on InstructorCourseServiceException catch (e) {
-      if (!mounted) {
+      if (!mounted || generation != _loadGeneration) {
         return;
       }
 
@@ -109,7 +144,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         _errorMessage = e.message;
       });
     } on AssignmentServiceException catch (e) {
-      if (!mounted) {
+      if (!mounted || generation != _loadGeneration) {
         return;
       }
 
@@ -118,7 +153,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         _errorMessage = e.message;
       });
     } catch (_) {
-      if (!mounted) {
+      if (!mounted || generation != _loadGeneration) {
         return;
       }
 
@@ -126,6 +161,42 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         _isLoading = false;
         _errorMessage = 'Unable to load instructor dashboard.';
       });
+    }
+  }
+
+  void _watchAssessmentCounts(List<Map<String, dynamic>> courses) {
+    final ids = courses.map((course) => course['courseId'].toString()).toSet();
+    for (final id in _submissionChanges.keys.toList()) {
+      if (!ids.contains(id)) {
+        _submissionChanges.remove(id)?.cancel();
+        _pendingAssessmentCounts.remove(id);
+      }
+    }
+    for (final id in ids) {
+      if (_submissionChanges.containsKey(id)) continue;
+      _submissionChanges[id] = FirebaseFirestore.instance
+          .collection('assessmentSubmissions')
+          .where('courseId', isEqualTo: id)
+          .snapshots()
+          .listen(
+            (snapshot) {
+              if (!mounted || !_courses.any((c) => c['courseId'] == id)) return;
+              setState(
+                () => _pendingAssessmentCounts[id] = snapshot.docs
+                    .where(
+                      (doc) => [
+                        'submitted',
+                        'under_review',
+                        'late',
+                      ].contains(doc.data()['status']),
+                    )
+                    .length,
+              );
+            },
+            onError: (Object error) {
+              /* Course navigation remains usable if this summary is unavailable. */
+            },
+          );
     }
   }
 
@@ -160,7 +231,12 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     return count;
   }
 
-  int get _pendingGradingCount => _pendingSubmissions.length;
+  int get _pendingGradingCount =>
+      _pendingSubmissions.length +
+      _pendingAssessmentCounts.values.fold<int>(
+        0,
+        (int total, int value) => total + value,
+      );
 
   // ============================================================
   // FILTERED COURSES
@@ -357,62 +433,24 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
             _buildWelcomeBanner(),
             const SizedBox(height: 24),
 
-            // ==================================================
-            // SEARCH (Moved up)
-            // ==================================================
+            _buildActiveClassesHeader(),
+            const SizedBox(height: 12),
             _buildSearchBar(),
+            const SizedBox(height: 14),
+            _buildActiveClasses(),
             const SizedBox(height: 24),
-
-            // ==================================================
-            // REAL STATISTICS (Grouped and compacted)
-            // ==================================================
             _buildStatistics(),
             const SizedBox(height: 24),
-
-            // ==================================================
-            // QUICK ACTIONS & TOOLS
-            // ==================================================
             const Text(
-              'Quick Actions',
+              'Teaching tools',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: textDark,
-                letterSpacing: -0.3,
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             _buildQuickActions(),
-            const SizedBox(height: 24),
-
-            // ==================================================
-            // COURSE WORKFLOW
-            // ==================================================
-            _buildCourseBuilderBanner(),
-            const SizedBox(height: 28),
-
-            // ==================================================
-            // COURSES LIST
-            // ==================================================
-            _buildActiveClassesHeader(),
-            const SizedBox(height: 14),
-            _buildActiveClasses(),
-            const SizedBox(height: 24),
-
-            // ==================================================
-            // FOOTER / HELP
-            // ==================================================
-            Align(
-              alignment: Alignment.centerRight,
-              child: Tooltip(
-                message: 'Open step-by-step CASLMS instructions',
-                child: TextButton.icon(
-                  onPressed: _openHelpGuide,
-                  icon: const Icon(Icons.help_outline),
-                  label: const Text('Help & User Guide'),
-                ),
-              ),
-            ),
             const SizedBox(height: 30),
           ],
         ),
@@ -429,177 +467,24 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF00796B), Color(0xFF26A69A)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: primaryTeal.withValues(alpha: 0.24),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        color: primaryTeal,
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Stack(
-        clipBehavior: Clip.none,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            right: -34,
-            top: -52,
-            child: Container(
-              width: 145,
-              height: 145,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          Positioned(
-            right: 62,
-            bottom: -74,
-            child: Container(
-              width: 112,
-              height: 112,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Welcome back, $_instructorName',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: -0.7,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          _pendingGradingCount == 0
-                              ? 'Your classes are organized and up to date.'
-                              : '$_pendingGradingCount ${_pendingGradingCount == 1 ? 'submission needs' : 'submissions need'} your review.',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.87),
-                            fontSize: 13,
-                            height: 1.4,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(17),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.18),
-                      ),
-                    ),
-                    child: const Icon(
-                      Icons.co_present_rounded,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  _buildWelcomeChip(
-                    Icons.class_rounded,
-                    '$_activeCourseCount ${_activeCourseCount == 1 ? 'course' : 'courses'}',
-                  ),
-                  _buildWelcomeChip(
-                    Icons.groups_rounded,
-                    '$_activeStudentCount students',
-                  ),
-                  InkWell(
-                    onTap: () => widget.onNavigateToTab?.call(2),
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 13,
-                        vertical: 9,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Review work',
-                            style: TextStyle(
-                              color: primaryTeal,
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          SizedBox(width: 5),
-                          Icon(
-                            Icons.arrow_forward_rounded,
-                            color: primaryTeal,
-                            size: 16,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWelcomeChip(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.13),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white, size: 15),
-          const SizedBox(width: 6),
           Text(
-            label,
+            'Welcome back, $_instructorName',
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
+              fontSize: 23,
+              fontWeight: FontWeight.w800,
             ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Open a course, choose a section, then manage students, learning materials and grades.',
+            style: TextStyle(color: Colors.white, height: 1.5),
           ),
         ],
       ),
@@ -609,159 +494,43 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   Widget _buildHeader() {
     return Row(
       children: [
-        Container(
-          width: 44,
-          height: 44,
-
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-
-            border: Border.all(color: const Color(0xFFE2E6ED), width: 1),
-
-            image: const DecorationImage(
-              image: AssetImage('assets/images/CASlogo.jpg'),
-
-              fit: BoxFit.cover,
-            ),
-          ),
+        const CircleAvatar(
+          radius: 20,
+          backgroundImage: AssetImage('assets/images/CASlogo.jpg'),
         ),
-
-        const SizedBox(width: 12),
-
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-
-          children: [
-            const Text(
-              'CASLMS',
-
-              style: TextStyle(
-                fontSize: 22,
-
-                fontWeight: FontWeight.w800,
-
-                color: primaryTeal,
-
-                letterSpacing: -0.8,
-              ),
-            ),
-
-            Text(
-              'INSTRUCTOR PORTAL',
-
-              style: TextStyle(
-                fontSize: 9.5,
-
-                fontWeight: FontWeight.w800,
-
-                color: primaryTeal.withValues(alpha: 0.7),
-
-                letterSpacing: 0.8,
-              ),
-            ),
-          ],
-        ),
-
-        const Spacer(),
-
-        // --------------------------------------------------------
-        // REFRESH
-        // --------------------------------------------------------
-        _buildHeaderIcon(
-          icon: Icons.refresh_rounded,
-
-          tooltip: 'Refresh',
-
-          onTap: _loadDashboard,
-        ),
-
         const SizedBox(width: 10),
-
-        // --------------------------------------------------------
-        // PROFILE
-        // --------------------------------------------------------
-        GestureDetector(
-          onTap: () {
-            widget.onNavigateToTab?.call(4);
-          },
-
-          child: Container(
-            width: 44,
-
-            height: 44,
-
-            decoration: BoxDecoration(
-              color: primaryTeal.withValues(alpha: 0.10),
-
-              shape: BoxShape.circle,
-
-              border: Border.all(color: Colors.white, width: 3),
-            ),
-
-            alignment: Alignment.center,
-
-            child: Text(
-              _instructorName.trim().isEmpty
-                  ? '?'
-                  : _instructorName.trim()[0].toUpperCase(),
-
-              style: const TextStyle(
-                color: primaryTeal,
-
-                fontSize: 17,
-
-                fontWeight: FontWeight.w800,
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'CASLMS',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: primaryTeal,
+                ),
               ),
-            ),
+              Text(
+                'Instructor portal',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: textGrey),
+              ),
+            ],
           ),
+        ),
+        const NotificationBell(),
+        IconButton(
+          tooltip: 'Refresh dashboard',
+          onPressed: _loadDashboard,
+          icon: const Icon(Icons.refresh_rounded),
         ),
       ],
     );
   }
-
-  Widget _buildHeaderIcon({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onTap,
-  }) {
-    return Tooltip(
-      message: tooltip,
-
-      child: GestureDetector(
-        onTap: onTap,
-
-        child: Container(
-          width: 44,
-
-          height: 44,
-
-          decoration: BoxDecoration(
-            color: Colors.white,
-
-            borderRadius: BorderRadius.circular(14),
-
-            border: Border.all(color: const Color(0xFFE7EAF0)),
-
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-
-                blurRadius: 12,
-
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-
-          child: Icon(icon, color: textDark, size: 23),
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // SEARCH
-  // ============================================================
 
   Widget _buildSearchBar() {
     return TextField(
@@ -852,7 +621,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         children: [
           Expanded(
             child: _buildInnerStat(
-              title: 'Active Students',
+              title: 'Enrollments',
               value: '$_activeStudentCount',
               icon: Icons.groups_rounded,
               color: blue,
@@ -919,126 +688,6 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   // COURSE BUILDER BANNER
   // ============================================================
 
-  Widget _buildCourseBuilderBanner() {
-    return GestureDetector(
-      onTap: () {
-        if (_courses.isEmpty) {
-          _openCreateCourse();
-
-          return;
-        }
-
-        widget.onNavigateToTab?.call(1);
-      },
-
-      child: Container(
-        width: double.infinity,
-
-        padding: const EdgeInsets.all(20),
-
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF00897B), Color(0xFF26A69A)],
-
-            begin: Alignment.topLeft,
-
-            end: Alignment.bottomRight,
-          ),
-
-          borderRadius: BorderRadius.circular(20),
-
-          boxShadow: [
-            BoxShadow(
-              color: primaryTeal.withValues(alpha: 0.25),
-
-              blurRadius: 18,
-
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
-
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.20),
-
-                shape: BoxShape.circle,
-              ),
-
-              child: const Icon(
-                Icons.menu_book_rounded,
-
-                color: Colors.white,
-
-                size: 28,
-              ),
-            ),
-
-            const SizedBox(width: 16),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-
-                children: [
-                  Text(
-                    _courses.isEmpty
-                        ? 'Create Your First Course'
-                        : 'Build Modules & Assessments',
-
-                    style: const TextStyle(
-                      fontSize: 15.5,
-
-                      fontWeight: FontWeight.w800,
-
-                      color: Colors.white,
-
-                      letterSpacing: -0.3,
-                    ),
-                  ),
-
-                  const SizedBox(height: 4),
-
-                  Text(
-                    _courses.isEmpty
-                        ? 'Create a course first, then add modules and quizzes.'
-                        : 'Open a class to manage modules, learning materials, and quizzes.',
-
-                    style: TextStyle(
-                      fontSize: 12,
-
-                      color: Colors.white.withValues(alpha: 0.85),
-
-                      height: 1.4,
-
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const Icon(
-              Icons.arrow_forward_ios_rounded,
-
-              color: Colors.white,
-
-              size: 16,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // QUICK ACTIONS
-  // ============================================================
-
   Future<void> _openHelpGuide() async {
     await Navigator.push(
       context,
@@ -1049,92 +698,32 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   }
 
   Widget _buildQuickActions() {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
-
-      decoration: BoxDecoration(
-        color: Colors.white,
-
-        borderRadius: BorderRadius.circular(20),
-
-        border: Border.all(color: borderColor),
-
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-
-            blurRadius: 15,
-
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-
-      child: Row(
-        children: [
-          Expanded(
-            child: _buildQuickActionItem(
-              icon: Icons.add_box_rounded,
-
-              label: 'Create Course',
-
-              onTap: _openCreateCourse,
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        SizedBox(
+          width: 130,
+          child: _buildQuickActionItem(
+            icon: Icons.campaign_rounded,
+            label: 'Announcements',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const InstructorAnnouncementsScreen(),
+              ),
             ),
           ),
-
-          _buildDivider(),
-
-          Expanded(
-            child: _buildQuickActionItem(
-              icon: Icons.campaign_rounded,
-
-              label: 'Announce',
-
-              onTap: () async {
-                await Navigator.push(
-                  context,
-
-                  MaterialPageRoute(
-                    builder: (context) => const InstructorAnnouncementsScreen(),
-                  ),
-                );
-
-                if (!mounted) {
-                  return;
-                }
-
-                await _loadDashboard();
-              },
-            ),
+        ),
+        SizedBox(
+          width: 130,
+          child: _buildQuickActionItem(
+            icon: Icons.help_outline_rounded,
+            label: 'Help & guide',
+            onTap: _openHelpGuide,
           ),
-
-          _buildDivider(),
-
-          Expanded(
-            child: _buildQuickActionItem(
-              icon: Icons.library_add_check_rounded,
-
-              label: 'Grade Tasks',
-
-              onTap: () {
-                widget.onNavigateToTab?.call(2);
-              },
-            ),
-          ),
-
-          _buildDivider(),
-
-          Expanded(
-            child: _buildQuickActionItem(
-              icon: Icons.auto_awesome_outlined,
-              label: 'AI Help',
-              onTap: () {
-                widget.onNavigateToTab?.call(6);
-              },
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -1178,58 +767,40 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     );
   }
 
-  Widget _buildDivider() {
-    return Container(width: 1, height: 40, color: const Color(0xFFE9EDF3));
-  }
-
-  // ============================================================
-  // ACTIVE CLASSES HEADER
-  // ============================================================
-
   Widget _buildActiveClassesHeader() {
-    return Row(
+    return Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 12,
+      runSpacing: 10,
       children: [
-        const Expanded(
-          child: Text(
-            'Recently Added Courses',
-
-            style: TextStyle(
-              fontSize: 18,
-
-              fontWeight: FontWeight.w800,
-
-              color: textDark,
-
-              letterSpacing: -0.3,
-            ),
+        const Text(
+          'My Courses',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: textDark,
           ),
         ),
-
-        if (_courses.isNotEmpty)
-          GestureDetector(
-            onTap: () {
-              widget.onNavigateToTab?.call(1);
-            },
-
-            child: const Text(
-              'View all',
-
-              style: TextStyle(
-                fontSize: 13,
-
-                fontWeight: FontWeight.w700,
-
-                color: primaryTeal,
+        Wrap(
+          spacing: 10,
+          children: [
+            if (_courses.isNotEmpty)
+              TextButton(
+                onPressed: () => widget.onNavigateToTab?.call(1),
+                child: const Text('View all'),
               ),
-            ),
-          ),
+            if (_courses.isNotEmpty)
+              FilledButton.icon(
+                onPressed: _openCreateCourse,
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Create course'),
+              ),
+          ],
+        ),
       ],
     );
   }
-
-  // ============================================================
-  // ACTIVE CLASSES
-  // ============================================================
 
   Widget _buildActiveClasses() {
     if (_courses.isEmpty) {
@@ -1382,8 +953,6 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
     final String code = (course['code'] ?? '').toString();
 
-    final String classCode = (course['classCode'] ?? '').toString();
-
     final String semester = (course['semester'] ?? '').toString();
 
     final String academicYear = (course['academicYear'] ?? '').toString();
@@ -1399,9 +968,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
       academicYear,
     ].where((value) => value.trim().isNotEmpty).toList();
 
-    final String period = periodParts.join(
-      ' \u2022 ',
-    );
+    final String period = periodParts.join(' \u2022 ');
 
     return InkWell(
       onTap: () {
@@ -1532,42 +1099,6 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
                       overflow: TextOverflow.ellipsis,
 
                       style: const TextStyle(color: textGrey, fontSize: 10.5),
-                    ),
-                  ],
-
-                  if (classCode.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.vpn_key_outlined,
-
-                          color: primaryTeal,
-
-                          size: 13,
-                        ),
-
-                        const SizedBox(width: 4),
-
-                        Flexible(
-                          child: Text(
-                            'Class Code: $classCode',
-
-                            maxLines: 1,
-
-                            overflow: TextOverflow.ellipsis,
-
-                            style: const TextStyle(
-                              color: primaryTeal,
-
-                              fontSize: 10.5,
-
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ],

@@ -1,9 +1,23 @@
+import 'dart:async';
+
+import 'activity_log_service.dart';
+import 'notification_service.dart';
+import 'live_courses_service.dart';
+
 import 'dart:math';
+import 'dart:developer' as developer;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class InstructorCourseService {
+  Stream<List<Map<String, dynamic>>> watchInstructorCourses() {
+    final uid = _auth.currentUser?.uid;
+    return uid == null
+        ? Stream.value([])
+        : LiveCoursesService.watch(_firestore, uid, instructor: true);
+  }
+
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -294,6 +308,30 @@ class InstructorCourseService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      unawaited(
+        ActivityLogService(
+          auth: _auth,
+          firestore: _firestore,
+        ).source('course_created', courseReference.id),
+      );
+
+      // A new course normally has no enrolled audience yet. Enrollment notices
+      // deliver the course shortcut when students join; never broadcast campus-wide.
+      try {
+        await NotificationService(
+          firestore: _firestore,
+          auth: _auth,
+        ).createSourceNotifications(
+          sourceType: 'course',
+          sourceId: courseReference.id,
+        );
+      } catch (error) {
+        // Course creation remains successful if notification delivery needs retry.
+        developer.log(
+          'Course notification delivery failed.',
+          name: 'InstructorCourseService',
+        );
+      }
       return {
         'id': courseReference.id,
 

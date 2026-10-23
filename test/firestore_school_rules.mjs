@@ -68,20 +68,21 @@ const joined = await fetch(`${base}:commit`, { method: 'POST', headers: {
   courseId: 'course', studentId: 'verified', studentName: 'Verified Student', studentCampusId: '10003',
   sectionId: 'NEW-A', status: 'active', enrollmentSource: 'section_code',
 }) }, updateTransforms: [{ fieldPath: 'enrolledAt', setToServerValue: 'REQUEST_TIME' }] }] }) });
-assert.equal(joined.status, 200, `Verified student joins selected section: ${await joined.text()}`);
+assert.equal(joined.status, 403, `Section code enrollment is disabled: ${await joined.text()}`);
 checks++;
 const enrollment = { courseId: 'course', studentId: 'verified', studentName: 'Verified Student', studentCampusId: '10003',
   sectionId: 'ORIGINAL', status: 'active', enrollmentSource: 'section_code' };
+await seed('enrollments/course_verified', {...enrollment, sectionId: 'NEW-A'});
 await status('enrollments/course_verified', 'PATCH', enrollment, token('teacher'), 200, 'Owner can transfer enrolled student');
 await status('enrollments/course_verified', 'PATCH', { ...enrollment, sectionId: 'NEW-A' }, token('other'), 403, 'Another instructor cannot transfer student');
 await seed('courseInvitations/course_legacy', { courseId: 'course', studentId: 'legacy', studentCampusId: '10001',
-  instructorId: 'teacher', status: 'accepted' });
+  instructorId: 'teacher', status: 'pending', courseCode: 'IT', courseTitle: 'Course', instructorName: 'Teacher', studentName: 'Legacy Student', studentEmail: 'legacy@example.com', createdAt: 'legacy-created', respondedAt: null });
 const invitedFields = { courseId: 'course', studentId: 'legacy', studentName: 'Legacy Student', studentCampusId: '10001',
   sectionId: 'ORIGINAL', status: 'active', enrollmentSource: 'instructor_invitation', invitationId: 'course_legacy', invitedBy: 'teacher' };
 const inviteResult = await fetch(`${base}:commit`, { method: 'POST', headers: {
   Authorization: `Bearer ${token('legacy')}`, 'Content-Type': 'application/json',
 }, body: JSON.stringify({ writes: [{ update: { name: `${database}/documents/enrollments/course_legacy`, fields: fields(invitedFields) },
-  updateTransforms: [{ fieldPath: 'enrolledAt', setToServerValue: 'REQUEST_TIME' }, { fieldPath: 'acceptedAt', setToServerValue: 'REQUEST_TIME' }] }] }) });
+  updateTransforms: [{ fieldPath: 'enrolledAt', setToServerValue: 'REQUEST_TIME' }, { fieldPath: 'acceptedAt', setToServerValue: 'REQUEST_TIME' }] }, {update: { name: `${database}/documents/courseInvitations/course_legacy`, fields: fields({status: 'accepted'}) }, updateMask: {fieldPaths: ['status']}, updateTransforms: [{fieldPath: 'updatedAt', setToServerValue: 'REQUEST_TIME'}, {fieldPath: 'respondedAt', setToServerValue: 'REQUEST_TIME'}]}] }) });
 assert.equal(inviteResult.status, 200, `Invitation retains explicit original-section membership: ${await inviteResult.text()}`);
 checks++;
 await seed('liveClasses/server-session', { courseId: 'course', sectionId: 'ORIGINAL', instructorId: 'teacher', status: 'live' });

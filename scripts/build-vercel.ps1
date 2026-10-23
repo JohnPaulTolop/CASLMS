@@ -1,8 +1,11 @@
+param([switch]$EnableAiGateway)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Push-Location -LiteralPath $projectRoot
 try {
-    & flutter.bat build web --release --dart-define-from-file=config/production.json
+    $flutterArguments = @('build', 'web', '--release', '--dart-define-from-file=config/production.json')
+    if ($EnableAiGateway) { $flutterArguments += '--dart-define=CASLMS_AI_GATEWAY_ENABLED=true' }
+    & flutter.bat @flutterArguments
     if ($LASTEXITCODE -ne 0) { throw 'Flutter release build failed. Packaging stopped.' }
 
     $outputDirectory = [IO.Path]::GetFullPath((Join-Path $projectRoot '.vercel\output'))
@@ -13,7 +16,11 @@ try {
     }
     $staticDirectory = Join-Path $outputDirectory 'static'
     New-Item -ItemType Directory -Path $staticDirectory -Force | Out-Null
-    Copy-Item -Path (Join-Path $projectRoot 'build\web\*') -Destination $staticDirectory -Recurse -Force
+    # Vercel tooling can leave local credentials and project metadata in a
+    # previously linked build directory. Never publish those dotfiles.
+    Get-ChildItem -LiteralPath (Join-Path $projectRoot 'build\web') -Force |
+        Where-Object { -not $_.Name.StartsWith('.') } |
+        ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $staticDirectory -Recurse -Force }
 
     # Build Output API serves only compiled assets. Runtime dependencies and
     # source directories are not uploaded by `vercel deploy --prebuilt`.

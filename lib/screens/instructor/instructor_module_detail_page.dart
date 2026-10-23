@@ -24,6 +24,7 @@ class InstructorModuleDetailScreen extends StatefulWidget {
   final String courseCode;
   final String courseTitle;
   final String moduleTitle;
+  final String focusResourceId;
 
   const InstructorModuleDetailScreen({
     super.key,
@@ -32,6 +33,7 @@ class InstructorModuleDetailScreen extends StatefulWidget {
     required this.courseCode,
     required this.courseTitle,
     required this.moduleTitle,
+    this.focusResourceId = '',
   });
 
   @override
@@ -203,7 +205,7 @@ class _InstructorModuleDetailScreenState
           'moduleId': moduleDocument.id,
         };
 
-        _materials = materials;
+        _materials = widget.focusResourceId.isEmpty ? materials : materials.where((m) => (m['resourceId'] ?? m['materialId'] ?? m['id']) == widget.focusResourceId).toList();
         _assessments = assessments;
 
         _isLoading = false;

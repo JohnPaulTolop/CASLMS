@@ -320,7 +320,16 @@ class AssignmentService {
       // Create new submission
       // ----------------------------------------------------------
 
-      await _firestore.collection('submissions').add(submissionData);
+      final reference = _firestore.collection('submissions').doc();
+      final noticeCourse = await _firestore.collection('courses').doc(courseId).get();
+      final instructorId = (noticeCourse.data()?['instructorId'] ?? '').toString();
+      final batch = _firestore.batch();
+      batch.set(reference,submissionData);
+      if (instructorId.isNotEmpty) {
+        batch.set(_firestore.collection('notifications').doc('submissionReceived_${reference.id}_$instructorId'),
+        NotificationService.submissionReceivedNotice(submissionId:reference.id,courseId:courseId,studentId:user.uid,instructorId:instructorId,legacy:true));
+      }
+      await batch.commit();
     } on AssignmentServiceException {
       rethrow;
     } on FirebaseException catch (e) {

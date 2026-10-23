@@ -1,3 +1,5 @@
+import '../shared/notification_destination_page.dart';
+
 import 'package:flutter/material.dart';
 
 import 'instructor_teaching_assistant_page.dart';
@@ -14,7 +16,8 @@ import 'instructor_classes_page.dart';
 import 'instructor_profile_page.dart';
 
 class InstructorMainScreen extends StatefulWidget {
-  const InstructorMainScreen({super.key});
+  const InstructorMainScreen({super.key, this.notificationId});
+  final String? notificationId;
 
   @override
   State<InstructorMainScreen> createState() => _InstructorMainScreenState();
@@ -32,14 +35,30 @@ class _InstructorMainScreenState extends State<InstructorMainScreen> {
   }
 
   int _selectedIndex = 0;
-  int _coursesRefresh = 0;
+  int _destinationIndex = 0;
+  bool _destinationVisible = true;
+  final _notificationKey = GlobalKey();
+  late final Widget? _notificationDestination = widget.notificationId == null
+      ? null
+      : NotificationDestinationScreen(
+          key: _notificationKey,
+          notificationId: widget.notificationId!,
+          onTab: (index) {
+            if (mounted) {
+              setState(() {
+                _selectedIndex = index;
+                _destinationIndex = index;
+              });
+            }
+          },
+        );
   final Set<int> _openedTabs = <int>{};
 
   void _onItemTapped(int index) {
     setState(() {
+      _destinationVisible = false;
       _selectedIndex = index;
       _openedTabs.add(index);
-      if (index == 1) _coursesRefresh++;
     });
   }
 
@@ -47,7 +66,7 @@ class _InstructorMainScreenState extends State<InstructorMainScreen> {
   Widget build(BuildContext context) {
     final List<Widget> pages = [
       InstructorDashboardScreen(onNavigateToTab: _onItemTapped),
-      InstructorClassesScreen(key: ValueKey(_coursesRefresh)),
+      const InstructorClassesScreen(),
       const InstructorGradingScreen(),
       const InstructorAnalyticsScreen(),
       const InstructorProfileScreen(),
@@ -66,7 +85,18 @@ class _InstructorMainScreenState extends State<InstructorMainScreen> {
         // Center horizontally handles the max-width alignment safely
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1200),
-          child: IndexedStack(index: _selectedIndex, children: pages),
+          child: IndexedStack(
+            index: _selectedIndex,
+            children: List.generate(
+              pages.length,
+              (index) =>
+                  _destinationVisible &&
+                      _notificationDestination != null &&
+                      index == _destinationIndex
+                  ? _notificationDestination
+                  : pages[index],
+            ),
+          ),
         ),
       ),
       bottomNavigationBar: RoleNavigationBar(
