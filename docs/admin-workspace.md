@@ -177,6 +177,42 @@ Browser checks still required on the preview:
 9. Test desktop and mobile widths, keyboard activation, long names/filenames,
    failed file URLs, lost connection and retry buttons.
 
+## PDF preview repair
+
+The admin PDF preview uses the self-hosted Mozilla PDF.js renderer rather than
+the browser PDF plugin. The sandboxed iframe loads `document-preview.html`
+from the LMS, and that page fetches only the configured Supabase
+learning-material URL. No document is sent to an external viewer.
+
+The viewer shows loading progress, previous/next page buttons, fit-width and
+zoom controls, retry, and readable missing, restricted, damaged and password
+protected file messages. The original-file link remains available. Images and
+Office-file behavior are unchanged. Existing admin access checks remain.
+
+Changed/added files: `lib/screens/admin/admin_document_frame_web.dart`,
+`web/document-preview.html`, `web/document-preview.css`,
+`web/document-preview.mjs`, `web/document-preview-policy.mjs`,
+`web/vendor/pdfjs/` (renderer/worker/assets/licenses), and
+`test/admin_pdf_preview_check.mjs`.
+
+Browser regression check (requires Edge installed):
+
+```powershell
+npm.cmd install --prefix "$env:TEMP\caslms-preview-test-tools" --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright-core@1.56.1
+node test/admin_pdf_preview_check.mjs
+```
+
+Run `node test/admin_pdf_preview_check.mjs --policy-only` for the URL/error
+checks without launching a browser. The changed Flutter file passed analysis,
+and viewer JavaScript passed syntax checks. Automated Edge execution in the
+restricted development environment could not start its browser process; run
+the browser regression check above locally and verify the real uploaded PDF
+after rebuilding. The browser test uses a synthetic two-page PDF and simulated
+storage responses, never real student or instructor documents.
+
+Rebuild Flutter Web after applying this repair so the bundled viewer files are
+copied into the web output. Do not deploy an old `build/web` directory.
+
 ## Files changed for this admin update
 
 | File | Change |

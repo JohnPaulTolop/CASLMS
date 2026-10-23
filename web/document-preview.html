@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https://jymjlterjhznsxrwpjqz.supabase.co; style-src 'self' 'unsafe-inline'; font-src 'self' blob: data:; img-src 'self' blob: data:; base-uri 'none'; form-action 'none'">
+  <title>Learning material PDF preview</title>
+  <link rel="stylesheet" href="document-preview.css">
+</head>
+<body>
+  <header class="toolbar" aria-label="PDF controls">
+    <div class="pages">
+      <button id="previous" type="button" aria-label="Previous page" disabled>←</button>
+      <span id="page-label">PDF preview</span>
+      <button id="next" type="button" aria-label="Next page" disabled>→</button>
+    </div>
+    <div class="tools">
+      <label for="zoom">Zoom</label>
+      <select id="zoom" disabled>
+        <option value="1">Fit width</option>
+        <option value="0.75">75% of width</option>
+        <option value="1.25">125% of width</option>
+        <option value="1.5">150% of width</option>
+        <option value="2">200% of width</option>
+      </select>
+      <a id="original" hidden target="_blank" rel="noopener noreferrer">Open original</a>
+    </div>
+  </header>
+  <main id="viewer" tabindex="0" aria-label="PDF document">
+    <div id="notice" role="status" aria-live="polite">
+      <span id="spinner" class="spinner" aria-hidden="true"></span>
+      <p id="status">Loading PDF preview…</p>
+      <button id="retry" type="button" hidden>Retry preview</button>
+    </div>
+    <canvas id="page" hidden aria-label="PDF page"></canvas>
+  </main>
+  <noscript>JavaScript is required for PDF preview. Use Open original / save file.</noscript>
+  <script type="module" src="document-preview.mjs"></script>
+</body>
+</html>

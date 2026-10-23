@@ -8,6 +8,17 @@ Firebase service or Firebase Cloud Function is required.
 
 ## Behavior
 
+The shared notification interface has bordered cards, blue unread highlights,
+type icons and labels, clearer local timestamps, a bordered dropdown with an
+unread summary, and a responsive full inbox with All/Unread filters and a
+clearable search field. The menu uses a short opening animation and honors
+reduced-motion preferences. Keyboard activation and hover/focus feedback use
+the existing Material controls. This presentation update changes only
+`lib/screens/shared/notification_inbox.dart`; Firestore payloads, listeners,
+destination authorization and read-status actions use their existing services.
+Static analysis passed for the shared widget and both role-specific exports.
+Visual verification is still required in a locally rebuilt browser preview.
+
 - Admin, Instructor and Student dashboard bells show live unread counts and a
   six-item dropdown; View all opens a searchable, shared notification history.
 - The dropdown and history use accessible Material menu items/InkWell controls

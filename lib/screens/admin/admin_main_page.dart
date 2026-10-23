@@ -1,3 +1,5 @@
+import '../shared/dashboard_hover.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../services/admin_catalog.dart';
@@ -117,11 +119,16 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
               ..._destinations
                   .where((d) => d.$1 > 2)
                   .map(
-                    (d) => ListTile(
-                      leading: Icon(d.$3),
-                      title: Text(d.$2),
-                      selected: _selectedIndex == d.$1,
-                      onTap: () => Navigator.pop(context, d.$1),
+                    (d) => DashboardHover(
+                      accent: AdminUi.accent,
+                      lift: 1,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ListTile(
+                        leading: Icon(d.$3),
+                        title: Text(d.$2),
+                        selected: _selectedIndex == d.$1,
+                        onTap: () => Navigator.pop(context, d.$1),
+                      ),
                     ),
                   ),
             ],
@@ -208,25 +215,30 @@ class _AdminMainScreenState extends State<AdminMainScreen> {
                                   .map(
                                     (d) => Padding(
                                       padding: const EdgeInsets.only(bottom: 5),
-                                      child: ListTile(
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
+                                      child: DashboardHover(
+                                        accent: AdminUi.accent,
+                                        lift: 1,
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: ListTile(
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
                                           ),
-                                        ),
-                                        selected: _selectedIndex == d.$1,
-                                        selectedTileColor: AdminUi.accent
-                                            .withValues(alpha: .08),
-                                        selectedColor: AdminUi.accent,
-                                        leading: Icon(d.$3, size: 22),
-                                        title: Text(
-                                          d.$2,
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
+                                          selected: _selectedIndex == d.$1,
+                                          selectedTileColor: AdminUi.accent
+                                              .withValues(alpha: .08),
+                                          selectedColor: AdminUi.accent,
+                                          leading: Icon(d.$3, size: 22),
+                                          title: Text(
+                                            d.$2,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
+                                          onTap: () => _onItemTapped(d.$1),
                                         ),
-                                        onTap: () => _onItemTapped(d.$1),
                                       ),
                                     ),
                                   )

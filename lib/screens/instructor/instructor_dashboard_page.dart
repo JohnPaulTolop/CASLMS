@@ -1,3 +1,5 @@
+import '../shared/dashboard_hover.dart';
+
 import 'dart:async';
 
 import '../shared/notification_inbox.dart';
@@ -463,30 +465,34 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   // ============================================================
 
   Widget _buildWelcomeBanner() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: primaryTeal,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Welcome back, $_instructorName',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 23,
-              fontWeight: FontWeight.w800,
+    return DashboardHover(
+      accent: primaryTeal,
+      lift: 2,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(22),
+        decoration: BoxDecoration(
+          color: primaryTeal,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Welcome back, $_instructorName',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 23,
+                fontWeight: FontWeight.w800,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Open a course, choose a section, then manage students, learning materials and grades.',
-            style: TextStyle(color: Colors.white, height: 1.5),
-          ),
-        ],
+            const SizedBox(height: 8),
+            const Text(
+              'Open a course, choose a section, then manage students, learning materials and grades.',
+              style: TextStyle(color: Colors.white, height: 1.5),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -522,11 +528,21 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
             ],
           ),
         ),
-        const NotificationBell(),
-        IconButton(
-          tooltip: 'Refresh dashboard',
-          onPressed: _loadDashboard,
-          icon: const Icon(Icons.refresh_rounded),
+        DashboardHover(
+          accent: primaryTeal,
+          lift: 1.5,
+          borderRadius: BorderRadius.circular(12),
+          child: const NotificationBell(),
+        ),
+        DashboardHover(
+          accent: primaryTeal,
+          lift: 1.5,
+          borderRadius: BorderRadius.circular(12),
+          child: IconButton(
+            tooltip: 'Refresh dashboard',
+            onPressed: _loadDashboard,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
         ),
       ],
     );
@@ -554,16 +570,21 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         prefixIcon: const Icon(Icons.search_rounded, color: textGrey, size: 24),
 
         suffixIcon: _searchQuery.isNotEmpty
-            ? IconButton(
-                onPressed: () {
-                  setState(() {
-                    _searchQuery = '';
-                  });
+            ? DashboardHover(
+                accent: primaryTeal,
+                lift: 1.5,
+                borderRadius: BorderRadius.circular(12),
+                child: IconButton(
+                  onPressed: () {
+                    setState(() {
+                      _searchQuery = '';
+                    });
 
-                  FocusScope.of(context).unfocus();
-                },
+                    FocusScope.of(context).unfocus();
+                  },
 
-                icon: const Icon(Icons.close_rounded, color: textGrey),
+                  icon: const Icon(Icons.close_rounded, color: textGrey),
+                ),
               )
             : null,
 
@@ -656,31 +677,36 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     required IconData icon,
     required Color color,
   }) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 24),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            color: color,
+    return DashboardHover(
+      accent: color,
+      lift: 2,
+      borderRadius: BorderRadius.circular(12),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
           ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 11,
-            color: textGrey,
-            fontWeight: FontWeight.w600,
+          const SizedBox(height: 2),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 11,
+              color: textGrey,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -732,36 +758,41 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     required String label,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-
+    return DashboardHover(
+      accent: primaryTeal,
+      lift: 2,
       borderRadius: BorderRadius.circular(15),
+      child: InkWell(
+        onTap: onTap,
 
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        borderRadius: BorderRadius.circular(15),
 
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
 
-          children: [
-            Icon(icon, color: primaryTeal, size: 26),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
 
-            const SizedBox(height: 8),
+            children: [
+              Icon(icon, color: primaryTeal, size: 26),
 
-            Text(
-              label,
+              const SizedBox(height: 8),
 
-              textAlign: TextAlign.center,
+              Text(
+                label,
 
-              style: const TextStyle(
-                color: textGrey,
+                textAlign: TextAlign.center,
 
-                fontSize: 11.5,
+                style: const TextStyle(
+                  color: textGrey,
 
-                fontWeight: FontWeight.w600,
+                  fontSize: 11.5,
+
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -786,15 +817,25 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
           spacing: 10,
           children: [
             if (_courses.isNotEmpty)
-              TextButton(
-                onPressed: () => widget.onNavigateToTab?.call(1),
-                child: const Text('View all'),
+              DashboardHover(
+                accent: primaryTeal,
+                lift: 1.5,
+                borderRadius: BorderRadius.circular(12),
+                child: TextButton(
+                  onPressed: () => widget.onNavigateToTab?.call(1),
+                  child: const Text('View all'),
+                ),
               ),
             if (_courses.isNotEmpty)
-              FilledButton.icon(
-                onPressed: _openCreateCourse,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Create course'),
+              DashboardHover(
+                accent: primaryTeal,
+                lift: 1.5,
+                borderRadius: BorderRadius.circular(12),
+                child: FilledButton.icon(
+                  onPressed: _openCreateCourse,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Create course'),
+                ),
               ),
           ],
         ),
@@ -912,30 +953,38 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
           const SizedBox(height: 18),
 
-          ElevatedButton.icon(
-            onPressed: _openCreateCourse,
+          DashboardHover(
+            accent: primaryTeal,
+            lift: 1.5,
+            borderRadius: BorderRadius.circular(12),
+            child: ElevatedButton.icon(
+              onPressed: _openCreateCourse,
 
-            icon: const Icon(Icons.add_rounded, color: Colors.white),
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
 
-            label: const Text(
-              'Create Course',
+              label: const Text(
+                'Create Course',
 
-              style: TextStyle(
-                color: Colors.white,
+                style: TextStyle(
+                  color: Colors.white,
 
-                fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
 
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryTeal,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryTeal,
 
-              elevation: 0,
+                elevation: 0,
 
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 13,
+                ),
 
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13),
+                ),
               ),
             ),
           ),
@@ -970,151 +1019,156 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
     final String period = periodParts.join(' \u2022 ');
 
-    return InkWell(
-      onTap: () {
-        _openCourse(course);
-      },
-
+    return DashboardHover(
+      accent: color,
+      showBorder: false,
       borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: () {
+          _openCourse(course);
+        },
 
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 14),
+        borderRadius: BorderRadius.circular(20),
 
-        padding: const EdgeInsets.all(18),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 14),
 
-        decoration: BoxDecoration(
-          color: Colors.white,
+          padding: const EdgeInsets.all(18),
 
-          borderRadius: BorderRadius.circular(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
 
-          border: Border.all(color: borderColor),
+            borderRadius: BorderRadius.circular(20),
 
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.03),
+            border: Border.all(color: borderColor),
 
-              blurRadius: 15,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
 
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
+                blurRadius: 15,
 
-        child: Row(
-          children: [
-            Container(
-              width: 56,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
 
-              height: 56,
+          child: Row(
+            children: [
+              Container(
+                width: 56,
 
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
+                height: 56,
 
-                borderRadius: BorderRadius.circular(16),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+
+                  borderRadius: BorderRadius.circular(16),
+                ),
+
+                child: Icon(Icons.menu_book_rounded, color: color, size: 28),
               ),
 
-              child: Icon(Icons.menu_book_rounded, color: color, size: 28),
-            ),
+              const SizedBox(width: 15),
 
-            const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
 
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-
-                children: [
-                  Text(
-                    title,
-
-                    maxLines: 1,
-
-                    overflow: TextOverflow.ellipsis,
-
-                    style: const TextStyle(
-                      fontSize: 15.5,
-
-                      fontWeight: FontWeight.w800,
-
-                      color: textDark,
-                    ),
-                  ),
-
-                  const SizedBox(height: 4),
-
-                  Row(
-                    children: [
-                      if (code.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-
-                            vertical: 3,
-                          ),
-
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.10),
-
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-
-                          child: Text(
-                            code,
-
-                            style: TextStyle(
-                              color: color,
-
-                              fontSize: 10.5,
-
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-
-                      if (code.isNotEmpty) const SizedBox(width: 8),
-
-                      Expanded(
-                        child: Text(
-                          '$studentCount ${studentCount == 1 ? 'Student' : 'Students'}',
-
-                          style: const TextStyle(
-                            color: textGrey,
-
-                            fontSize: 11.5,
-
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  if (period.isNotEmpty) ...[
-                    const SizedBox(height: 5),
-
+                  children: [
                     Text(
-                      period,
+                      title,
 
                       maxLines: 1,
 
                       overflow: TextOverflow.ellipsis,
 
-                      style: const TextStyle(color: textGrey, fontSize: 10.5),
+                      style: const TextStyle(
+                        fontSize: 15.5,
+
+                        fontWeight: FontWeight.w800,
+
+                        color: textDark,
+                      ),
                     ),
+
+                    const SizedBox(height: 4),
+
+                    Row(
+                      children: [
+                        if (code.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+
+                              vertical: 3,
+                            ),
+
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.10),
+
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+
+                            child: Text(
+                              code,
+
+                              style: TextStyle(
+                                color: color,
+
+                                fontSize: 10.5,
+
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+
+                        if (code.isNotEmpty) const SizedBox(width: 8),
+
+                        Expanded(
+                          child: Text(
+                            '$studentCount ${studentCount == 1 ? 'Student' : 'Students'}',
+
+                            style: const TextStyle(
+                              color: textGrey,
+
+                              fontSize: 11.5,
+
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    if (period.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+
+                      Text(
+                        period,
+
+                        maxLines: 1,
+
+                        overflow: TextOverflow.ellipsis,
+
+                        style: const TextStyle(color: textGrey, fontSize: 10.5),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
 
-            const SizedBox(width: 8),
+              const SizedBox(width: 8),
 
-            const Icon(
-              Icons.chevron_right_rounded,
+              const Icon(
+                Icons.chevron_right_rounded,
 
-              color: Color(0xFF9BA4B4),
+                color: Color(0xFF9BA4B4),
 
-              size: 22,
-            ),
-          ],
+                size: 22,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1165,24 +1219,29 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
           const SizedBox(height: 18),
 
           Center(
-            child: ElevatedButton.icon(
-              onPressed: _loadDashboard,
+            child: DashboardHover(
+              accent: primaryTeal,
+              lift: 1.5,
+              borderRadius: BorderRadius.circular(12),
+              child: ElevatedButton.icon(
+                onPressed: _loadDashboard,
 
-              icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                icon: const Icon(Icons.refresh_rounded, color: Colors.white),
 
-              label: const Text(
-                'Try Again',
+                label: const Text(
+                  'Try Again',
 
-                style: TextStyle(color: Colors.white),
-              ),
+                  style: TextStyle(color: Colors.white),
+                ),
 
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryTeal,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryTeal,
 
-                elevation: 0,
+                  elevation: 0,
 
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(13),
+                  ),
                 ),
               ),
             ),

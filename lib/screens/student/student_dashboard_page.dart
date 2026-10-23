@@ -1,3 +1,4 @@
+import '../shared/dashboard_hover.dart';
 import 'student_course_modules_page.dart';
 
 import 'dart:async';
@@ -616,17 +617,22 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
         const SizedBox(height: 20),
 
-        OutlinedButton.icon(
-          onPressed: _openCourseInvitations,
-          icon: Badge(
-            isLabelVisible: _pendingInvitations > 0,
-            label: Text('$_pendingInvitations'),
-            child: const Icon(Icons.mail_outline_rounded),
-          ),
-          label: Text(
-            _pendingInvitations > 0
-                ? 'Course invitations ($_pendingInvitations)'
-                : 'Course invitations',
+        DashboardHover(
+          accent: primaryBlue,
+          lift: 1.5,
+          borderRadius: BorderRadius.circular(12),
+          child: OutlinedButton.icon(
+            onPressed: _openCourseInvitations,
+            icon: Badge(
+              isLabelVisible: _pendingInvitations > 0,
+              label: Text('$_pendingInvitations'),
+              child: const Icon(Icons.mail_outline_rounded),
+            ),
+            label: Text(
+              _pendingInvitations > 0
+                  ? 'Course invitations ($_pendingInvitations)'
+                  : 'Course invitations',
+            ),
           ),
         ),
         const SizedBox(height: 20),
@@ -678,30 +684,34 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   // ============================================================
 
   Widget _buildWelcomeBanner() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: primaryBlue,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Welcome back, $_firstName',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 23,
-              fontWeight: FontWeight.w800,
+    return DashboardHover(
+      accent: primaryBlue,
+      lift: 2,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: primaryBlue,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Welcome back, $_firstName',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 23,
+                fontWeight: FontWeight.w800,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Accept your invitations and open your classes below.',
-            style: TextStyle(color: Colors.white, height: 1.5),
-          ),
-        ],
+            const SizedBox(height: 8),
+            const Text(
+              'Accept your invitations and open your classes below.',
+              style: TextStyle(color: Colors.white, height: 1.5),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -743,27 +753,37 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
         const Spacer(),
 
-        const NotificationBell(),
+        DashboardHover(
+          accent: primaryBlue,
+          lift: 1.5,
+          borderRadius: BorderRadius.circular(12),
+          child: const NotificationBell(),
+        ),
 
         const SizedBox(width: 6),
 
-        GestureDetector(
-          onTap: () {
-            widget.onNavigateToTab?.call(4);
-          },
+        DashboardHover(
+          accent: primaryBlue,
+          lift: 2,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(24),
+            onTap: () {
+              widget.onNavigateToTab?.call(4);
+            },
 
-          child: CircleAvatar(
-            radius: 21,
+            child: CircleAvatar(
+              radius: 21,
 
-            backgroundColor: lightBlue,
+              backgroundColor: lightBlue,
 
-            child: Text(
-              _studentInitial,
+              child: Text(
+                _studentInitial,
 
-              style: const TextStyle(
-                color: primaryBlue,
+                style: const TextStyle(
+                  color: primaryBlue,
 
-                fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
           ),
@@ -827,73 +847,77 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         ? Icons.task_alt_rounded
         : Icons.campaign_rounded;
 
-    return Container(
-      height: 105,
+    return DashboardHover(
+      accent: color,
+      borderRadius: BorderRadius.circular(17),
+      child: Container(
+        height: 105,
 
-      padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(14),
 
-      decoration: BoxDecoration(
-        color: Colors.white,
+        decoration: BoxDecoration(
+          color: Colors.white,
 
-        borderRadius: BorderRadius.circular(17),
+          borderRadius: BorderRadius.circular(17),
 
-        border: Border.all(color: color.withValues(alpha: 0.14)),
-        boxShadow: [
-          BoxShadow(
-            color: color.withValues(alpha: 0.07),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-
-        mainAxisAlignment: MainAxisAlignment.center,
-
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 29,
-                height: 29,
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Icon(icon, color: color, size: 16),
-              ),
-              const Spacer(),
-              Text(
-                value,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 3),
-
-          Text(
-            label,
-
-            maxLines: 1,
-
-            overflow: TextOverflow.ellipsis,
-
-            style: const TextStyle(
-              color: textGrey,
-
-              fontSize: 10.5,
-
-              fontWeight: FontWeight.w600,
+          border: Border.all(color: color.withValues(alpha: 0.14)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.07),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
             ),
-          ),
-        ],
+          ],
+        ),
+
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+
+          mainAxisAlignment: MainAxisAlignment.center,
+
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 29,
+                  height: 29,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(icon, color: color, size: 16),
+                ),
+                const Spacer(),
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 3),
+
+            Text(
+              label,
+
+              maxLines: 1,
+
+              overflow: TextOverflow.ellipsis,
+
+              style: const TextStyle(
+                color: textGrey,
+
+                fontSize: 10.5,
+
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -923,16 +947,21 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
         const Spacer(),
 
-        TextButton(
-          onPressed: onTap,
+        DashboardHover(
+          accent: primaryBlue,
+          lift: 1.5,
+          borderRadius: BorderRadius.circular(12),
+          child: TextButton(
+            onPressed: onTap,
 
-          child: Text(
-            action,
+            child: Text(
+              action,
 
-            style: const TextStyle(
-              color: primaryBlue,
+              style: const TextStyle(
+                color: primaryBlue,
 
-              fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ),
@@ -1000,66 +1029,69 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
           return Column(
             children: [
-              ListTile(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => StudentCourseModulesScreen(
-                      courseId: (course['courseId'] ?? course['id']).toString(),
-                      courseTitle: courseTitle,
-                      courseCode: courseCode,
-                      instructorName: instructor,
+              DashboardHover(
+                accent: primaryBlue,
+                lift: 2,
+                child: ListTile(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => StudentCourseModulesScreen(
+                        courseId: (course['courseId'] ?? course['id'])
+                            .toString(),
+                        courseTitle: courseTitle,
+                        courseCode: courseCode,
+                        instructorName: instructor,
+                      ),
                     ),
                   ),
-                ),
 
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
 
-                  vertical: 5,
-                ),
-
-                leading: Container(
-                  width: 46,
-
-                  height: 46,
-
-                  decoration: BoxDecoration(
-                    color: lightBlue,
-
-                    borderRadius: BorderRadius.circular(13),
+                    vertical: 5,
                   ),
 
-                  child: const Icon(
-                    Icons.menu_book_rounded,
+                  leading: Container(
+                    width: 46,
 
-                    color: primaryBlue,
+                    height: 46,
+
+                    decoration: BoxDecoration(
+                      color: lightBlue,
+
+                      borderRadius: BorderRadius.circular(13),
+                    ),
+
+                    child: const Icon(
+                      Icons.menu_book_rounded,
+
+                      color: primaryBlue,
+                    ),
                   ),
-                ),
 
-                title: Text(
-                  courseCode,
+                  title: Text(
+                    courseCode,
 
-                  style: const TextStyle(
-                    color: textDark,
+                    style: const TextStyle(
+                      color: textDark,
 
-                    fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
+
+                  subtitle: Text(
+                    [courseTitle, if (instructor.trim().isNotEmpty) instructor]
+                        .where((value) => value.trim().isNotEmpty)
+                        .join(' \u2022 '),
+
+                    maxLines: 2,
+
+                    overflow: TextOverflow.ellipsis,
+                  ),
+
+                  trailing: const Icon(Icons.chevron_right_rounded),
                 ),
-
-                subtitle: Text(
-                  [
-                    courseTitle,
-
-                    if (instructor.trim().isNotEmpty) instructor,
-                  ].where((value) => value.trim().isNotEmpty).join(' \u2022 '),
-
-                  maxLines: 2,
-
-                  overflow: TextOverflow.ellipsis,
-                ),
-
-                trailing: const Icon(Icons.chevron_right_rounded),
               ),
 
               if (index < visibleCount - 1)
@@ -1115,80 +1147,84 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
         final Color typeColor = _assessmentColor(type);
 
-        return Container(
-          width: double.infinity,
+        return DashboardHover(
+          accent: typeColor,
+          borderRadius: BorderRadius.circular(17),
+          child: Container(
+            width: double.infinity,
 
-          margin: const EdgeInsets.only(bottom: 10),
+            margin: const EdgeInsets.only(bottom: 10),
 
-          padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(14),
 
-          decoration: BoxDecoration(
-            color: Colors.white,
+            decoration: BoxDecoration(
+              color: Colors.white,
 
-            borderRadius: BorderRadius.circular(17),
+              borderRadius: BorderRadius.circular(17),
 
-            border: Border.all(color: borderColor),
-          ),
+              border: Border.all(color: borderColor),
+            ),
 
-          child: Row(
-            children: [
-              Container(
-                width: 44,
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
 
-                height: 44,
+                  height: 44,
 
-                decoration: BoxDecoration(
-                  color: typeColor.withValues(alpha: 0.10),
+                  decoration: BoxDecoration(
+                    color: typeColor.withValues(alpha: 0.10),
 
-                  borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+
+                  child: Icon(_assessmentIcon(type), color: typeColor),
                 ),
 
-                child: Icon(_assessmentIcon(type), color: typeColor),
-              ),
+                const SizedBox(width: 12),
 
-              const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
 
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (assessment['title'] ?? 'Assessment').toString(),
 
-                  children: [
-                    Text(
-                      (assessment['title'] ?? 'Assessment').toString(),
+                        maxLines: 1,
 
-                      maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
 
-                      overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: textDark,
 
-                      style: const TextStyle(
-                        color: textDark,
+                          fontSize: 13,
 
-                        fontSize: 13,
-
-                        fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
-                    ),
 
-                    const SizedBox(height: 4),
+                      const SizedBox(height: 4),
 
-                    Text(
-                      [
-                            (assessment['courseCode'] ?? '').toString(),
+                      Text(
+                        [
+                              (assessment['courseCode'] ?? '').toString(),
 
-                            if (dueAt != null)
-                              '${_formatDate(dueAt)} \u2022 ${_formatTime(dueAt)}',
-                          ]
-                          .where((value) => value.trim().isNotEmpty)
-                          .join('  \u2022  '),
+                              if (dueAt != null)
+                                '${_formatDate(dueAt)} \u2022 ${_formatTime(dueAt)}',
+                            ]
+                            .where((value) => value.trim().isNotEmpty)
+                            .join('  \u2022  '),
 
-                      style: const TextStyle(color: textGrey, fontSize: 10.5),
-                    ),
-                  ],
+                        style: const TextStyle(color: textGrey, fontSize: 10.5),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
 
-              const Icon(Icons.chevron_right_rounded, color: textGrey),
-            ],
+                const Icon(Icons.chevron_right_rounded, color: textGrey),
+              ],
+            ),
           ),
         );
       }).toList(),
@@ -1225,18 +1261,23 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
               const SizedBox(height: 18),
 
-              ElevatedButton.icon(
-                onPressed: _loadDashboard,
+              DashboardHover(
+                accent: primaryBlue,
+                lift: 1.5,
+                borderRadius: BorderRadius.circular(12),
+                child: ElevatedButton.icon(
+                  onPressed: _loadDashboard,
 
-                icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                  icon: const Icon(Icons.refresh_rounded, color: Colors.white),
 
-                label: const Text(
-                  'Try Again',
+                  label: const Text(
+                    'Try Again',
 
-                  style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: Colors.white),
+                  ),
+
+                  style: ElevatedButton.styleFrom(backgroundColor: primaryBlue),
                 ),
-
-                style: ElevatedButton.styleFrom(backgroundColor: primaryBlue),
               ),
             ],
           ),

@@ -10,7 +10,14 @@ class AdminDocumentFrame extends StatelessWidget {
     tagName: 'iframe',
     onElementCreated: (element) {
       final frame = element as web.HTMLIFrameElement;
-      frame.src = uri.toString();
+      // Render with our bundled PDF.js viewer rather than relying on a browser
+      // PDF plugin inside a sandboxed cross-origin storage iframe.
+      frame.src = Uri.parse(web.document.baseURI)
+          .resolve('document-preview.html')
+          .replace(
+            fragment: Uri(queryParameters: {'file': uri.toString()}).query,
+          )
+          .toString();
       frame.title = 'Instructor document preview';
       frame.setAttribute(
         'sandbox',
