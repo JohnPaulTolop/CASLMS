@@ -8,7 +8,7 @@ import {
   json,
   RequestError,
 } from "../_shared/firebase.ts";
-import { mayActivate, validProgram } from "./policy.ts";
+import { mayActivate, maySyncVerifiedEmail, validProgram } from "./policy.ts";
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
@@ -30,6 +30,35 @@ Deno.serve(async (request) => {
       throw new RequestError("Invalid request body.");
     });
     const ref = db.collection("users").doc(user.uid);
+    if (body?.action === "sync_verified_email") {
+      await db.runTransaction(async (tx) => {
+        const profile = (await tx.get(ref)).data();
+        if (
+          !profile || !maySyncVerifiedEmail(
+            profile,
+            user.uid,
+            email,
+            user.emailVerified,
+            token.email,
+            token.email_verified === true,
+          )
+        ) {
+          throw new RequestError(
+            "Confirm your new email and sign in again before checking it. Suspended accounts must contact the administrator.",
+            403,
+          );
+        }
+        if (profile.email === email && profile.authEmail === email) return;
+        tx.update(ref, {
+          email,
+          authEmail: email,
+          emailVerificationRequired: true,
+          emailVerifiedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      });
+      return json({ success: true });
+    }
     if (body?.action === "activate") {
       await db.runTransaction(async (tx) => {
         const profile = (await tx.get(ref)).data();

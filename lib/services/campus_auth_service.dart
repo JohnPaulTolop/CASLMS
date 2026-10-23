@@ -220,7 +220,7 @@ class CampusAuthService {
     try {
       final document = await _firestore.collection('users').doc(user.uid).get();
 
-      final Map<String, dynamic>? profile = document.data();
+      Map<String, dynamic>? profile = document.data();
 
       if (!document.exists || profile == null) {
         await _auth.signOut();
@@ -237,6 +237,8 @@ class CampusAuthService {
 
         throw CampusAuthException('Campus ID does not match this account.');
       }
+
+      profile = await _synchronizeVerifiedEmail(profile);
 
       final String role = (profile['role'] ?? '')
           .toString()
@@ -389,21 +391,59 @@ class CampusAuthService {
       return null;
     }
 
-    return {...profile, 'uid': user.uid};
+    return {...await _synchronizeVerifiedEmail(profile), 'uid': user.uid};
   }
 
   Stream<Map<String, dynamic>?> watchProfile(String userId) {
-    return _firestore.collection('users').doc(userId).snapshots().map((
+    return _firestore.collection('users').doc(userId).snapshots().asyncMap((
       document,
-    ) {
+    ) async {
       final Map<String, dynamic>? profile = document.data();
 
       if (!document.exists || profile == null) {
         return null;
       }
 
-      return {...profile, 'uid': document.id};
+      final ownProfile = document.id == _auth.currentUser?.uid;
+      return {
+        ...ownProfile ? await _synchronizeVerifiedEmail(profile) : profile,
+        'uid': document.id,
+      };
     });
+  }
+
+  Future<Map<String, dynamic>> _synchronizeVerifiedEmail(
+    Map<String, dynamic> profile,
+  ) async {
+    final user = _auth.currentUser;
+    final email = user?.email?.trim().toLowerCase() ?? '';
+    if (user == null ||
+        (profile['uid'] != null && profile['uid'] != user.uid) ||
+        profile['role'] != 'student' ||
+        profile['status'] != 'active' ||
+        !user.emailVerified ||
+        email.isEmpty ||
+        email.endsWith('@caslms.app') ||
+        (profile['email'] == email && profile['authEmail'] == email)) {
+      return profile;
+    }
+    await _registrationRequest({'action': 'sync_verified_email'});
+    return {
+      ...profile,
+      'email': email,
+      'authEmail': email,
+      'emailVerificationRequired': true,
+    };
+  }
+
+  /// Called after a verification link, on profile reload or the next login.
+  /// It recovers an interrupted email update without changing the campus ID.
+  Future<void> checkVerifiedProfileEmail() async {
+    final user = _auth.currentUser;
+    if (user == null) throw CampusAuthException('Please sign in again.');
+    await user.reload();
+    await _auth.currentUser?.getIdToken(true);
+    await getCurrentProfile();
   }
 
   Future<void> signOut() async {
