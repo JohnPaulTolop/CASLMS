@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../services/enrollment_service.dart';
@@ -29,8 +27,6 @@ class _ModulesScreenState extends State<ModulesScreen> {
 
   final ProgressService _progressService = ProgressService();
 
-  StreamSubscription<List<Map<String, dynamic>>>? _coursesSubscription;
-  int _loadGeneration = 0;
   bool _isLoading = true;
 
   String? _errorMessage;
@@ -61,50 +57,11 @@ class _ModulesScreenState extends State<ModulesScreen> {
   void initState() {
     super.initState();
 
-    _coursesSubscription = _enrollmentService.watchMyActiveCourses().listen(
-      (courses) {
-        if (!mounted) return;
-        final previous = {
-          for (final course in _courses) course['courseId']: course,
-        };
-        setState(() {
-          _courses = courses
-              .map(
-                (course) => <String, dynamic>{
-                  ...?previous[course['courseId']],
-                  ...course,
-                },
-              )
-              .toList();
-          _isLoading = false;
-          _errorMessage = null;
-        });
-        _loadCourses(activeCourses: courses, showLoading: false);
-      },
-      onError: (Object error) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _errorMessage = 'Unable to sync enrolled courses. Please retry.';
-          });
-        }
-      },
-    );
+    _loadCourses();
   }
 
-  @override
-  void dispose() {
-    _loadGeneration++;
-    _coursesSubscription?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _loadCourses({
-    List<Map<String, dynamic>>? activeCourses,
-    bool showLoading = true,
-  }) async {
-    final generation = ++_loadGeneration;
-    if (mounted && showLoading) {
+  Future<void> _loadCourses() async {
+    if (mounted) {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
@@ -112,8 +69,8 @@ class _ModulesScreenState extends State<ModulesScreen> {
     }
 
     try {
-      final List<Map<String, dynamic>> courses =
-          activeCourses ?? await _enrollmentService.getMyActiveCourses();
+      final List<Map<String, dynamic>> courses = await _enrollmentService
+          .getMyActiveCourses();
 
       final List<Map<String, dynamic>> enrichedCourses = [];
 
@@ -147,7 +104,7 @@ class _ModulesScreenState extends State<ModulesScreen> {
         }
       }
 
-      if (!mounted || generation != _loadGeneration) {
+      if (!mounted) {
         return;
       }
 
@@ -156,7 +113,7 @@ class _ModulesScreenState extends State<ModulesScreen> {
         _isLoading = false;
       });
     } on EnrollmentServiceException catch (e) {
-      if (!mounted || generation != _loadGeneration) {
+      if (!mounted) {
         return;
       }
 
@@ -165,7 +122,7 @@ class _ModulesScreenState extends State<ModulesScreen> {
         _errorMessage = e.message;
       });
     } catch (_) {
-      if (!mounted || generation != _loadGeneration) {
+      if (!mounted) {
         return;
       }
 

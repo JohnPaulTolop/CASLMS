@@ -205,7 +205,17 @@ class _InstructorModuleDetailScreenState
           'moduleId': moduleDocument.id,
         };
 
-        _materials = widget.focusResourceId.isEmpty ? materials : materials.where((m) => (m['resourceId'] ?? m['materialId'] ?? m['id']) == widget.focusResourceId).toList();
+        _materials = widget.focusResourceId.isEmpty
+            ? materials
+            : materials
+                  .where(
+                    (material) =>
+                        (material['resourceId'] ??
+                            material['materialId'] ??
+                            material['id']) ==
+                        widget.focusResourceId,
+                  )
+                  .toList();
         _assessments = assessments;
 
         _isLoading = false;

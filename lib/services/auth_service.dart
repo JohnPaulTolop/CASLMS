@@ -1,7 +1,3 @@
-import 'dart:async';
-
-import 'activity_log_service.dart';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -31,7 +27,8 @@ class AuthService {
   }) async {
     try {
       // Authenticate with Firebase Authentication
-      final UserCredential credential = await _auth.signInWithEmailAndPassword(
+      final UserCredential credential =
+          await _auth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
@@ -52,7 +49,9 @@ class AuthService {
       if (!userDocument.exists) {
         await _auth.signOut();
 
-        throw AuthServiceException('Your CASLMS user profile was not found.');
+        throw AuthServiceException(
+          'Your CASLMS user profile was not found.',
+        );
       }
 
       final Map<String, dynamic>? data = userDocument.data();
@@ -60,17 +59,17 @@ class AuthService {
       if (data == null) {
         await _auth.signOut();
 
-        throw AuthServiceException('Your CASLMS user profile is invalid.');
+        throw AuthServiceException(
+          'Your CASLMS user profile is invalid.',
+        );
       }
 
       // ============================================================
       // CHECK ACCOUNT STATUS
       // ============================================================
 
-      final String status = (data['status'] ?? '')
-          .toString()
-          .trim()
-          .toLowerCase();
+      final String status =
+          (data['status'] ?? '').toString().trim().toLowerCase();
 
       if (status != 'active') {
         await _auth.signOut();
@@ -84,9 +83,14 @@ class AuthService {
       // GET USER ROLE
       // ============================================================
 
-      final String role = (data['role'] ?? '').toString().trim().toLowerCase();
+      final String role =
+          (data['role'] ?? '').toString().trim().toLowerCase();
 
-      final List<String> allowedRoles = ['student', 'instructor', 'admin'];
+      final List<String> allowedRoles = [
+        'student',
+        'instructor',
+        'admin',
+      ];
 
       if (!allowedRoles.contains(role)) {
         await _auth.signOut();
@@ -96,23 +100,22 @@ class AuthService {
         );
       }
 
-      unawaited(
-        ActivityLogService(
-          auth: _auth,
-          firestore: _firestore,
-        ).session('login', profile: data),
-      );
-
       // Return role to auth_page.dart
       return role;
     } on FirebaseAuthException catch (e) {
-      throw AuthServiceException(_getFirebaseAuthMessage(e));
+      throw AuthServiceException(
+        _getFirebaseAuthMessage(e),
+      );
     } on FirebaseException catch (e) {
-      throw AuthServiceException(e.message ?? 'A Firebase error occurred.');
+      throw AuthServiceException(
+        e.message ?? 'A Firebase error occurred.',
+      );
     } on AuthServiceException {
       rethrow;
     } catch (e) {
-      throw AuthServiceException('Unable to log in. Please try again.');
+      throw AuthServiceException(
+        'Unable to log in. Please try again.',
+      );
     }
   }
 
@@ -128,10 +131,8 @@ class AuthService {
         return null;
       }
 
-      final DocumentSnapshot<Map<String, dynamic>> document = await _firestore
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      final DocumentSnapshot<Map<String, dynamic>> document =
+          await _firestore.collection('users').doc(user.uid).get();
 
       if (!document.exists) {
         return null;
@@ -148,7 +149,8 @@ class AuthService {
   // ============================================================
 
   Future<String?> getCurrentUserRole() async {
-    final Map<String, dynamic>? data = await getCurrentUserData();
+    final Map<String, dynamic>? data =
+        await getCurrentUserData();
 
     if (data == null) {
       return null;
@@ -164,7 +166,8 @@ class AuthService {
   // ============================================================
 
   Future<String?> getCurrentUserStatus() async {
-    final Map<String, dynamic>? data = await getCurrentUserData();
+    final Map<String, dynamic>? data =
+        await getCurrentUserData();
 
     if (data == null) {
       return null;
@@ -181,11 +184,17 @@ class AuthService {
 
   Future<void> sendPasswordResetEmail(String email) async {
     try {
-      await _auth.sendPasswordResetEmail(email: email.trim());
+      await _auth.sendPasswordResetEmail(
+        email: email.trim(),
+      );
     } on FirebaseAuthException catch (e) {
-      throw AuthServiceException(_getFirebaseAuthMessage(e));
+      throw AuthServiceException(
+        _getFirebaseAuthMessage(e),
+      );
     } catch (e) {
-      throw AuthServiceException('Unable to send password reset email.');
+      throw AuthServiceException(
+        'Unable to send password reset email.',
+      );
     }
   }
 
@@ -195,9 +204,11 @@ class AuthService {
 
   Future<void> signOut() async {
     try {
-      await ActivityLogService(auth: _auth, firestore: _firestore).signOut();
+      await _auth.signOut();
     } catch (e) {
-      throw AuthServiceException('Unable to log out. Please try again.');
+      throw AuthServiceException(
+        'Unable to log out. Please try again.',
+      );
     }
   }
 
@@ -205,7 +216,9 @@ class AuthService {
   // FIREBASE AUTH ERROR MESSAGES
   // ============================================================
 
-  String _getFirebaseAuthMessage(FirebaseAuthException e) {
+  String _getFirebaseAuthMessage(
+    FirebaseAuthException e,
+  ) {
     switch (e.code) {
       case 'invalid-email':
         return 'Please enter a valid email address.';
@@ -235,7 +248,8 @@ class AuthService {
         return 'Please enter your password.';
 
       default:
-        return e.message ?? 'Authentication failed. Please try again.';
+        return e.message ??
+            'Authentication failed. Please try again.';
     }
   }
 }

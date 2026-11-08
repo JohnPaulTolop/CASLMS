@@ -90,7 +90,11 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
   @override
   void initState() {
     super.initState();
-    _selectedTab = widget.showGrades ? 3 : widget.focusResourceId.isNotEmpty ? 2 : 1;
+    _selectedTab = widget.showGrades
+        ? 3
+        : widget.focusResourceId.isNotEmpty
+        ? 2
+        : 1;
 
     WidgetsBinding.instance.addObserver(this);
 
@@ -109,7 +113,10 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
                     .where(
                       (doc) =>
                           doc.data()['courseId'] == widget.courseId &&
-                          doc.data()['moduleId'] == widget.moduleId && (widget.focusAssessmentId.isEmpty || doc.data()['assessmentId'] == widget.focusAssessmentId),
+                          doc.data()['moduleId'] == widget.moduleId &&
+                          (widget.focusAssessmentId.isEmpty ||
+                              doc.data()['assessmentId'] ==
+                                  widget.focusAssessmentId),
                     )
                     .map(
                       (doc) => <String, dynamic>{
@@ -338,9 +345,32 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
 
         _module = {...moduleData, 'id': moduleDocument.id};
 
-        _assessments = widget.focusAssessmentId.isEmpty ? assessments : assessments.where((a) => (a['assessmentId'] ?? a['id']) == widget.focusAssessmentId).toList();
-        _submissions = widget.focusAssessmentId.isEmpty ? submissions : submissions.where((s) => s['assessmentId'] == widget.focusAssessmentId).toList();
-        _resources = widget.focusResourceId.isEmpty ? resources : resources.where((r) => (r['resourceId'] ?? r['id']) == widget.focusResourceId).toList();
+        _assessments = widget.focusAssessmentId.isEmpty
+            ? assessments
+            : assessments
+                  .where(
+                    (assessment) =>
+                        (assessment['assessmentId'] ?? assessment['id']) ==
+                        widget.focusAssessmentId,
+                  )
+                  .toList();
+        _submissions = widget.focusAssessmentId.isEmpty
+            ? submissions
+            : submissions
+                  .where(
+                    (submission) =>
+                        submission['assessmentId'] == widget.focusAssessmentId,
+                  )
+                  .toList();
+        _resources = widget.focusResourceId.isEmpty
+            ? resources
+            : resources
+                  .where(
+                    (resource) =>
+                        (resource['resourceId'] ?? resource['id']) ==
+                        widget.focusResourceId,
+                  )
+                  .toList();
 
         _isLoading = false;
       });

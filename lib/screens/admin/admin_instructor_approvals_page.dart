@@ -5,6 +5,7 @@ import '../../services/instructor_approval_service.dart';
 
 class AdminInstructorApprovalsScreen extends StatefulWidget {
   const AdminInstructorApprovalsScreen({super.key, this.applicationId = ''});
+
   final String applicationId;
 
   @override

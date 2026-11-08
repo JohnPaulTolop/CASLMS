@@ -1171,48 +1171,60 @@ class _InstructorAddLearningMaterialScreenState
   // ============================================================
 
   Widget _buildStatusSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return RadioGroup<String>(
+      groupValue: _status,
+      onChanged: (newValue) {
+        if (_isSaving || newValue == null) {
+          return;
+        }
+        setState(() {
+          _status = newValue;
+        });
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
 
-      children: [
-        const Text(
-          'Visibility',
+        children: [
+          const Text(
+            'Visibility',
 
-          style: TextStyle(
-            color: textDark,
-            fontSize: 16,
-            fontWeight: FontWeight.w800,
+            style: TextStyle(
+              color: textDark,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-        ),
 
-        const SizedBox(height: 10),
+          const SizedBox(height: 10),
 
-        _statusCard(
-          value: 'published',
+          _statusCard(
+            value: 'published',
 
-          title: 'Publish Now',
+            title: 'Publish Now',
 
-          subtitle: 'Students enrolled in the course can access this material.',
+            subtitle:
+                'Students enrolled in the course can access this material.',
 
-          icon: Icons.visibility_rounded,
+            icon: Icons.visibility_rounded,
 
-          color: green,
-        ),
+            color: green,
+          ),
 
-        const SizedBox(height: 9),
+          const SizedBox(height: 9),
 
-        _statusCard(
-          value: 'draft',
+          _statusCard(
+            value: 'draft',
 
-          title: 'Save as Draft',
+            title: 'Save as Draft',
 
-          subtitle: 'Only you can access the material until it is published.',
+            subtitle: 'Only you can access the material until it is published.',
 
-          icon: Icons.edit_note_rounded,
+            icon: Icons.edit_note_rounded,
 
-          color: const Color(0xFFFF9418),
-        ),
-      ],
+            color: const Color(0xFFFF9418),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1304,20 +1316,8 @@ class _InstructorAddLearningMaterialScreenState
 
             Radio<String>(
               value: value,
-              groupValue: _status,
               activeColor: color,
-
-              onChanged: _isSaving
-                  ? null
-                  : (newValue) {
-                      if (newValue == null) {
-                        return;
-                      }
-
-                      setState(() {
-                        _status = newValue;
-                      });
-                    },
+              enabled: !_isSaving,
             ),
           ],
         ),

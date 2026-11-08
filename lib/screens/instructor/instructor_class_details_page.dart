@@ -1,7 +1,3 @@
-import 'dart:async';
-
-import 'invite_student_dialog.dart';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -19,7 +15,6 @@ class InstructorClassDetailsScreen extends StatefulWidget {
   // ============================================================
 
   final String courseId;
-  final String? sectionId;
   final String courseCode;
   final String courseTitle;
   final String classCode;
@@ -37,7 +32,6 @@ class InstructorClassDetailsScreen extends StatefulWidget {
   const InstructorClassDetailsScreen({
     super.key,
     this.courseId = '',
-    this.sectionId,
     this.courseCode = '',
     this.courseTitle = '',
     this.classCode = '',
@@ -82,10 +76,6 @@ class _InstructorClassDetailsScreenState
   // STATE
   // ============================================================
 
-  final List<StreamSubscription> _changes = [];
-  String? _watchedCourseId;
-  Timer? _refreshTimer;
-  int _loadGeneration = 0;
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -163,9 +153,8 @@ class _InstructorClassDetailsScreenState
   // LOAD COURSE
   // ============================================================
 
-  Future<void> _loadCourseData({bool showLoading = true}) async {
-    final generation = ++_loadGeneration;
-    if (mounted && showLoading) {
+  Future<void> _loadCourseData() async {
+    if (mounted) {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
@@ -180,8 +169,6 @@ class _InstructorClassDetailsScreenState
       }
 
       final String courseId = await _resolveCourseId();
-      if (!mounted || generation != _loadGeneration) return;
-      _watchChanges(courseId);
 
       final DocumentSnapshot<Map<String, dynamic>> courseDocument =
           await _firestore.collection('courses').doc(courseId).get();
@@ -307,7 +294,7 @@ class _InstructorClassDetailsScreenState
               )
               .toList();
 
-      if (!mounted || generation != _loadGeneration) return;
+      if (!mounted) return;
 
       setState(() {
         _course = {
@@ -323,7 +310,7 @@ class _InstructorClassDetailsScreenState
         _isLoading = false;
       });
     } catch (e) {
-      if (!mounted || generation != _loadGeneration) return;
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
@@ -464,64 +451,51 @@ class _InstructorClassDetailsScreenState
 
   Future<void> _inviteStudent() async {
     if (_isSendingInvitation || _courseId.isEmpty) return;
-    setState(() => _isSendingInvitation = true);
-    final sent = await showDialog<bool>(
+
+    final String? campusId = await showDialog<String>(
       context: context,
-      barrierDismissible: false,
-      builder: (_) =>
-          InviteStudentDialog(courseId: _courseId, sectionId: widget.sectionId),
+      builder: (dialogContext) => const _InviteStudentDialog(),
     );
-    if (!mounted) return;
-    setState(() => _isSendingInvitation = false);
-    if (sent == true) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Invitation sent. The roster updates when the student accepts.',
-          ),
-        ),
-      );
-    }
-  }
 
-  void _watchChanges(String courseId) {
-    if (_watchedCourseId == courseId) return;
-    _watchedCourseId = courseId;
-    for (final change in _changes) {
-      change.cancel();
-    }
-    _changes.clear();
-    for (final collection in ['enrollments', 'courseInvitations']) {
-      _changes.add(
-        _firestore
-            .collection(collection)
-            .where('courseId', isEqualTo: courseId)
-            .snapshots()
-            .listen(
-              (_) {
-                _refreshTimer?.cancel();
-                _refreshTimer = Timer(const Duration(milliseconds: 180), () {
-                  if (mounted) _loadCourseData(showLoading: false);
-                });
-              },
-              onError: (Object error) {
-                if (mounted) {
-                  _showError('Unable to sync the roster. Please refresh.');
-                }
-              },
+    if (!mounted || campusId == null || campusId.trim().isEmpty) return;
+
+    setState(() => _isSendingInvitation = true);
+
+    try {
+      final invitation = await _invitationService.inviteStudentByCampusId(
+        courseId: _courseId,
+        campusId: campusId,
+      );
+
+      if (!mounted) return;
+
+      final String studentName =
+          (invitation['studentName'] ?? invitation['studentCampusId'] ?? '')
+              .toString()
+              .trim();
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              studentName.isEmpty
+                  ? 'Course invitation sent.'
+                  : 'Invitation sent to $studentName.',
             ),
-      );
-    }
-  }
+            backgroundColor: green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
 
-  @override
-  void dispose() {
-    _loadGeneration++;
-    _refreshTimer?.cancel();
-    for (final change in _changes) {
-      change.cancel();
+      await _loadCourseData();
+    } on CourseInvitationException catch (error) {
+      _showError(error.message);
+    } catch (_) {
+      _showError('Unable to send the course invitation.');
+    } finally {
+      if (mounted) setState(() => _isSendingInvitation = false);
     }
-    super.dispose();
   }
 
   Future<void> _cancelInvitation(Map<String, dynamic> invitation) async {
@@ -1551,12 +1525,6 @@ class _InstructorClassDetailsScreenState
                     ),
                     const Divider(height: 1, color: borderColor),
                     _buildSettingTile(
-                      icon: Icons.mail_outline_rounded,
-                      title: 'Enrollment',
-                      value: 'By instructor invitation',
-                    ),
-                    const Divider(height: 1, color: borderColor),
-                    _buildSettingTile(
                       icon: Icons.person_outline_rounded,
                       title: 'Instructor',
                       value: _instructorName,
@@ -1659,6 +1627,101 @@ class _InstructorClassDetailsScreenState
           ),
         ],
       ),
+    );
+  }
+}
+
+class _InviteStudentDialog extends StatefulWidget {
+  const _InviteStudentDialog();
+
+  @override
+  State<_InviteStudentDialog> createState() => _InviteStudentDialogState();
+}
+
+class _InviteStudentDialogState extends State<_InviteStudentDialog> {
+  static const Color teal = Color(0xFF00897B);
+
+  final TextEditingController _campusIdController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _campusIdController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_formKey.currentState?.validate() != true) return;
+    Navigator.of(context)
+        .pop(_campusIdController.text.trim().replaceAll(RegExp(r'\s+'), ''));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.person_add_alt_1_rounded, color: teal),
+          SizedBox(width: 10),
+          Expanded(child: Text('Invite Student')),
+        ],
+      ),
+      content: SizedBox(
+        width: 420,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter the Campus ID registered to the student’s CASLMS account.',
+              ),
+              const SizedBox(height: 17),
+              TextFormField(
+                controller: _campusIdController,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.done,
+                onFieldSubmitted: (_) => _submit(),
+                decoration: const InputDecoration(
+                  labelText: 'Student Campus ID',
+                  hintText: 'Enter 5–12 digits',
+                  prefixIcon: Icon(Icons.badge_outlined),
+                ),
+                validator: (value) {
+                  final campusId = (value ?? '').trim().replaceAll(
+                    RegExp(r'\s+'),
+                    '',
+                  );
+                  if (campusId.isEmpty) return 'Enter the student Campus ID.';
+                  if (!RegExp(r'^\d{5,12}$').hasMatch(campusId)) {
+                    return 'Campus ID must contain 5–12 numeric digits.';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'The student must accept the invitation before enrollment becomes active.',
+                style: TextStyle(color: Color(0xFF6B7C93), fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.send_rounded),
+          label: const Text('Send Invitation'),
+          style: FilledButton.styleFrom(backgroundColor: teal),
+        ),
+      ],
     );
   }
 }

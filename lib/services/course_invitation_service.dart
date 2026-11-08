@@ -1,7 +1,3 @@
-import 'dart:async';
-
-import 'notification_service.dart';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -257,33 +253,6 @@ class CourseInvitationService {
     }
   }
 
-  Stream<List<Map<String, dynamic>>> watchMyPendingInvitations() {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return Stream.value([]);
-    return _firestore
-        .collection('courseInvitations')
-        .where('studentId', isEqualTo: uid)
-        .snapshots()
-        .map((snapshot) {
-          final result = snapshot.docs
-              .where((d) => d.data()['status'] == 'pending')
-              .map(
-                (d) => <String, dynamic>{
-                  ...d.data(),
-                  'id': d.id,
-                  'invitationId': d.id,
-                },
-              )
-              .toList();
-          result.sort(
-            (a, b) => (_dateFrom(b['createdAt']) ?? DateTime(1970)).compareTo(
-              _dateFrom(a['createdAt']) ?? DateTime(1970),
-            ),
-          );
-          return result;
-        });
-  }
-
   Future<List<Map<String, dynamic>>> getMyPendingInvitations() async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -353,7 +322,7 @@ class CourseInvitationService {
         .doc(cleanInvitationId);
 
     try {
-      final result = await _firestore.runTransaction<Map<String, dynamic>>((
+      return await _firestore.runTransaction<Map<String, dynamic>>((
         transaction,
       ) async {
         final invitationDocument = await transaction.get(invitationReference);
@@ -429,6 +398,7 @@ class CourseInvitationService {
             );
           }
         }
+
         if (accept) {
           final previous = enrollmentDocument.data();
           final alreadyActive = previous?['status'] == 'active';
@@ -451,8 +421,7 @@ class CourseInvitationService {
               'invitationId': cleanInvitationId,
             };
           }
-          // Enrollment is the essential transaction. A notification is optional
-          // and must never block a student's invitation acceptance.
+
           transaction.set(enrollmentReference, {
             'courseId': courseId,
             'studentId': user.uid,
@@ -485,8 +454,6 @@ class CourseInvitationService {
           'status': accept ? 'accepted' : 'declined',
         };
       });
-      if (accept) unawaited(_sendEnrollmentReceipt(result, user.uid));
-      return result;
     } on CourseInvitationException {
       rethrow;
     } on FirebaseException catch (error) {
@@ -497,27 +464,6 @@ class CourseInvitationService {
       throw CourseInvitationException(
         'Unable to answer the course invitation.',
       );
-    }
-  }
-
-  Future<void> _sendEnrollmentReceipt(
-    Map<String, dynamic> invitation,
-    String uid,
-  ) async {
-    try {
-      final courseId = invitation['courseId'].toString();
-      await _firestore
-          .collection('notifications')
-          .doc('enrollment_${courseId}_$uid')
-          .set(
-            NotificationService.enrollmentNotice(
-              courseId: courseId,
-              studentId: uid,
-              actorId: uid,
-            ),
-          );
-    } on FirebaseException {
-      // A duplicate receipt or older notification rules cannot undo enrollment.
     }
   }
 

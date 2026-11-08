@@ -46,14 +46,35 @@ service cloud.firestore {
         currentUser().role == 'instructor';
     }
 
+    // Section identifiers are retained internally for legacy compatibility.
+    // A student can enter a section only through an instructor invitation.
     function validInvitedSection(courseId, sectionId) {
-      let course = get(/databases/$(database)/documents/courses/$(courseId)).data;
-      return course.status == 'active' && sectionId is string && sectionId != '' &&
-        (sectionId == course.classCode ||
-          (exists(/databases/$(database)/documents/courseSections/$(sectionId)) &&
-           get(/databases/$(database)/documents/courseSections/$(sectionId)).data.courseId == courseId &&
-           get(/databases/$(database)/documents/courseSections/$(sectionId)).data.instructorId == course.instructorId &&
-           get(/databases/$(database)/documents/courseSections/$(sectionId)).data.status == 'active'));
+      let course = get(
+        /databases/$(database)/documents/courses/$(courseId)
+      ).data;
+
+      return
+        course.status == 'active' &&
+        sectionId is string &&
+        sectionId != '' &&
+        (
+          sectionId == course.classCode
+          ||
+          (
+            exists(
+              /databases/$(database)/documents/courseSections/$(sectionId)
+            ) &&
+            get(
+              /databases/$(database)/documents/courseSections/$(sectionId)
+            ).data.courseId == courseId &&
+            get(
+              /databases/$(database)/documents/courseSections/$(sectionId)
+            ).data.instructorId == course.instructorId &&
+            get(
+              /databases/$(database)/documents/courseSections/$(sectionId)
+            ).data.status == 'active'
+          )
+        );
     }
 
     function isAdmin() {
@@ -181,6 +202,62 @@ service cloud.firestore {
     }
 
     // ============================================================
+    // PRIVATE STUDENT NOTES
+    // ============================================================
+
+    match /users/{userId}/personalNotes/{noteId} {
+      function validPersonalNote(data) {
+        return
+          data.keys().hasOnly([
+            'ownerId',
+            'title',
+            'content',
+            'createdAt',
+            'updatedAt'
+          ]) &&
+          data.ownerId == request.auth.uid &&
+          data.ownerId == userId &&
+          data.title is string &&
+          data.title.size() >= 1 &&
+          data.title.size() <= 150 &&
+          data.content is string &&
+          data.content.size() >= 1 &&
+          data.content.size() <= 10000 &&
+          data.createdAt is timestamp &&
+          data.updatedAt == request.time;
+      }
+
+      allow read: if
+        isStudent() &&
+        isSelf(userId);
+
+      allow create: if
+        isStudent() &&
+        isSelf(userId) &&
+        validPersonalNote(request.resource.data) &&
+        request.resource.data.createdAt == request.time;
+
+      allow update: if
+        isStudent() &&
+        isSelf(userId) &&
+        resource.data.ownerId == request.auth.uid &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.diff(resource.data)
+          .affectedKeys().hasOnly([
+            'title',
+            'content',
+            'updatedAt'
+          ]) &&
+        validPersonalNote(request.resource.data);
+
+      allow delete: if
+        isStudent() &&
+        isSelf(userId) &&
+        resource.data.ownerId == request.auth.uid;
+    }
+
+    // ============================================================
     // INSTRUCTOR APPLICATIONS
     // ============================================================
 
@@ -280,7 +357,9 @@ service cloud.firestore {
           student.role == 'student' &&
           student.status == 'active' &&
           student.universityId == data.studentCampusId &&
-          validInvitedSection(data.courseId, data.get('sectionId', course.classCode));
+          data.sectionId is string &&
+          data.sectionName is string &&
+          validInvitedSection(data.courseId, data.sectionId);
       }
 
       function invitationIdentityIsUnchanged() {
@@ -309,7 +388,12 @@ service cloud.firestore {
           enrollment.invitationId == invitationId &&
           enrollment.invitedBy == resource.data.instructorId &&
           enrollment.enrollmentSource == 'instructor_invitation' &&
-          enrollment.sectionId == resource.data.get('sectionId', get(/databases/$(database)/documents/courses/$(resource.data.courseId)).data.classCode) &&
+          enrollment.sectionId == resource.data.get(
+            'sectionId',
+            get(
+              /databases/$(database)/documents/courses/$(resource.data.courseId)
+            ).data.classCode
+          ) &&
           enrollment.status == 'active';
       }
 
@@ -394,7 +478,10 @@ service cloud.firestore {
           resource.data.studentId == request.auth.uid &&
           resource.data.status == 'pending' &&
           invitationIdentityIsUnchanged() &&
-          request.resource.data.get('sectionId', '') == resource.data.get('sectionId', '') &&
+          request.resource.data.get('sectionId', '') ==
+            resource.data.get('sectionId', '') &&
+          request.resource.data.get('sectionName', '') ==
+            resource.data.get('sectionName', '') &&
           request.resource.data.createdAt == resource.data.createdAt &&
           request.resource.data.updatedAt == request.time &&
           request.resource.data.respondedAt == request.time &&
@@ -436,8 +523,8 @@ service cloud.firestore {
           );
       }
 
-      // Students can resolve active section metadata for invitations.
-      // Students cannot list all section documents.
+      // Students may read only the active section named in their own
+      // invitation. They cannot list sections or discover them by identifier.
 
       allow get: if
         isAdmin()
@@ -455,13 +542,19 @@ service cloud.firestore {
         ||
         (
           isStudent() &&
-          (
-            !exists(
-              /databases/$(database)/documents/courseSections/$(sectionId)
-            )
-            ||
-            resource.data.status == 'active'
-          )
+          resource.data.status == 'active' &&
+          exists(
+            /databases/$(database)/documents/courseInvitations/$(resource.data.courseId + "_" + request.auth.uid)
+          ) &&
+          get(
+            /databases/$(database)/documents/courseInvitations/$(resource.data.courseId + "_" + request.auth.uid)
+          ).data.studentId == request.auth.uid &&
+          get(
+            /databases/$(database)/documents/courseInvitations/$(resource.data.courseId + "_" + request.auth.uid)
+          ).data.status in ['pending', 'accepted'] &&
+          get(
+            /databases/$(database)/documents/courseInvitations/$(resource.data.courseId + "_" + request.auth.uid)
+          ).data.get('sectionId', '') == sectionId
         );
 
       allow list: if
@@ -562,8 +655,15 @@ service cloud.firestore {
           data.invitationId == enrollmentId &&
           data.invitedBy == invitation.instructorId &&
           data.enrollmentSource == 'instructor_invitation' &&
-          get(/databases/$(database)/documents/courses/$(data.courseId)).data.instructorId == invitation.instructorId &&
-          data.sectionId == invitation.get('sectionId', get(/databases/$(database)/documents/courses/$(data.courseId)).data.classCode) &&
+          get(
+            /databases/$(database)/documents/courses/$(data.courseId)
+          ).data.instructorId == invitation.instructorId &&
+          data.sectionId == invitation.get(
+            'sectionId',
+            get(
+              /databases/$(database)/documents/courses/$(data.courseId)
+            ).data.classCode
+          ) &&
           validInvitedSection(data.courseId, data.sectionId);
       }
 
@@ -587,14 +687,24 @@ service cloud.firestore {
           data.studentName is string &&
           data.studentCampusId == currentUser().universityId &&
           data.status == 'active' &&
-          (data.enrolledAt == request.time ||
-            (resource != null && resource.data.status == 'active' && data.enrolledAt == resource.data.enrolledAt)) &&
+          validInvitedSection(data.courseId, data.sectionId) &&
+          (
+            data.enrolledAt == request.time
+            ||
+            (
+              exists(
+                /databases/$(database)/documents/enrollments/$(enrollmentId)
+              ) &&
+              resource.data.status == 'active' &&
+              data.sectionId == resource.data.sectionId &&
+              data.enrolledAt == resource.data.enrolledAt
+            )
+          ) &&
           data.acceptedAt == request.time &&
           enrollmentId == data.courseId + "_" + request.auth.uid &&
           acceptedInvitation(data);
       }
 
-      // Student enrollment requires an instructor invitation.
       allow get: if
         isAdmin()
         ||
@@ -650,7 +760,16 @@ service cloud.firestore {
           resource.data.studentId == request.auth.uid &&
           request.resource.data.courseId == resource.data.courseId &&
           request.resource.data.studentId == resource.data.studentId &&
-          (resource.data.status != 'active' || request.resource.data.sectionId == resource.data.get('sectionId', get(/databases/$(database)/documents/courses/$(resource.data.courseId)).data.classCode)) &&
+          (
+            resource.data.status != 'active'
+            ||
+            request.resource.data.sectionId == resource.data.get(
+              'sectionId',
+              get(
+                /databases/$(database)/documents/courses/$(resource.data.courseId)
+              ).data.classCode
+            )
+          ) &&
           validAcceptedEnrollment(request.resource.data)
         );
 
@@ -1458,38 +1577,212 @@ service cloud.firestore {
     }
 
     // ============================================================
+    // LIVE CLASS MEETING CHAT
+    // ============================================================
+
+    match /meetingMessages/{messageId} {
+      function activeMeetingParticipant(data) {
+        let enrollmentPath =
+          /databases/$(database)/documents/enrollments/$(data.courseId + "_" + request.auth.uid);
+
+        return
+          ownsCourse(data.courseId)
+          ||
+          (
+            isStudent() &&
+            exists(enrollmentPath) &&
+            get(enrollmentPath).data.studentId == request.auth.uid &&
+            get(enrollmentPath).data.courseId == data.courseId &&
+            get(enrollmentPath).data.sectionId == data.sectionId &&
+            get(enrollmentPath).data.status == 'active'
+          );
+      }
+
+      function validMeetingMessage(data) {
+        return
+          data.keys().hasOnly([
+            'courseId',
+            'sectionId',
+            'sessionId',
+            'senderId',
+            'senderName',
+            'senderRole',
+            'text',
+            'clientNonce',
+            'createdAt'
+          ]) &&
+          data.courseId is string &&
+          data.courseId != '' &&
+          data.sectionId is string &&
+          data.sectionId != '' &&
+          data.sessionId is string &&
+          data.sessionId.size() >= 20 &&
+          data.sessionId.size() <= 80 &&
+          data.senderId == request.auth.uid &&
+          data.senderName is string &&
+          data.senderName.size() >= 1 &&
+          data.senderName.size() <= 120 &&
+          data.senderRole == currentUser().role &&
+          data.senderRole in ['student', 'instructor'] &&
+          data.text is string &&
+          data.text.size() >= 1 &&
+          data.text.size() <= 2000 &&
+          data.clientNonce is string &&
+          data.clientNonce.size() >= 10 &&
+          data.clientNonce.size() <= 30 &&
+          data.createdAt == request.time;
+      }
+
+      allow read: if
+        isActive() &&
+        activeMeetingParticipant(resource.data);
+
+      allow create: if
+        isActive() &&
+        activeMeetingParticipant(request.resource.data) &&
+        validMeetingMessage(request.resource.data);
+
+      // Meeting chat is append-only to prevent history tampering.
+      allow update, delete: if false;
+    }
+
+    // ============================================================
     // ANNOUNCEMENTS
     // ============================================================
 
     match /announcements/{announcementId} {
+      function validAnnouncementCreate(data) {
+        return
+          data.keys().hasOnly([
+            'title',
+            'message',
+            'courseId',
+            'courseCode',
+            'courseTitle',
+            'targetType',
+            'targetRole',
+            'createdBy',
+            'createdByName',
+            'createdByRole',
+            'priority',
+            'isUrgent',
+            'status',
+            'createdAt',
+            'updatedAt'
+          ]) &&
+          data.title is string &&
+          data.title.size() >= 1 &&
+          data.title.size() <= 150 &&
+          data.message is string &&
+          data.message.size() >= 1 &&
+          data.message.size() <= 5000 &&
+          data.courseId is string &&
+          data.courseCode is string &&
+          data.courseTitle is string &&
+          data.targetType in ['all_classes', 'course'] &&
+          (
+            (
+              data.targetType == 'all_classes' &&
+              data.courseId == '' &&
+              isAdmin()
+            )
+            ||
+            (
+              data.targetType == 'course' &&
+              data.courseId != ''
+            )
+          ) &&
+          data.targetRole == 'student' &&
+          data.createdBy == request.auth.uid &&
+          data.createdByName is string &&
+          data.createdByName.size() >= 1 &&
+          data.createdByName.size() <= 120 &&
+          data.createdByRole == currentUser().role &&
+          data.createdByRole in ['admin', 'instructor'] &&
+          data.priority in ['normal', 'urgent'] &&
+          data.isUrgent == (data.priority == 'urgent') &&
+          data.status == 'published' &&
+          data.createdAt == request.time &&
+          data.updatedAt == request.time;
+      }
+
+      function validInstructorUpdate() {
+        return
+          request.resource.data.diff(resource.data)
+            .affectedKeys().hasOnly([
+              'title',
+              'message',
+              'priority',
+              'isUrgent',
+              'status',
+              'updatedAt'
+            ]) &&
+          request.resource.data.title is string &&
+          request.resource.data.title.size() >= 1 &&
+          request.resource.data.title.size() <= 150 &&
+          request.resource.data.message is string &&
+          request.resource.data.message.size() >= 1 &&
+          request.resource.data.message.size() <= 5000 &&
+          request.resource.data.priority in ['normal', 'urgent'] &&
+          request.resource.data.isUrgent ==
+            (request.resource.data.priority == 'urgent') &&
+          request.resource.data.status in ['published', 'deleted'] &&
+          request.resource.data.updatedAt == request.time;
+      }
+
       function ownsAudience(data) {
         return
           data.createdBy ==
             request.auth.uid &&
+          data.targetType == 'course' &&
+          ownsCourse(data.courseId);
+      }
+
+      function studentCanReceive(data) {
+        let enrollmentPath =
+          /databases/$(database)/documents/enrollments/$(data.courseId + "_" + request.auth.uid);
+
+        return
+          isStudent() &&
+          data.status == 'published' &&
+          data.targetRole in ['student', 'all'] &&
           (
             (
-              data.targetType == 'course' &&
-              ownsCourse(data.courseId)
+              data.targetType == 'all_classes' &&
+              data.courseId == '' &&
+              data.createdByRole == 'admin'
             )
             ||
             (
-              data.targetType ==
-                'all_classes' &&
-              data.courseId == ''
+              data.targetType == 'course' &&
+              exists(enrollmentPath) &&
+              get(enrollmentPath).data.studentId == request.auth.uid &&
+              get(enrollmentPath).data.courseId == data.courseId &&
+              get(enrollmentPath).data.status == 'active'
             )
           );
       }
 
-      allow read: if isActive();
+      allow read: if
+        isAdmin()
+        ||
+        (
+          isInstructor() &&
+          resource.data.createdBy == request.auth.uid
+        )
+        ||
+        studentCanReceive(resource.data);
 
-      allow create: if isAdmin() || (
-        isInstructor() &&
-        ownsAudience(
-          request.resource.data
-        ) &&
-        request.resource.data.status ==
-          'published'
-      );
+      allow create: if
+        validAnnouncementCreate(request.resource.data) &&
+        (
+          isAdmin()
+          ||
+          (
+            isInstructor() &&
+            ownsAudience(request.resource.data)
+          )
+        );
 
       allow update: if isAdmin() || (
         isInstructor() &&
@@ -1499,13 +1792,88 @@ service cloud.firestore {
         request.resource.data.courseId ==
           resource.data.courseId &&
         request.resource.data.targetType ==
-          resource.data.targetType
+          resource.data.targetType &&
+        validInstructorUpdate()
       );
 
       allow delete: if isAdmin() || (
         isInstructor() &&
         ownsAudience(resource.data)
       );
+    }
+
+    match /announcementStates/{stateId} {
+      function sourceAnnouncement(data) {
+        return get(
+          /databases/$(database)/documents/announcements/$(data.announcementId)
+        ).data;
+      }
+
+      function validStudentState(data) {
+        let source = sourceAnnouncement(data);
+        let enrollmentPath =
+          /databases/$(database)/documents/enrollments/$(source.courseId + "_" + request.auth.uid);
+
+        return
+          data.keys().hasOnly([
+            'announcementId',
+            'userId',
+            'readAt',
+            'dismissedAt',
+            'updatedAt'
+          ]) &&
+          data.announcementId is string &&
+          data.announcementId != '' &&
+          data.userId == request.auth.uid &&
+          stateId == data.announcementId + "_" + request.auth.uid &&
+          data.readAt == request.time &&
+          data.updatedAt == request.time &&
+          (
+            !data.keys().hasAny(['dismissedAt']) ||
+            data.dismissedAt == request.time
+          ) &&
+          source.status == 'published' &&
+          source.targetRole in ['student', 'all'] &&
+          (
+            (
+              source.targetType == 'all_classes' &&
+              source.courseId == '' &&
+              source.createdByRole == 'admin'
+            )
+            ||
+            (
+              source.targetType == 'course' &&
+              exists(enrollmentPath) &&
+              get(enrollmentPath).data.studentId == request.auth.uid &&
+              get(enrollmentPath).data.courseId == source.courseId &&
+              get(enrollmentPath).data.status == 'active'
+            )
+          );
+      }
+
+      allow read: if
+        isAdmin()
+        ||
+        (
+          isStudent() &&
+          resource.data.userId == request.auth.uid
+        )
+        ||
+        (
+          isInstructor() &&
+          sourceAnnouncement(resource.data).createdBy == request.auth.uid
+        );
+
+      allow create: if isStudent() && validStudentState(request.resource.data);
+
+      allow update: if
+        isStudent() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.announcementId == resource.data.announcementId &&
+        request.resource.data.userId == resource.data.userId &&
+        validStudentState(request.resource.data);
+
+      allow delete: if false;
     }
 
     // ============================================================
@@ -1559,9 +1927,6 @@ service cloud.firestore {
                   )
           ) &&
           activeEnrollee(data) &&
-          (source.get('sectionId', '') == '' ||
-            get(/databases/$(database)/documents/enrollments/$(data.authorizationCourseId + '_' + data.userId)).data.get('sectionId',
-              get(/databases/$(database)/documents/courses/$(data.authorizationCourseId)).data.get('classCode', '')) == source.sectionId) &&
           (
             // AI quiz notification section isolation.
             // Ordinary course notifications retain their existing access.
@@ -1654,12 +2019,7 @@ service cloud.firestore {
 
       function validSource(data) {
         return
-          data.sourceType == 'course'
-            ? (data.type == 'course' && data.sourceId == data.courseId &&
-                data.courseId == data.authorizationCourseId && data.moduleId == '' &&
-                get(/databases/$(database)/documents/courses/$(data.sourceId)).data.status == 'active' &&
-                activeEnrollee(data))
-          : data.sourceType == 'module'
+          data.sourceType == 'module'
             ? publishedSource(
                 data,
                 'modules',
@@ -2036,59 +2396,8 @@ service cloud.firestore {
           request.auth.uid
       );
 
-      function validConversationNotice(data) {
-        let conversation = getAfter(/databases/$(database)/documents/conversations/$(data.sourceId)).data;
-        let messagePath = /databases/$(database)/documents/conversations/$(data.sourceId)/messages/$(data.messageId);
-        let message = getAfter(messagePath).data;
-        return isActive() && data.get('sourceType', '') == 'conversation' &&
-          data.keys().hasOnly(['userId','type','sourceType','sourceId','messageId','actorId','title','message','courseId','isRead','readAt','createdAt']) &&
-          data.type == 'message' && data.actorId == request.auth.uid &&
-          notificationId == 'message_' + data.messageId + '_' + data.userId &&
-          !exists(messagePath) && message.senderId == request.auth.uid &&
-          message.receiverId == data.userId && message.sentAt == request.time &&
-          ((conversation.studentId == request.auth.uid && conversation.instructorId == data.userId) ||
-            (conversation.instructorId == request.auth.uid && conversation.studentId == data.userId)) &&
-          data.courseId == conversation.courseId && data.title == 'New message' &&
-          data.message == 'Open your conversation to read the message.' &&
-          data.isRead == false && data.readAt == null && data.createdAt == request.time;
-      }
-
-      function validEnrollmentNotice(data) {
-        let enrollment = getAfter(/databases/$(database)/documents/enrollments/$(data.sourceId)).data;
-        return isActive() && data.get('sourceType', '') == 'enrollment' &&
-          data.keys().hasOnly(['userId','type','sourceType','sourceId','actorId','title','message','courseId','isRead','readAt','createdAt']) &&
-          data.type == 'course_enrollment' && data.actorId == request.auth.uid &&
-          data.sourceId == data.courseId + '_' + data.userId &&
-          notificationId == 'enrollment_' + data.sourceId &&
-          enrollment.studentId == data.userId && enrollment.courseId == data.courseId && enrollment.status == 'active' &&
-          (request.auth.uid == data.userId || ownsCourse(data.courseId)) &&
-          data.title == 'Course enrollment confirmed' && data.message == 'Open your enrolled course.' &&
-          data.isRead == false && data.readAt == null && data.createdAt == request.time;
-      }
-
-      function validReceivedNotice(data, collection) {
-        let source = getAfter(/databases/$(database)/documents/$(collection)/$(data.sourceId)).data;
-        let course = get(/databases/$(database)/documents/courses/$(data.courseId)).data;
-        let assignment = get(/databases/$(database)/documents/assignments/$(source.assignmentId)).data;
-        let enrollment = get(/databases/$(database)/documents/enrollments/$(data.courseId + '_' + request.auth.uid)).data;
-        return isStudent() &&
-          data.keys().hasOnly(['userId','type','sourceType','sourceId','actorId','title','message','courseId','isRead','readAt','createdAt']) &&
-          notificationId == data.sourceType + '_' + data.sourceId + '_' + data.userId &&
-          data.actorId == request.auth.uid && source.studentId == request.auth.uid &&
-          source.courseId == data.courseId && course.instructorId == data.userId &&
-          assignment.courseId == data.courseId && enrollment.studentId == request.auth.uid &&
-          enrollment.courseId == data.courseId && enrollment.status == 'active' &&
-          source.status == 'submitted' && source.submittedAt == request.time &&
-          data.type == 'submission' && data.title == 'New assessment submission' &&
-          data.message == 'A student submitted work. Open this notification to review it.' &&
-          data.isRead == false && data.readAt == null && data.createdAt == request.time;
-      }
-
       allow create: if
         isAdmin()
-        || (request.resource.data.get('sourceType', '') == 'conversation' && validConversationNotice(request.resource.data))
-        || (request.resource.data.get('sourceType', '') == 'enrollment' && validEnrollmentNotice(request.resource.data))
-        || (request.resource.data.get('sourceType', '') == 'submissionReceived' && validReceivedNotice(request.resource.data, 'submissions'))
         ||
         (
           request.resource.data.sourceType ==
@@ -2409,44 +2718,6 @@ service cloud.firestore {
           resource.data.senderId ==
             request.auth.uid
         );
-    }
-
-    // ============================================================
-    // ADMIN ACTIVITY HISTORY
-    // Append-only, source-bound app events. No passwords or tokens are stored.
-    match /activityLogs/{logId} {
-      function validActor(data) {
-        return isActive() && data.actorId == request.auth.uid &&
-          data.actorRole == currentUser().role &&
-          data.actorName == currentUser().get('name', '') &&
-          data.createdAt == request.time;
-      }
-      function validSession(data) {
-        return data.keys().hasOnly(['type','actorId','actorName','actorRole','sessionAuthTime','createdAt']) &&
-          data.type in ['login','logout'] &&
-          data.sessionAuthTime is int && data.sessionAuthTime == request.auth.token.auth_time &&
-          logId == data.type + '_' + string(data.sessionAuthTime) + '_' + request.auth.uid;
-      }
-      function validSource(data) {
-        let collection = data.type == 'course_created' ? 'courses' : 'moduleResources';
-        let source = get(/databases/$(database)/documents/$(collection)/$(data.targetId)).data;
-        return (isInstructor() || isAdmin()) && data.keys().hasOnly(['type','actorId','actorName','actorRole','targetId','courseId','title','occurredAt','createdAt']) &&
-          data.type in ['course_created','material_uploaded'] &&
-          data.targetId is string && data.targetId.size() > 0 &&
-          logId == data.type + '_' + data.targetId &&
-          data.title == source.title && data.occurredAt == source.createdAt &&
-          (
-            (data.type == 'course_created' && data.courseId == data.targetId &&
-              (source.instructorId == request.auth.uid || isAdmin())) ||
-            (data.type == 'material_uploaded' && data.courseId == source.courseId &&
-              source.deliveryType == 'uploaded_file' && source.createdBy == request.auth.uid &&
-              (ownsCourse(source.courseId) || isAdmin()))
-          );
-      }
-      allow get, list: if isAdmin();
-      allow create: if validActor(request.resource.data) &&
-        (validSession(request.resource.data) || validSource(request.resource.data));
-      allow update, delete: if false;
     }
 
     // ============================================================

@@ -22,8 +22,6 @@ class _InstructorCreateCourseScreenState
 
   static const Color textDark = Color(0xFF10182F);
 
-  static const Color textGrey = Color(0xFF68738A);
-
   static const Color borderColor = Color(0xFFE6EAF0);
 
   final InstructorCourseService _courseService = InstructorCourseService();
@@ -345,10 +343,6 @@ class _InstructorCreateCourseScreenState
                         ),
                       ),
                     ],
-
-                    const SizedBox(height: 22),
-
-                    _buildClassCodeInfo(),
                   ],
                 ),
               ),
@@ -458,38 +452,6 @@ class _InstructorCreateCourseScreenState
                   ),
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildClassCodeInfo() {
-    return Container(
-      width: double.infinity,
-
-      padding: const EdgeInsets.all(16),
-
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF7F5),
-
-        borderRadius: BorderRadius.circular(15),
-      ),
-
-      child: const Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-
-        children: [
-          Icon(Icons.vpn_key_rounded, color: primaryTeal),
-
-          SizedBox(width: 11),
-
-          Expanded(
-            child: Text(
-              'After creating a course, open a section and invite students using their registered Campus ID. Only invited students can join.',
-
-              style: TextStyle(color: textGrey, fontSize: 11, height: 1.5),
             ),
           ),
         ],

@@ -4,7 +4,8 @@ class StudentAssignmentsScreen extends StatefulWidget {
   const StudentAssignmentsScreen({super.key});
 
   @override
-  State<StudentAssignmentsScreen> createState() => _StudentAssignmentsScreenState();
+  State<StudentAssignmentsScreen> createState() =>
+      _StudentAssignmentsScreenState();
 }
 
 class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
@@ -15,10 +16,9 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
   static const Color background = Color(0xFFF7F9FC);
   static const Color textDark = Color(0xFF10182F);
   static const Color textGrey = Color(0xFF68738A);
-  
+
   static const Color orange = Color(0xFFFF9418);
   static const Color green = Color(0xFF26A65B);
-  static const Color red = Color(0xFFFF4B4B);
 
   int _selectedTab = 0; // 0: To Do, 1: Submitted, 2: Completed
 
@@ -62,9 +62,14 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
                 // SEGMENTED TABS
                 // ----------------------------------------------------
                 Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                   padding: const EdgeInsets.all(4),
-                  constraints: const BoxConstraints(maxWidth: 500), // Keeps tabs neat and compact on wide screens
+                  constraints: const BoxConstraints(
+                    maxWidth: 500,
+                  ), // Keeps tabs neat and compact on wide screens
                   decoration: BoxDecoration(
                     color: const Color(0xFFEEEFF3),
                     borderRadius: BorderRadius.circular(16),
@@ -85,7 +90,10 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
                 Expanded(
                   child: ListView(
                     physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 8,
+                    ),
                     children: _buildTaskListContent(),
                   ),
                 ),
@@ -117,7 +125,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
                     color: Colors.black.withValues(alpha: 0.04),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
-                  )
+                  ),
                 ]
               : [],
         ),

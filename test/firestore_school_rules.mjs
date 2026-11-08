@@ -68,27 +68,92 @@ const joined = await fetch(`${base}:commit`, { method: 'POST', headers: {
   courseId: 'course', studentId: 'verified', studentName: 'Verified Student', studentCampusId: '10003',
   sectionId: 'NEW-A', status: 'active', enrollmentSource: 'section_code',
 }) }, updateTransforms: [{ fieldPath: 'enrolledAt', setToServerValue: 'REQUEST_TIME' }] }] }) });
-assert.equal(joined.status, 403, `Section code enrollment is disabled: ${await joined.text()}`);
+assert.equal(joined.status, 403, `Students cannot join by a known section code: ${await joined.text()}`);
 checks++;
+await seed('enrollments/course_verified', {
+  courseId: 'course', studentId: 'verified', studentName: 'Verified Student', studentCampusId: '10003',
+  sectionId: 'NEW-A', status: 'active', enrollmentSource: 'instructor_invitation',
+  invitationId: 'course_verified', invitedBy: 'teacher', enrolledAt: 'seeded', acceptedAt: 'seeded',
+});
 const enrollment = { courseId: 'course', studentId: 'verified', studentName: 'Verified Student', studentCampusId: '10003',
-  sectionId: 'ORIGINAL', status: 'active', enrollmentSource: 'section_code' };
-await seed('enrollments/course_verified', {...enrollment, sectionId: 'NEW-A'});
+  sectionId: 'ORIGINAL', status: 'active', enrollmentSource: 'instructor_invitation',
+  invitationId: 'course_verified', invitedBy: 'teacher', enrolledAt: 'seeded', acceptedAt: 'seeded' };
 await status('enrollments/course_verified', 'PATCH', enrollment, token('teacher'), 200, 'Owner can transfer enrolled student');
 await status('enrollments/course_verified', 'PATCH', { ...enrollment, sectionId: 'NEW-A' }, token('other'), 403, 'Another instructor cannot transfer student');
+const personalNote = await fetch(`${base}:commit`, { method: 'POST', headers: {
+  Authorization: `Bearer ${token('verified', true)}`, 'Content-Type': 'application/json',
+}, body: JSON.stringify({ writes: [{ update: {
+  name: `${database}/documents/users/verified/personalNotes/private-note`,
+  fields: fields({ ownerId: 'verified', title: 'My study reminder', content: 'Review the next module.' }),
+}, updateTransforms: [
+  { fieldPath: 'createdAt', setToServerValue: 'REQUEST_TIME' },
+  { fieldPath: 'updatedAt', setToServerValue: 'REQUEST_TIME' },
+] }] }) });
+assert.equal(personalNote.status, 200, `Student can create a private personal note: ${await personalNote.text()}`);
+checks++;
+await status('users/verified/personalNotes/private-note', 'GET', undefined, token('verified', true), 200,
+  'Student can read their own personal note');
+await status('users/verified/personalNotes/private-note', 'GET', undefined, token('legacy'), 403,
+  'Another student cannot read a personal note');
+await status('users/verified/personalNotes/private-note', 'GET', undefined, token('teacher'), 403,
+  'Instructor cannot read a student personal note');
+await status('users/verified/personalNotes/forged', 'PATCH', {
+  ownerId: 'verified', title: 'Forged', content: 'Not allowed', createdAt: 'forged', updatedAt: 'forged',
+}, token('legacy'), 403, 'Another student cannot create a note in the owner subcollection');
 await seed('courseInvitations/course_legacy', { courseId: 'course', studentId: 'legacy', studentCampusId: '10001',
-  instructorId: 'teacher', status: 'pending', courseCode: 'IT', courseTitle: 'Course', instructorName: 'Teacher', studentName: 'Legacy Student', studentEmail: 'legacy@example.com', createdAt: 'legacy-created', respondedAt: null });
+  instructorId: 'teacher', status: 'accepted' });
 const invitedFields = { courseId: 'course', studentId: 'legacy', studentName: 'Legacy Student', studentCampusId: '10001',
   sectionId: 'ORIGINAL', status: 'active', enrollmentSource: 'instructor_invitation', invitationId: 'course_legacy', invitedBy: 'teacher' };
 const inviteResult = await fetch(`${base}:commit`, { method: 'POST', headers: {
   Authorization: `Bearer ${token('legacy')}`, 'Content-Type': 'application/json',
 }, body: JSON.stringify({ writes: [{ update: { name: `${database}/documents/enrollments/course_legacy`, fields: fields(invitedFields) },
-  updateTransforms: [{ fieldPath: 'enrolledAt', setToServerValue: 'REQUEST_TIME' }, { fieldPath: 'acceptedAt', setToServerValue: 'REQUEST_TIME' }] }, {update: { name: `${database}/documents/courseInvitations/course_legacy`, fields: fields({status: 'accepted'}) }, updateMask: {fieldPaths: ['status']}, updateTransforms: [{fieldPath: 'updatedAt', setToServerValue: 'REQUEST_TIME'}, {fieldPath: 'respondedAt', setToServerValue: 'REQUEST_TIME'}]}] }) });
-assert.equal(inviteResult.status, 200, `Invitation retains explicit original-section membership: ${await inviteResult.text()}`);
+  updateTransforms: [{ fieldPath: 'enrolledAt', setToServerValue: 'REQUEST_TIME' }, { fieldPath: 'acceptedAt', setToServerValue: 'REQUEST_TIME' }] }] }) });
+assert.equal(inviteResult.status, 403, `A pre-marked invitation cannot bypass atomic acceptance: ${await inviteResult.text()}`);
 checks++;
 await seed('liveClasses/server-session', { courseId: 'course', sectionId: 'ORIGINAL', instructorId: 'teacher', status: 'live' });
 await status('liveClasses/server-session', 'GET', undefined, token('verified', true), 403, 'Room state is only returned through the authorized backend');
 await status('liveClasses/server-session', 'PATCH', { status: 'live', studentIds: 'forged' }, token('teacher'), 403, 'Even instructors cannot forge room capacity directly');
 await status('liveClasses/forged-session', 'PATCH', { courseId: 'course', status: 'live' }, token('legacy'), 403, 'Students cannot create or alter live sessions');
+const meetingMessage = await fetch(`${base}:commit`, { method: 'POST', headers: {
+  Authorization: `Bearer ${token('verified', true)}`, 'Content-Type': 'application/json',
+}, body: JSON.stringify({ writes: [{ update: {
+  name: `${database}/documents/meetingMessages/verified_1234567890123456`,
+  fields: fields({ courseId: 'course', sectionId: 'ORIGINAL', sessionId: '12345678-1234-1234-1234-123456789012',
+    senderId: 'verified', senderName: 'Verified Student', senderRole: 'student',
+    text: 'Hello class', clientNonce: '1234567890123456' }),
+}, updateTransforms: [{ fieldPath: 'createdAt', setToServerValue: 'REQUEST_TIME' }] }] }) });
+assert.equal(meetingMessage.status, 200, `Enrolled participant can send meeting chat: ${await meetingMessage.text()}`);
+checks++;
+await status('meetingMessages/verified_1234567890123456', 'GET', undefined, token('legacy'), 403,
+  'A student outside the meeting section cannot read meeting chat');
+await status('meetingMessages/forged', 'PATCH', {
+  courseId: 'course', sectionId: 'ORIGINAL', sessionId: '12345678-1234-1234-1234-123456789012',
+  senderId: 'other', senderName: 'Other Teacher', senderRole: 'instructor',
+  text: 'Forged', clientNonce: '1234567890123457', createdAt: 'forged',
+}, token('other'), 403, 'Another instructor cannot write to the meeting chat');
+await seed('announcements/course-note', {
+  title: 'Course note', message: 'Read the module', courseId: 'course', courseCode: 'CAS101',
+  courseTitle: 'CAS Course', targetType: 'course', targetRole: 'student',
+  createdBy: 'teacher', createdByName: 'Teacher', createdByRole: 'instructor',
+  priority: 'normal', isUrgent: false, status: 'published', createdAt: 'seeded', updatedAt: 'seeded',
+});
+await status('announcements/course-note', 'GET', undefined, token('verified', true), 200,
+  'Enrolled student can read a targeted course note');
+await status('announcements/course-note', 'GET', undefined, token('legacy'), 403,
+  'Unenrolled student cannot read another course note');
+const noteState = await fetch(`${base}:commit`, { method: 'POST', headers: {
+  Authorization: `Bearer ${token('verified', true)}`, 'Content-Type': 'application/json',
+}, body: JSON.stringify({ writes: [{ update: {
+  name: `${database}/documents/announcementStates/course-note_verified`,
+  fields: fields({ announcementId: 'course-note', userId: 'verified' }),
+}, updateTransforms: [
+  { fieldPath: 'readAt', setToServerValue: 'REQUEST_TIME' },
+  { fieldPath: 'updatedAt', setToServerValue: 'REQUEST_TIME' },
+] }] }) });
+assert.equal(noteState.status, 200, `Student can save own note read state: ${await noteState.text()}`);
+checks++;
+await status('announcementStates/course-note_verified', 'GET', undefined, token('legacy'), 403,
+  'Students cannot read another student note state');
 await seed('semesterGrades/own-final', { courseId: 'course', studentId: 'verified', posted: true, revision: 1, encrypted: 'test-ciphertext' });
 await seed('semesterGrades/own-final/revisions/1', { studentId: 'verified', encrypted: 'test-ciphertext' });
 await status('semesterGrades/own-final', 'GET', undefined, token('verified', true), 403, 'Owner cannot fetch posted grade without backend password reveal');

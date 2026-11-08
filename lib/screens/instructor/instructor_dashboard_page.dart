@@ -1,9 +1,3 @@
-import '../shared/dashboard_hover.dart';
-
-import 'dart:async';
-
-import '../shared/notification_inbox.dart';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -52,10 +46,6 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   // STATE
   // ============================================================
 
-  StreamSubscription<List<Map<String, dynamic>>>? _coursesSubscription;
-  int _loadGeneration = 0;
-  final Map<String, StreamSubscription> _submissionChanges = {};
-  final Map<String, int> _pendingAssessmentCounts = {};
   bool _isLoading = true;
   String? _errorMessage;
   Map<String, dynamic>? _instructor;
@@ -70,46 +60,15 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _coursesSubscription = _courseService.watchInstructorCourses().listen(
-      (courses) {
-        if (!mounted) return;
-        _watchAssessmentCounts(courses);
-        setState(() {
-          _courses = courses;
-          _errorMessage = null;
-        });
-        if (_instructor == null) {
-          _loadDashboard(showLoading: true);
-        }
-      },
-      onError: (Object error) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _errorMessage = 'Unable to sync courses. Please retry.';
-          });
-        }
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _loadGeneration++;
-    _coursesSubscription?.cancel();
-    for (final subscription in _submissionChanges.values) {
-      subscription.cancel();
-    }
-    super.dispose();
+    _loadDashboard();
   }
 
   // ============================================================
   // LOAD DASHBOARD
   // ============================================================
 
-  Future<void> _loadDashboard({bool showLoading = true}) async {
-    final generation = ++_loadGeneration;
-    if (mounted && showLoading) {
+  Future<void> _loadDashboard() async {
+    if (mounted) {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
@@ -119,25 +78,29 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     try {
       final List<dynamic> results = await Future.wait<dynamic>([
         _courseService.getCurrentInstructorProfile(),
+        _courseService.getInstructorCourses(),
         _assignmentService.getInstructorPendingSubmissions(),
       ]);
 
       final Map<String, dynamic> instructor =
           results[0] as Map<String, dynamic>;
-      final List<Map<String, dynamic>> pendingSubmissions =
+      final List<Map<String, dynamic>> courses =
           results[1] as List<Map<String, dynamic>>;
+      final List<Map<String, dynamic>> pendingSubmissions =
+          results[2] as List<Map<String, dynamic>>;
 
-      if (!mounted || generation != _loadGeneration) {
+      if (!mounted) {
         return;
       }
 
       setState(() {
         _instructor = instructor;
+        _courses = courses;
         _pendingSubmissions = pendingSubmissions;
         _isLoading = false;
       });
     } on InstructorCourseServiceException catch (e) {
-      if (!mounted || generation != _loadGeneration) {
+      if (!mounted) {
         return;
       }
 
@@ -146,7 +109,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         _errorMessage = e.message;
       });
     } on AssignmentServiceException catch (e) {
-      if (!mounted || generation != _loadGeneration) {
+      if (!mounted) {
         return;
       }
 
@@ -155,7 +118,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         _errorMessage = e.message;
       });
     } catch (_) {
-      if (!mounted || generation != _loadGeneration) {
+      if (!mounted) {
         return;
       }
 
@@ -163,42 +126,6 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         _isLoading = false;
         _errorMessage = 'Unable to load instructor dashboard.';
       });
-    }
-  }
-
-  void _watchAssessmentCounts(List<Map<String, dynamic>> courses) {
-    final ids = courses.map((course) => course['courseId'].toString()).toSet();
-    for (final id in _submissionChanges.keys.toList()) {
-      if (!ids.contains(id)) {
-        _submissionChanges.remove(id)?.cancel();
-        _pendingAssessmentCounts.remove(id);
-      }
-    }
-    for (final id in ids) {
-      if (_submissionChanges.containsKey(id)) continue;
-      _submissionChanges[id] = FirebaseFirestore.instance
-          .collection('assessmentSubmissions')
-          .where('courseId', isEqualTo: id)
-          .snapshots()
-          .listen(
-            (snapshot) {
-              if (!mounted || !_courses.any((c) => c['courseId'] == id)) return;
-              setState(
-                () => _pendingAssessmentCounts[id] = snapshot.docs
-                    .where(
-                      (doc) => [
-                        'submitted',
-                        'under_review',
-                        'late',
-                      ].contains(doc.data()['status']),
-                    )
-                    .length,
-              );
-            },
-            onError: (Object error) {
-              /* Course navigation remains usable if this summary is unavailable. */
-            },
-          );
     }
   }
 
@@ -233,12 +160,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     return count;
   }
 
-  int get _pendingGradingCount =>
-      _pendingSubmissions.length +
-      _pendingAssessmentCounts.values.fold<int>(
-        0,
-        (int total, int value) => total + value,
-      );
+  int get _pendingGradingCount => _pendingSubmissions.length;
 
   // ============================================================
   // FILTERED COURSES
@@ -254,9 +176,6 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     return _courses.where((course) {
       final String title = (course['title'] ?? '').toString().toLowerCase();
       final String code = (course['code'] ?? '').toString().toLowerCase();
-      final String classCode = (course['classCode'] ?? '')
-          .toString()
-          .toLowerCase();
       final String semester = (course['semester'] ?? '')
           .toString()
           .toLowerCase();
@@ -266,7 +185,6 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
       return title.contains(query) ||
           code.contains(query) ||
-          classCode.contains(query) ||
           semester.contains(query) ||
           academicYear.contains(query);
     }).toList();
@@ -435,24 +353,62 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
             _buildWelcomeBanner(),
             const SizedBox(height: 24),
 
-            _buildActiveClassesHeader(),
-            const SizedBox(height: 12),
+            // ==================================================
+            // SEARCH (Moved up)
+            // ==================================================
             _buildSearchBar(),
-            const SizedBox(height: 14),
-            _buildActiveClasses(),
             const SizedBox(height: 24),
+
+            // ==================================================
+            // REAL STATISTICS (Grouped and compacted)
+            // ==================================================
             _buildStatistics(),
             const SizedBox(height: 24),
+
+            // ==================================================
+            // QUICK ACTIONS & TOOLS
+            // ==================================================
             const Text(
-              'Teaching tools',
+              'Quick Actions',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
                 color: textDark,
+                letterSpacing: -0.3,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             _buildQuickActions(),
+            const SizedBox(height: 24),
+
+            // ==================================================
+            // COURSE WORKFLOW
+            // ==================================================
+            _buildCourseBuilderBanner(),
+            const SizedBox(height: 28),
+
+            // ==================================================
+            // COURSES LIST
+            // ==================================================
+            _buildActiveClassesHeader(),
+            const SizedBox(height: 14),
+            _buildActiveClasses(),
+            const SizedBox(height: 24),
+
+            // ==================================================
+            // FOOTER / HELP
+            // ==================================================
+            Align(
+              alignment: Alignment.centerRight,
+              child: Tooltip(
+                message: 'Open step-by-step CASLMS instructions',
+                child: TextButton.icon(
+                  onPressed: _openHelpGuide,
+                  icon: const Icon(Icons.help_outline),
+                  label: const Text('Help & User Guide'),
+                ),
+              ),
+            ),
             const SizedBox(height: 30),
           ],
         ),
@@ -465,34 +421,183 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   // ============================================================
 
   Widget _buildWelcomeBanner() {
-    return DashboardHover(
-      accent: primaryTeal,
-      lift: 2,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(
-          color: primaryTeal,
-          borderRadius: BorderRadius.circular(20),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF00796B), Color(0xFF26A69A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Welcome back, $_instructorName',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 23,
-                fontWeight: FontWeight.w800,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: primaryTeal.withValues(alpha: 0.24),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            right: -34,
+            top: -52,
+            child: Container(
+              width: 145,
+              height: 145,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
               ),
             ),
-            const SizedBox(height: 8),
-            const Text(
-              'Open a course, choose a section, then manage students, learning materials and grades.',
-              style: TextStyle(color: Colors.white, height: 1.5),
+          ),
+          Positioned(
+            right: 62,
+            bottom: -74,
+            child: Container(
+              width: 112,
+              height: 112,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                shape: BoxShape.circle,
+              ),
             ),
-          ],
-        ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Welcome back, $_instructorName',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.7,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _pendingGradingCount == 0
+                              ? 'Your classes are organized and up to date.'
+                              : '$_pendingGradingCount ${_pendingGradingCount == 1 ? 'submission needs' : 'submissions need'} your review.',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.87),
+                            fontSize: 13,
+                            height: 1.4,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(17),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.18),
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.co_present_rounded,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _buildWelcomeChip(
+                    Icons.class_rounded,
+                    '$_activeCourseCount ${_activeCourseCount == 1 ? 'course' : 'courses'}',
+                  ),
+                  _buildWelcomeChip(
+                    Icons.groups_rounded,
+                    '$_activeStudentCount students',
+                  ),
+                  InkWell(
+                    onTap: () => widget.onNavigateToTab?.call(2),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 13,
+                        vertical: 9,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Review work',
+                            style: TextStyle(
+                              color: primaryTeal,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          SizedBox(width: 5),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            color: primaryTeal,
+                            size: 16,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWelcomeChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 15),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -500,53 +605,159 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   Widget _buildHeader() {
     return Row(
       children: [
-        const CircleAvatar(
-          radius: 20,
-          backgroundImage: AssetImage('assets/images/CASlogo.jpg'),
-        ),
-        const SizedBox(width: 10),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'CASLMS',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: primaryTeal,
-                ),
-              ),
-              Text(
-                'Instructor portal',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 11, color: textGrey),
-              ),
-            ],
+        Container(
+          width: 44,
+          height: 44,
+
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+
+            border: Border.all(color: const Color(0xFFE2E6ED), width: 1),
+
+            image: const DecorationImage(
+              image: AssetImage('assets/images/CASlogo.jpg'),
+
+              fit: BoxFit.cover,
+            ),
           ),
         ),
-        DashboardHover(
-          accent: primaryTeal,
-          lift: 1.5,
-          borderRadius: BorderRadius.circular(12),
-          child: const NotificationBell(),
+
+        const SizedBox(width: 12),
+
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+
+          children: [
+            const Text(
+              'CASLMS',
+
+              style: TextStyle(
+                fontSize: 22,
+
+                fontWeight: FontWeight.w800,
+
+                color: primaryTeal,
+
+                letterSpacing: -0.8,
+              ),
+            ),
+
+            Text(
+              'INSTRUCTOR PORTAL',
+
+              style: TextStyle(
+                fontSize: 9.5,
+
+                fontWeight: FontWeight.w800,
+
+                color: primaryTeal.withValues(alpha: 0.7),
+
+                letterSpacing: 0.8,
+              ),
+            ),
+          ],
         ),
-        DashboardHover(
-          accent: primaryTeal,
-          lift: 1.5,
-          borderRadius: BorderRadius.circular(12),
-          child: IconButton(
-            tooltip: 'Refresh dashboard',
-            onPressed: _loadDashboard,
-            icon: const Icon(Icons.refresh_rounded),
+
+        const Spacer(),
+
+        // --------------------------------------------------------
+        // REFRESH
+        // --------------------------------------------------------
+        _buildHeaderIcon(
+          icon: Icons.refresh_rounded,
+
+          tooltip: 'Refresh',
+
+          onTap: _loadDashboard,
+        ),
+
+        const SizedBox(width: 10),
+
+        // --------------------------------------------------------
+        // PROFILE
+        // --------------------------------------------------------
+        GestureDetector(
+          onTap: () {
+            widget.onNavigateToTab?.call(4);
+          },
+
+          child: Container(
+            width: 44,
+
+            height: 44,
+
+            decoration: BoxDecoration(
+              color: primaryTeal.withValues(alpha: 0.10),
+
+              shape: BoxShape.circle,
+
+              border: Border.all(color: Colors.white, width: 3),
+            ),
+
+            alignment: Alignment.center,
+
+            child: Text(
+              _instructorName.trim().isEmpty
+                  ? '?'
+                  : _instructorName.trim()[0].toUpperCase(),
+
+              style: const TextStyle(
+                color: primaryTeal,
+
+                fontSize: 17,
+
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
         ),
       ],
     );
   }
+
+  Widget _buildHeaderIcon({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+
+      child: GestureDetector(
+        onTap: onTap,
+
+        child: Container(
+          width: 44,
+
+          height: 44,
+
+          decoration: BoxDecoration(
+            color: Colors.white,
+
+            borderRadius: BorderRadius.circular(14),
+
+            border: Border.all(color: const Color(0xFFE7EAF0)),
+
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+
+                blurRadius: 12,
+
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+
+          child: Icon(icon, color: textDark, size: 23),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // SEARCH
+  // ============================================================
 
   Widget _buildSearchBar() {
     return TextField(
@@ -570,21 +781,16 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         prefixIcon: const Icon(Icons.search_rounded, color: textGrey, size: 24),
 
         suffixIcon: _searchQuery.isNotEmpty
-            ? DashboardHover(
-                accent: primaryTeal,
-                lift: 1.5,
-                borderRadius: BorderRadius.circular(12),
-                child: IconButton(
-                  onPressed: () {
-                    setState(() {
-                      _searchQuery = '';
-                    });
+            ? IconButton(
+                onPressed: () {
+                  setState(() {
+                    _searchQuery = '';
+                  });
 
-                    FocusScope.of(context).unfocus();
-                  },
+                  FocusScope.of(context).unfocus();
+                },
 
-                  icon: const Icon(Icons.close_rounded, color: textGrey),
-                ),
+                icon: const Icon(Icons.close_rounded, color: textGrey),
               )
             : null,
 
@@ -642,7 +848,7 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
         children: [
           Expanded(
             child: _buildInnerStat(
-              title: 'Enrollments',
+              title: 'Active Students',
               value: '$_activeStudentCount',
               icon: Icons.groups_rounded,
               color: blue,
@@ -677,41 +883,156 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     required IconData icon,
     required Color color,
   }) {
-    return DashboardHover(
-      accent: color,
-      lift: 2,
-      borderRadius: BorderRadius.circular(12),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            color: color,
           ),
-          const SizedBox(height: 2),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 11,
-              color: textGrey,
-              fontWeight: FontWeight.w600,
-            ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontSize: 11,
+            color: textGrey,
+            fontWeight: FontWeight.w600,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   // ============================================================
   // COURSE BUILDER BANNER
+  // ============================================================
+
+  Widget _buildCourseBuilderBanner() {
+    return GestureDetector(
+      onTap: () {
+        if (_courses.isEmpty) {
+          _openCreateCourse();
+
+          return;
+        }
+
+        widget.onNavigateToTab?.call(1);
+      },
+
+      child: Container(
+        width: double.infinity,
+
+        padding: const EdgeInsets.all(20),
+
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF00897B), Color(0xFF26A69A)],
+
+            begin: Alignment.topLeft,
+
+            end: Alignment.bottomRight,
+          ),
+
+          borderRadius: BorderRadius.circular(20),
+
+          boxShadow: [
+            BoxShadow(
+              color: primaryTeal.withValues(alpha: 0.25),
+
+              blurRadius: 18,
+
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.20),
+
+                shape: BoxShape.circle,
+              ),
+
+              child: const Icon(
+                Icons.menu_book_rounded,
+
+                color: Colors.white,
+
+                size: 28,
+              ),
+            ),
+
+            const SizedBox(width: 16),
+
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+
+                children: [
+                  Text(
+                    _courses.isEmpty
+                        ? 'Create Your First Course'
+                        : 'Build Modules & Assessments',
+
+                    style: const TextStyle(
+                      fontSize: 15.5,
+
+                      fontWeight: FontWeight.w800,
+
+                      color: Colors.white,
+
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  Text(
+                    _courses.isEmpty
+                        ? 'Create a course first, then add modules and quizzes.'
+                        : 'Open a class to manage modules, learning materials, and quizzes.',
+
+                    style: TextStyle(
+                      fontSize: 12,
+
+                      color: Colors.white.withValues(alpha: 0.85),
+
+                      height: 1.4,
+
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+
+              color: Colors.white,
+
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // QUICK ACTIONS
   // ============================================================
 
   Future<void> _openHelpGuide() async {
@@ -724,32 +1045,92 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   }
 
   Widget _buildQuickActions() {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: [
-        SizedBox(
-          width: 130,
-          child: _buildQuickActionItem(
-            icon: Icons.campaign_rounded,
-            label: 'Announcements',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const InstructorAnnouncementsScreen(),
-              ),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
+
+      decoration: BoxDecoration(
+        color: Colors.white,
+
+        borderRadius: BorderRadius.circular(20),
+
+        border: Border.all(color: borderColor),
+
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+
+            blurRadius: 15,
+
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildQuickActionItem(
+              icon: Icons.add_box_rounded,
+
+              label: 'Create Course',
+
+              onTap: _openCreateCourse,
             ),
           ),
-        ),
-        SizedBox(
-          width: 130,
-          child: _buildQuickActionItem(
-            icon: Icons.help_outline_rounded,
-            label: 'Help & guide',
-            onTap: _openHelpGuide,
+
+          _buildDivider(),
+
+          Expanded(
+            child: _buildQuickActionItem(
+              icon: Icons.campaign_rounded,
+
+              label: 'Announce',
+
+              onTap: () async {
+                await Navigator.push(
+                  context,
+
+                  MaterialPageRoute(
+                    builder: (context) => const InstructorAnnouncementsScreen(),
+                  ),
+                );
+
+                if (!mounted) {
+                  return;
+                }
+
+                await _loadDashboard();
+              },
+            ),
           ),
-        ),
-      ],
+
+          _buildDivider(),
+
+          Expanded(
+            child: _buildQuickActionItem(
+              icon: Icons.library_add_check_rounded,
+
+              label: 'Grade Tasks',
+
+              onTap: () {
+                widget.onNavigateToTab?.call(2);
+              },
+            ),
+          ),
+
+          _buildDivider(),
+
+          Expanded(
+            child: _buildQuickActionItem(
+              icon: Icons.auto_awesome_outlined,
+              label: 'AI Help',
+              onTap: () {
+                widget.onNavigateToTab?.call(6);
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -758,90 +1139,93 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     required String label,
     required VoidCallback onTap,
   }) {
-    return DashboardHover(
-      accent: primaryTeal,
-      lift: 2,
+    return InkWell(
+      onTap: onTap,
+
       borderRadius: BorderRadius.circular(15),
-      child: InkWell(
-        onTap: onTap,
 
-        borderRadius: BorderRadius.circular(15),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
 
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
 
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: primaryTeal, size: 26),
 
-            children: [
-              Icon(icon, color: primaryTeal, size: 26),
+            const SizedBox(height: 8),
 
-              const SizedBox(height: 8),
+            Text(
+              label,
 
-              Text(
-                label,
+              textAlign: TextAlign.center,
 
-                textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: textGrey,
 
-                style: const TextStyle(
-                  color: textGrey,
+                fontSize: 11.5,
 
-                  fontSize: 11.5,
-
-                  fontWeight: FontWeight.w600,
-                ),
+                fontWeight: FontWeight.w600,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 
+  Widget _buildDivider() {
+    return Container(width: 1, height: 40, color: const Color(0xFFE9EDF3));
+  }
+
+  // ============================================================
+  // ACTIVE CLASSES HEADER
+  // ============================================================
+
   Widget _buildActiveClassesHeader() {
-    return Wrap(
-      alignment: WrapAlignment.spaceBetween,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 12,
-      runSpacing: 10,
+    return Row(
       children: [
-        const Text(
-          'My Courses',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            color: textDark,
+        const Expanded(
+          child: Text(
+            'Recently Added Courses',
+
+            style: TextStyle(
+              fontSize: 18,
+
+              fontWeight: FontWeight.w800,
+
+              color: textDark,
+
+              letterSpacing: -0.3,
+            ),
           ),
         ),
-        Wrap(
-          spacing: 10,
-          children: [
-            if (_courses.isNotEmpty)
-              DashboardHover(
-                accent: primaryTeal,
-                lift: 1.5,
-                borderRadius: BorderRadius.circular(12),
-                child: TextButton(
-                  onPressed: () => widget.onNavigateToTab?.call(1),
-                  child: const Text('View all'),
-                ),
+
+        if (_courses.isNotEmpty)
+          GestureDetector(
+            onTap: () {
+              widget.onNavigateToTab?.call(1);
+            },
+
+            child: const Text(
+              'View all',
+
+              style: TextStyle(
+                fontSize: 13,
+
+                fontWeight: FontWeight.w700,
+
+                color: primaryTeal,
               ),
-            if (_courses.isNotEmpty)
-              DashboardHover(
-                accent: primaryTeal,
-                lift: 1.5,
-                borderRadius: BorderRadius.circular(12),
-                child: FilledButton.icon(
-                  onPressed: _openCreateCourse,
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Create course'),
-                ),
-              ),
-          ],
-        ),
+            ),
+          ),
       ],
     );
   }
+
+  // ============================================================
+  // ACTIVE CLASSES
+  // ============================================================
 
   Widget _buildActiveClasses() {
     if (_courses.isEmpty) {
@@ -953,38 +1337,30 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
           const SizedBox(height: 18),
 
-          DashboardHover(
-            accent: primaryTeal,
-            lift: 1.5,
-            borderRadius: BorderRadius.circular(12),
-            child: ElevatedButton.icon(
-              onPressed: _openCreateCourse,
+          ElevatedButton.icon(
+            onPressed: _openCreateCourse,
 
-              icon: const Icon(Icons.add_rounded, color: Colors.white),
+            icon: const Icon(Icons.add_rounded, color: Colors.white),
 
-              label: const Text(
-                'Create Course',
+            label: const Text(
+              'Create Course',
 
-                style: TextStyle(
-                  color: Colors.white,
+              style: TextStyle(
+                color: Colors.white,
 
-                  fontWeight: FontWeight.w700,
-                ),
+                fontWeight: FontWeight.w700,
               ),
+            ),
 
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryTeal,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryTeal,
 
-                elevation: 0,
+              elevation: 0,
 
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 13,
-                ),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
 
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(13),
-                ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(13),
               ),
             ),
           ),
@@ -1019,156 +1395,151 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
 
     final String period = periodParts.join(' \u2022 ');
 
-    return DashboardHover(
-      accent: color,
-      showBorder: false,
+    return InkWell(
+      onTap: () {
+        _openCourse(course);
+      },
+
       borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: () {
-          _openCourse(course);
-        },
 
-        borderRadius: BorderRadius.circular(20),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
 
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(18),
 
-          padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
 
-          decoration: BoxDecoration(
-            color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
 
-            borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: borderColor),
 
-            border: Border.all(color: borderColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
 
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 15,
 
-                blurRadius: 15,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
 
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
 
-          child: Row(
-            children: [
-              Container(
-                width: 56,
+              height: 56,
 
-                height: 56,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
 
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-
-                  borderRadius: BorderRadius.circular(16),
-                ),
-
-                child: Icon(Icons.menu_book_rounded, color: color, size: 28),
+                borderRadius: BorderRadius.circular(16),
               ),
 
-              const SizedBox(width: 15),
+              child: Icon(Icons.menu_book_rounded, color: color, size: 28),
+            ),
 
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: 15),
 
-                  children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+
+                children: [
+                  Text(
+                    title,
+
+                    maxLines: 1,
+
+                    overflow: TextOverflow.ellipsis,
+
+                    style: const TextStyle(
+                      fontSize: 15.5,
+
+                      fontWeight: FontWeight.w800,
+
+                      color: textDark,
+                    ),
+                  ),
+
+                  const SizedBox(height: 4),
+
+                  Row(
+                    children: [
+                      if (code.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+
+                            vertical: 3,
+                          ),
+
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.10),
+
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+
+                          child: Text(
+                            code,
+
+                            style: TextStyle(
+                              color: color,
+
+                              fontSize: 10.5,
+
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+
+                      if (code.isNotEmpty) const SizedBox(width: 8),
+
+                      Expanded(
+                        child: Text(
+                          '$studentCount ${studentCount == 1 ? 'Student' : 'Students'}',
+
+                          style: const TextStyle(
+                            color: textGrey,
+
+                            fontSize: 11.5,
+
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  if (period.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+
                     Text(
-                      title,
+                      period,
 
                       maxLines: 1,
 
                       overflow: TextOverflow.ellipsis,
 
-                      style: const TextStyle(
-                        fontSize: 15.5,
-
-                        fontWeight: FontWeight.w800,
-
-                        color: textDark,
-                      ),
+                      style: const TextStyle(color: textGrey, fontSize: 10.5),
                     ),
-
-                    const SizedBox(height: 4),
-
-                    Row(
-                      children: [
-                        if (code.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-
-                              vertical: 3,
-                            ),
-
-                            decoration: BoxDecoration(
-                              color: color.withValues(alpha: 0.10),
-
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-
-                            child: Text(
-                              code,
-
-                              style: TextStyle(
-                                color: color,
-
-                                fontSize: 10.5,
-
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-
-                        if (code.isNotEmpty) const SizedBox(width: 8),
-
-                        Expanded(
-                          child: Text(
-                            '$studentCount ${studentCount == 1 ? 'Student' : 'Students'}',
-
-                            style: const TextStyle(
-                              color: textGrey,
-
-                              fontSize: 11.5,
-
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    if (period.isNotEmpty) ...[
-                      const SizedBox(height: 5),
-
-                      Text(
-                        period,
-
-                        maxLines: 1,
-
-                        overflow: TextOverflow.ellipsis,
-
-                        style: const TextStyle(color: textGrey, fontSize: 10.5),
-                      ),
-                    ],
                   ],
-                ),
+                ],
               ),
+            ),
 
-              const SizedBox(width: 8),
+            const SizedBox(width: 8),
 
-              const Icon(
-                Icons.chevron_right_rounded,
+            const Icon(
+              Icons.chevron_right_rounded,
 
-                color: Color(0xFF9BA4B4),
+              color: Color(0xFF9BA4B4),
 
-                size: 22,
-              ),
-            ],
-          ),
+              size: 22,
+            ),
+          ],
         ),
       ),
     );
@@ -1219,29 +1590,24 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
           const SizedBox(height: 18),
 
           Center(
-            child: DashboardHover(
-              accent: primaryTeal,
-              lift: 1.5,
-              borderRadius: BorderRadius.circular(12),
-              child: ElevatedButton.icon(
-                onPressed: _loadDashboard,
+            child: ElevatedButton.icon(
+              onPressed: _loadDashboard,
 
-                icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+              icon: const Icon(Icons.refresh_rounded, color: Colors.white),
 
-                label: const Text(
-                  'Try Again',
+              label: const Text(
+                'Try Again',
 
-                  style: TextStyle(color: Colors.white),
-                ),
+                style: TextStyle(color: Colors.white),
+              ),
 
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryTeal,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryTeal,
 
-                  elevation: 0,
+                elevation: 0,
 
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(13),
-                  ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(13),
                 ),
               ),
             ),

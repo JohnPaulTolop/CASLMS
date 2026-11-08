@@ -51,6 +51,7 @@ class _InstructorCourseSectionsScreenState
         .collection('enrollments')
         .where('courseId', isEqualTo: widget.courseId)
         .snapshots()
+        .skip(1)
         .listen(
           (_) {
             _refreshTimer?.cancel();

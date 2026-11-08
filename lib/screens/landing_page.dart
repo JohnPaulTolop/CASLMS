@@ -20,9 +20,6 @@ class LandingScreen extends StatelessWidget {
               opacity: 0.12,
               child: Image.asset(
                 'assets/images/ssu.jpg',
-                // The campus photo is optional; keep the dark background until supplied.
-                errorBuilder: (context, error, stackTrace) =>
-                    const SizedBox.expand(),
                 fit: BoxFit.cover,
                 alignment: Alignment.centerRight,
               ),

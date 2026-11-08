@@ -106,11 +106,20 @@ Future<void> _activateFirebaseAppCheck() async {
 
   if (kIsWeb) {
     if (kDebugMode) {
-      await FirebaseAppCheck.instance.activate(providerWeb: WebDebugProvider());
+      const debugToken = String.fromEnvironment(
+        'FIREBASE_APPCHECK_DEBUG_TOKEN',
+      );
+
+      await FirebaseAppCheck.instance.activate(
+        providerWeb: WebDebugProvider(
+          debugToken: debugToken.isEmpty ? null : debugToken,
+        ),
+      );
 
       debugPrint(
         'Firebase App Check activated with the web debug provider. '
-        'Register the debug token from the browser console in Firebase '
+        'Register the configured debug token (or the token from the browser '
+        'console when no token is configured) in Firebase '
         'Console > App Check > Manage debug tokens.',
       );
 
@@ -235,15 +244,7 @@ class CASLMSApp extends StatelessWidget {
       // ========================================================
       // ROUTING
       // ========================================================
-      initialRoute: WidgetsBinding.instance.platformDispatcher.defaultRouteName,
-      onGenerateRoute: (settings) {
-        final uri = Uri.tryParse(settings.name ?? '');
-        if (uri?.path == '/notification') {
-          return MaterialPageRoute<void>(settings: settings,
-            builder: (_) => SessionGate(notificationId: uri!.queryParameters['id']));
-        }
-        return null;
-      },
+      initialRoute: '/',
       routes: {
         // SessionGate decides whether to display the landing,
         // student, instructor, or administrator interface.

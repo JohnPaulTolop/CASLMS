@@ -294,7 +294,15 @@ class _InstructorAssessmentGradingScreenState
 
         _module = moduleDocument.data();
 
-        _submissions = widget.focusSubmissionId.isEmpty ? submissions : submissions.where((s) => (s['submissionId'] ?? s['id']) == widget.focusSubmissionId).toList();
+        _submissions = widget.focusSubmissionId.isEmpty
+            ? submissions
+            : submissions
+                  .where(
+                    (submission) =>
+                        (submission['submissionId'] ?? submission['id']) ==
+                        widget.focusSubmissionId,
+                  )
+                  .toList();
 
         _isLoading = false;
       });

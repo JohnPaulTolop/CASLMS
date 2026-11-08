@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../../services/course_invitation_service.dart';
@@ -25,7 +23,6 @@ class _StudentCourseInvitationsScreenState
   final CourseInvitationService _service = CourseInvitationService();
   final Set<String> _busyInvitationIds = {};
 
-  StreamSubscription<List<Map<String, dynamic>>>? _subscription;
   bool _isLoading = true;
   bool _changed = false;
   String? _errorMessage;
@@ -34,31 +31,7 @@ class _StudentCourseInvitationsScreenState
   @override
   void initState() {
     super.initState();
-    _subscription = _service.watchMyPendingInvitations().listen(
-      (items) {
-        if (mounted) {
-          setState(() {
-            _invitations = items;
-            _isLoading = false;
-            _errorMessage = null;
-          });
-        }
-      },
-      onError: (Object error) {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _errorMessage = 'Unable to sync invitations. Please retry.';
-          });
-        }
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _subscription?.cancel();
-    super.dispose();
+    _loadInvitations();
   }
 
   Future<void> _loadInvitations() async {
@@ -409,7 +382,7 @@ class _StudentCourseInvitationsScreenState
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      'Invited by $instructorName\nSection: ${invitation['sectionName'] ?? 'Original Section'}',
+                      'Invited by $instructorName',
                       style: const TextStyle(color: textGrey, fontSize: 12),
                     ),
                   ],

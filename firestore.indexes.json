@@ -1,88 +1,68 @@
 {
   "indexes": [
     {
-      "collectionGroup": "activityLogs",
+      "collectionGroup": "meetingMessages",
       "queryScope": "COLLECTION",
       "fields": [
-        {
-          "fieldPath": "type",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "moduleResources",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "deliveryType",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "moduleResources",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "deliveryType",
-          "order": "ASCENDING"
-        },
         {
           "fieldPath": "courseId",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "moduleResources",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "deliveryType",
+          "fieldPath": "sectionId",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "createdBy",
+          "fieldPath": "sessionId",
           "order": "ASCENDING"
         },
         {
           "fieldPath": "createdAt",
-          "order": "DESCENDING"
+          "order": "ASCENDING"
         }
       ]
     },
     {
-      "collectionGroup": "moduleResources",
+      "collectionGroup": "announcements",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "deliveryType",
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "targetType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "targetRole",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdByRole",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "announcements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "targetType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "targetRole",
           "order": "ASCENDING"
         },
         {
           "fieldPath": "courseId",
           "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdBy",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "createdAt",
-          "order": "DESCENDING"
         }
       ]
     }

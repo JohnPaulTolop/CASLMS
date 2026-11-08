@@ -5,8 +5,15 @@ import '../../services/semester_grades_service.dart';
 import '../shared/grading_ui.dart';
 
 class PostedGradesScreen extends StatefulWidget {
-  const PostedGradesScreen({super.key, this.api, this.initialCourseId = '', this.initialTermId = ''});
-  final String initialCourseId, initialTermId;
+  const PostedGradesScreen({
+    super.key,
+    this.api,
+    this.initialCourseId = '',
+    this.initialTermId = '',
+  });
+
+  final String initialCourseId;
+  final String initialTermId;
   final GradebookApi? api;
   @override
   State<PostedGradesScreen> createState() => _PostedGradesScreenState();
@@ -214,7 +221,13 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
               message: 'No enrolled subjects for this semester.',
             )
           else
-            ..._subjects.where((subject) => widget.initialCourseId.isEmpty || subject.courseId == widget.initialCourseId).map(_subjectCard),
+            ..._subjects
+                .where(
+                  (subject) =>
+                      widget.initialCourseId.isEmpty ||
+                      subject.courseId == widget.initialCourseId,
+                )
+                .map(_subjectCard),
         ],
       ),
     ),

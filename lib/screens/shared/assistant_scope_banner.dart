@@ -23,11 +23,11 @@ class AssistantScopeBanner extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'CAS LMS & schoolwork only',
+                'LMS, academics & education technology',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
               ),
               Text(
-                'Lessons, assignments, research and LMS guidance.',
+                'Courses, grades, modules, assignments and platform help.',
                 style: TextStyle(fontSize: 12),
               ),
             ],
@@ -44,12 +44,14 @@ class AssistantScopeBanner extends StatelessWidget {
                 child: Text(
                   'Ask about classes, invitations, submissions, learning materials, '
                   'grade navigation, account settings and other CAS LMS tasks.\n\n'
-                  'Study Help covers lessons, worked examples, assignments, '
-                  'research, thesis writing and teaching preparation.\n\n'
+                  'Academic help must connect to a course, assignment, study task, '
+                  'or teaching responsibility. Education-technology questions are '
+                  'also supported.\n\n'
                   'Use the records view for permitted personal record lookups. '
                   'Study Help cannot look up private grades or account records.\n\n'
-                  'Unrelated entertainment, gossip, shopping and other general '
-                  'topics are outside this assistant’s scope.\n\n'
+                  'Unrelated coding projects, creative stories, medical or legal '
+                  'advice, shopping, entertainment, and general trivia are outside '
+                  "this assistant's scope.\n\n"
                   'Never share passwords, API keys or other private credentials.',
                 ),
               ),

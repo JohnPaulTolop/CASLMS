@@ -1,5 +1,3 @@
-import '../../services/admin_catalog.dart';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -44,36 +42,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   List<Map<String, dynamic>> _users = [];
 
-  AdminCatalog? _catalog;
-  bool _started = false;
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _catalog = context
-        .dependOnInheritedWidgetOfExactType<AdminScope>()
-        ?.notifier;
-    if (_catalog != null) {
-      _syncDirectory();
-    } else if (!_started) {
-      _started = true;
-      _loadUsers();
-    }
-  }
-
-  void _syncDirectory() {
-    final catalog = _catalog!;
-    _users =
-        catalog.users.values
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList()
-          ..sort(
-            (a, b) =>
-                _displayName(a)
-                    .toLowerCase()
-                    .compareTo(_displayName(b).toLowerCase()),
-          );
-    _isLoading = catalog.loading;
-    _errorMessage = catalog.error;
+  void initState() {
+    super.initState();
+    _loadUsers();
   }
 
   Future<void> _requireAdmin() async {
@@ -99,11 +71,6 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   Future<void> _loadUsers() async {
-    if (_catalog != null) {
-      if (_catalog!.error != null) await _catalog!.start();
-      if (mounted) setState(_syncDirectory);
-      return;
-    }
     if (mounted) {
       setState(() {
         _isLoading = true;

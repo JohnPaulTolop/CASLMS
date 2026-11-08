@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/instructor_teaching_ai_service.dart';
-import '../shared/learner_assistant_page.dart';
 import '../shared/assistant_scope_banner.dart';
+import '../shared/learner_assistant_page.dart';
 
 class InstructorTeachingAssistantScreen extends StatefulWidget {
   const InstructorTeachingAssistantScreen({super.key});
@@ -99,40 +99,17 @@ class _InstructorTeachingAssistantScreenState
 
     _scrollDown();
 
-    int? streamingIndex;
     try {
       final answer = await _service.ask(
         question: question,
         history: history,
         courseId: _courseId.isEmpty ? null : _courseId,
-        onDelta: (text) {
-          if (!mounted) return;
-          setState(() {
-            streamingIndex ??= _messages.length;
-            if (streamingIndex == _messages.length) {
-              _messages.add(TeachingAiTurn(text: text, isUser: false));
-            } else {
-              _messages[streamingIndex!] = TeachingAiTurn(
-                text: text,
-                isUser: false,
-              );
-            }
-          });
-          _scrollDown();
-        },
       );
 
       if (!mounted) return;
 
       setState(() {
-        if (streamingIndex == null) {
-          _messages.add(TeachingAiTurn(text: answer, isUser: false));
-        } else {
-          _messages[streamingIndex!] = TeachingAiTurn(
-            text: answer,
-            isUser: false,
-          );
-        }
+        _messages.add(TeachingAiTurn(text: answer, isUser: false));
       });
     } catch (error) {
       if (!mounted) return;
@@ -210,10 +187,8 @@ class _InstructorTeachingAssistantScreenState
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => const LearnerAssistantScreen(
-                  role: 'instructor',
-                  initialStudyHelp: false,
-                ),
+                builder: (_) =>
+                    const LearnerAssistantScreen(role: 'instructor'),
               ),
             ),
           ),
@@ -236,22 +211,17 @@ class _InstructorTeachingAssistantScreenState
             constraints: const BoxConstraints(maxWidth: 900),
             child: Column(
               children: [
+                _buildContextSelector(),
                 const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 10, 16, 4),
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: AssistantScopeBanner(color: teal),
                 ),
-                _buildContextSelector(),
                 if (_error != null) _buildErrorBanner(),
                 Expanded(
                   child: _messages.isEmpty
                       ? _buildEmptyState()
                       : _buildChatList(),
                 ),
-                if (!_sending &&
-                    _error == null &&
-                    _messages.isNotEmpty &&
-                    !_messages.last.isUser)
-                  _buildFollowUps(),
                 _buildInputArea(),
               ],
             ),
@@ -264,36 +234,6 @@ class _InstructorTeachingAssistantScreenState
   // ============================================================
   // UI COMPONENTS
   // ============================================================
-
-  Widget _buildFollowUps() {
-    final limited =
-        _messages.last.text.startsWith("I'm limited to CAS LMS") ||
-        _messages.last.text.startsWith(
-          'I can help with CAS LMS and schoolwork.',
-        );
-    final questions = limited
-        ? ['Help me plan a lesson', 'How do I publish an activity in CAS LMS?']
-        : [
-            'Show a classroom example',
-            'Adapt this for beginners',
-            'Suggest a practice activity',
-          ];
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: SizedBox(
-        height: 42,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          itemCount: questions.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 8),
-          itemBuilder: (_, i) => ActionChip(
-            label: Text(questions[i]),
-            onPressed: () => _send(questions[i]),
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildContextSelector() {
     return Container(
@@ -643,7 +583,7 @@ class _InstructorTeachingAssistantScreenState
                 ),
                 SizedBox(width: 12),
                 Text(
-                  'Preparing teaching guidance…',
+                  'Analyzing course data...',
                   style: TextStyle(
                     color: secondaryText,
                     fontSize: 13,

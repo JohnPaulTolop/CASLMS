@@ -1,8 +1,6 @@
-import '../../models/admin_records.dart';
-import 'admin_download.dart';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class AdminSystemReportsScreen extends StatefulWidget {
   const AdminSystemReportsScreen({super.key});
@@ -12,7 +10,8 @@ class AdminSystemReportsScreen extends StatefulWidget {
       _AdminSystemReportsScreenState();
 }
 
-class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
+class _AdminSystemReportsScreenState
+    extends State<AdminSystemReportsScreen> {
   static const Color reportRed = Color(0xFFFF4B4B);
   static const Color background = Color(0xFFF8F9FA);
   static const Color textDark = Color(0xFF10182F);
@@ -22,7 +21,8 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
   static const Color blue = Color(0xFF1769FF);
   static const Color orange = Color(0xFFFF9418);
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance;
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -61,25 +61,25 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
     }
 
     try {
-      final usersSnapshot = await _firestore.collection('users').get();
+      final usersSnapshot =
+          await _firestore.collection('users').get();
 
-      final coursesSnapshot = await _firestore.collection('courses').get();
+      final coursesSnapshot =
+          await _firestore.collection('courses').get();
 
-      final enrollmentSnapshot = await _firestore
-          .collection('enrollments')
-          .get();
+      final enrollmentSnapshot =
+          await _firestore.collection('enrollments').get();
 
-      final submissionSnapshot = await _firestore
-          .collection('assessmentSubmissions')
-          .get();
+      final submissionSnapshot =
+          await _firestore
+              .collection('assessmentSubmissions')
+              .get();
 
-      final progressSnapshot = await _firestore
-          .collection('moduleProgress')
-          .get();
+      final progressSnapshot =
+          await _firestore.collection('moduleProgress').get();
 
-      final resourceSnapshot = await _firestore
-          .collection('moduleResources')
-          .get();
+      final resourceSnapshot =
+          await _firestore.collection('moduleResources').get();
 
       int activeCourses = 0;
 
@@ -112,16 +112,34 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
 
       final List<Map<String, dynamic>> activities = [];
 
+      for (final document in usersSnapshot.docs) {
+        final data = document.data();
+
+        if (data['lastLoginAt'] != null) {
+          activities.add({
+            'type': 'User Login',
+            'title': (data['name'] ?? 'User').toString(),
+            'subtitle':
+                '${_capitalize((data['role'] ?? 'user').toString())} account activity',
+            'timestamp': data['lastLoginAt'],
+            'color': blue,
+            'icon': Icons.login_rounded,
+          });
+        }
+      }
+
       for (final document in coursesSnapshot.docs) {
         final data = document.data();
 
-        final timestamp = data['createdAt'];
+        final timestamp =
+            data['updatedAt'] ?? data['createdAt'];
 
         if (timestamp != null) {
           activities.add({
             'type': 'Course',
-            'title': '${(data['code'] ?? 'Course')} • ${(data['title'] ?? '')}',
-            'subtitle': 'Current course record - created',
+            'title':
+                '${(data['code'] ?? 'Course')} • ${(data['title'] ?? '')}',
+            'subtitle': 'Course record updated',
             'timestamp': timestamp,
             'color': Colors.indigo,
             'icon': Icons.library_books_rounded,
@@ -143,20 +161,22 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
           aiFailed++;
         }
 
-        final timestamp = data['aiProcessedAt'] ?? data['updatedAt'];
+        final timestamp =
+            data['aiProcessedAt'] ?? data['updatedAt'];
 
         if (status.isNotEmpty && timestamp != null) {
           activities.add({
             'type': 'AI',
-            'title': (data['fileName'] ?? data['title'] ?? 'Learning Material')
-                .toString(),
+            'title':
+                (data['fileName'] ?? data['title'] ?? 'Learning Material')
+                    .toString(),
             'subtitle': 'AI status: ${_capitalize(status)}',
             'timestamp': timestamp,
             'color': status == 'ready'
                 ? green
                 : status == 'failed'
-                ? reportRed
-                : orange,
+                    ? reportRed
+                    : orange,
             'icon': Icons.auto_awesome_rounded,
           });
         }
@@ -191,14 +211,16 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
 
       setState(() {
         _isLoading = false;
-        _errorMessage = e.message ?? 'Unable to load system report.';
+        _errorMessage =
+            e.message ?? 'Unable to load system report.';
       });
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
         _isLoading = false;
-        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _errorMessage =
+            e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -219,55 +241,59 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
       return _activities.take(50).toList();
     }
 
-    return _activities
-        .where((item) {
-          final date = _dateFrom(item['timestamp']);
+    return _activities.where((item) {
+      final date = _dateFrom(item['timestamp']);
 
-          return date != null && !date.toLocal().isBefore(cutoff!);
-        })
-        .take(50)
-        .toList();
+      return date != null &&
+          !date.toLocal().isBefore(cutoff!);
+    }).take(50).toList();
   }
 
   Future<void> _exportReport() async {
-    try {
-      await downloadAdminCsv(
-        adminCsv([
-          ['CASLMS System Report'],
-          ['Record snapshot timeframe', _selectedTimeframe],
-          [
-            'Metrics describe current records; timeframe applies to snapshots below.',
-          ],
-          ['Metric', 'Value'],
-          ['Users', _users],
-          ['Active courses', _activeCourses],
-          ['Active enrollments', _activeEnrollments],
-          ['Assessment submissions', _assessmentSubmissions],
-          ['Module progress records', _moduleProgressRecords],
-          ['AI ready', _aiReady],
-          ['AI failed', _aiFailed],
-          [],
-          ['Record type', 'Title', 'Details', 'Timestamp'],
-          ..._filteredActivities.map(
-            (item) => [
-              item['type'],
-              item['title'],
-              item['subtitle'],
-              _formatAbsoluteDate(item['timestamp']),
-            ],
-          ),
-        ]),
-        'caslms-system-report.csv',
+    final csv = StringBuffer();
+
+    csv.writeln('CASLMS System Report');
+    csv.writeln('Timeframe,${_csv(_selectedTimeframe)}');
+    csv.writeln();
+    csv.writeln('Metric,Value');
+    csv.writeln('Users,$_users');
+    csv.writeln('Active Courses,$_activeCourses');
+    csv.writeln('Active Enrollments,$_activeEnrollments');
+    csv.writeln(
+      'Assessment Submissions,$_assessmentSubmissions',
+    );
+    csv.writeln(
+      'Module Progress Records,$_moduleProgressRecords',
+    );
+    csv.writeln('AI Ready,$_aiReady');
+    csv.writeln('AI Failed,$_aiFailed');
+    csv.writeln();
+    csv.writeln('Activity Type,Title,Details,Timestamp');
+
+    for (final item in _filteredActivities) {
+      csv.writeln(
+        '${_csv((item['type'] ?? '').toString())},'
+        '${_csv((item['title'] ?? '').toString())},'
+        '${_csv((item['subtitle'] ?? '').toString())},'
+        '${_csv(_formatAbsoluteDate(item['timestamp']))}',
       );
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Unable to download report. Please retry.'),
-          ),
-        );
-      }
     }
+
+    await Clipboard.setData(
+      ClipboardData(text: csv.toString()),
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'System report CSV copied to clipboard.',
+        ),
+        backgroundColor: green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -283,10 +309,13 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
           children: [
             Text(
               'System Reports',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 18,
+              ),
             ),
             Text(
-              'Current platform metrics',
+              'Real Firestore Platform Metrics',
               style: TextStyle(
                 fontSize: 12,
                 color: textGrey,
@@ -298,8 +327,11 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
         actions: [
           IconButton(
             onPressed: _isLoading ? null : _exportReport,
-            tooltip: 'Download CSV',
-            icon: const Icon(Icons.file_download_outlined, color: reportRed),
+            tooltip: 'Copy CSV',
+            icon: const Icon(
+              Icons.file_download_outlined,
+              color: reportRed,
+            ),
           ),
           IconButton(
             onPressed: _isLoading ? null : _loadReport,
@@ -324,7 +356,9 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: reportRed));
+      return const Center(
+        child: CircularProgressIndicator(color: reportRed),
+      );
     }
 
     if (_errorMessage != null) {
@@ -343,7 +377,10 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
               Text(
                 _errorMessage!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: textGrey, height: 1.45),
+                style: const TextStyle(
+                  color: textGrey,
+                  height: 1.45,
+                ),
               ),
               const SizedBox(height: 18),
               ElevatedButton.icon(
@@ -370,17 +407,12 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
         ),
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
         children: [
-          const Text(
-            'Metrics describe current records. The timeframe filters the record snapshots below; open Activity logs for session history.',
-            style: TextStyle(color: textGrey, fontSize: 12, height: 1.5),
-          ),
-          const SizedBox(height: 12),
           _buildTimeframeSelector(),
           const SizedBox(height: 18),
           _buildMetrics(),
           const SizedBox(height: 28),
           const Text(
-            'Current record snapshots',
+            'Recent Platform Activity',
             style: TextStyle(
               color: textDark,
               fontSize: 17,
@@ -393,7 +425,7 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
               padding: EdgeInsets.symmetric(vertical: 40),
               child: Center(
                 child: Text(
-                  'No matching record snapshots for this timeframe.',
+                  'No recorded activity for this timeframe.',
                   style: TextStyle(color: textGrey),
                 ),
               ),
@@ -474,7 +506,12 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
         Icons.auto_awesome_rounded,
         Colors.deepPurple,
       ),
-      _metric('AI Failed', _aiFailed, Icons.error_outline_rounded, reportRed),
+      _metric(
+        'AI Failed',
+        _aiFailed,
+        Icons.error_outline_rounded,
+        reportRed,
+      ),
     ];
 
     return LayoutBuilder(
@@ -482,8 +519,8 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
         final columns = constraints.maxWidth >= 850
             ? 4
             : constraints.maxWidth >= 520
-            ? 2
-            : 1;
+                ? 2
+                : 1;
 
         const spacing = 12.0;
         final width =
@@ -500,7 +537,12 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
     );
   }
 
-  Widget _metric(String label, int value, IconData icon, Color color) {
+  Widget _metric(
+    String label,
+    int value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
@@ -548,7 +590,9 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
   }
 
   Widget _buildActivityCard(Map<String, dynamic> item) {
-    final color = item['color'] is Color ? item['color'] as Color : textGrey;
+    final color = item['color'] is Color
+        ? item['color'] as Color
+        : textGrey;
 
     final icon = item['icon'] is IconData
         ? item['icon'] as IconData
@@ -590,7 +634,10 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
                 const SizedBox(height: 3),
                 Text(
                   (item['subtitle'] ?? '').toString(),
-                  style: const TextStyle(color: textGrey, fontSize: 10.5),
+                  style: const TextStyle(
+                    color: textGrey,
+                    fontSize: 10.5,
+                  ),
                 ),
               ],
             ),
@@ -598,7 +645,10 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
           const SizedBox(width: 8),
           Text(
             _formatRelative(item['timestamp']),
-            style: const TextStyle(color: textGrey, fontSize: 9.5),
+            style: const TextStyle(
+              color: textGrey,
+              fontSize: 9.5,
+            ),
           ),
         ],
       ),
@@ -616,7 +666,8 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
 
     if (date == null) return '';
 
-    final difference = DateTime.now().difference(date.toLocal());
+    final difference =
+        DateTime.now().difference(date.toLocal());
 
     if (difference.inMinutes < 1) return 'Now';
     if (difference.inMinutes < 60) {
@@ -649,5 +700,9 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
     if (clean.isEmpty) return clean;
 
     return '${clean[0].toUpperCase()}${clean.substring(1)}';
+  }
+
+  String _csv(String value) {
+    return '"${value.replaceAll('"', '""')}"';
   }
 }

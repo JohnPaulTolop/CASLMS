@@ -477,12 +477,25 @@ class _InstructorAnnouncementsScreenState
               // ==================================================
               PopupMenuButton<String>(
                 onSelected: (value) {
+                  if (value == 'edit') {
+                    _showEditAnnouncementModal(announcement);
+                  }
                   if (value == 'delete') {
                     _confirmDelete(id, title);
                   }
                 },
                 itemBuilder: (context) {
                   return const [
+                    PopupMenuItem<String>(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, color: primaryTeal),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
+                    ),
                     PopupMenuItem<String>(
                       value: 'delete',
                       child: Row(
@@ -555,6 +568,126 @@ class _InstructorAnnouncementsScreenState
         ],
       ),
     );
+  }
+
+  Future<void> _showEditAnnouncementModal(
+    Map<String, dynamic> announcement,
+  ) async {
+    final titleController = TextEditingController(
+      text: (announcement['title'] ?? '').toString(),
+    );
+    final messageController = TextEditingController(
+      text: (announcement['message'] ?? '').toString(),
+    );
+    bool urgent =
+        announcement['isUrgent'] == true ||
+        (announcement['priority'] ?? '').toString() == 'urgent';
+    bool saving = false;
+    final id = (announcement['id'] ?? '').toString();
+
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: !saving,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit announcement'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    enabled: !saving,
+                    maxLength: 150,
+                    decoration: _inputDecoration(label: 'Title'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: messageController,
+                    enabled: !saving,
+                    minLines: 4,
+                    maxLines: 8,
+                    maxLength: 5000,
+                    decoration: _inputDecoration(label: 'Message'),
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    value: urgent,
+                    activeThumbColor: orange,
+                    title: const Text('High priority'),
+                    onChanged: saving
+                        ? null
+                        : (value) => setDialogState(() => urgent = value),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      setDialogState(() => saving = true);
+                      try {
+                        await _announcementService.updateAnnouncement(
+                          announcementId: id,
+                          title: titleController.text,
+                          message: messageController.text,
+                          isUrgent: urgent,
+                        );
+                        if (dialogContext.mounted) {
+                          Navigator.of(dialogContext).pop(true);
+                        }
+                      } on AnnouncementServiceException catch (error) {
+                        if (!dialogContext.mounted) return;
+                        setDialogState(() => saving = false);
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          SnackBar(
+                            content: Text(error.message),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    },
+              icon: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label: Text(saving ? 'Saving...' : 'Save changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+    titleController.dispose();
+    messageController.dispose();
+    if (saved == true && mounted) {
+      await _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Announcement updated.'),
+            backgroundColor: primaryTeal,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   // ============================================================

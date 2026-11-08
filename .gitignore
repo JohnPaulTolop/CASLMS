@@ -18,6 +18,9 @@ migrate_working_dir/
 *.iws
 .idea/
 
+# Local Dart defines include the shared Firebase App Check development token.
+config/local.json
+
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
 # is commented out by default.
@@ -49,3 +52,8 @@ app.*.map.json
 
 .vercel
 .env*
+
+# Local/generated tooling artifacts
+.codex-backups/
+supabase/functions/node_modules/
+web/vendor/

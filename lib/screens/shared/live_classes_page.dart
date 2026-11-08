@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../services/live_class_service.dart';
+import '../../services/meeting_chat_service.dart';
+import 'meeting_chat_panel.dart';
 import 'live_classroom_embed.dart';
 import 'grading_ui.dart';
 
@@ -687,14 +689,46 @@ class _LiveRoomScreen extends StatefulWidget {
 
 class _LiveRoomScreenState extends State<_LiveRoomScreen> {
   final _service = LiveClassService();
+  final _chatService = MeetingChatService();
   Timer? _poll;
+  StreamSubscription<List<MeetingChatMessage>>? _chatSubscription;
+  late final Stream<List<MeetingChatMessage>> _chatMessages;
   bool _ending = false;
   bool _checking = false;
   bool _leaving = false;
+  bool _chatOpen = false;
+  bool _chatInitialized = false;
+  int _messageCount = 0;
+  int _unreadMessages = 0;
 
   @override
   void initState() {
     super.initState();
+    _chatMessages = _chatService
+        .watchMessages(
+          courseId: widget.courseId,
+          sectionId: widget.sectionId,
+          sessionId: widget.connection['sessionId'] as String,
+        )
+        .asBroadcastStream();
+    _chatSubscription = _chatMessages.listen((messages) {
+      if (!mounted) return;
+      if (!_chatInitialized) {
+        _chatInitialized = true;
+        _messageCount = messages.length;
+        return;
+      }
+      if (messages.length > _messageCount && !_chatOpen) {
+        final added = messages
+            .skip(_messageCount)
+            .where((message) => !message.isMine(_chatService.currentUserId))
+            .length;
+        if (added > 0) {
+          setState(() => _unreadMessages += added);
+        }
+      }
+      _messageCount = messages.length;
+    });
     _poll = Timer.periodic(const Duration(seconds: 20), (_) => _check());
   }
 
@@ -725,7 +759,43 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
   @override
   void dispose() {
     _poll?.cancel();
+    _chatSubscription?.cancel();
     super.dispose();
+  }
+
+  void _toggleDesktopChat() {
+    setState(() {
+      _chatOpen = !_chatOpen;
+      if (_chatOpen) _unreadMessages = 0;
+    });
+  }
+
+  Future<void> _openMobileChat() async {
+    if (_chatOpen) return;
+    setState(() {
+      _chatOpen = true;
+      _unreadMessages = 0;
+    });
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: .78,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          child: MeetingChatPanel(
+            service: _chatService,
+            messages: _chatMessages,
+            courseId: widget.courseId,
+            sectionId: widget.sectionId,
+            sessionId: widget.connection['sessionId'] as String,
+            onClose: () => Navigator.of(sheetContext).pop(),
+          ),
+        ),
+      ),
+    );
+    if (mounted) setState(() => _chatOpen = false);
   }
 
   void _leave() {
@@ -762,55 +832,93 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: const Color(0xFF0B1120),
-    appBar: AppBar(
-      backgroundColor: const Color(0xFF101A2D),
-      foregroundColor: Colors.white,
-      surfaceTintColor: Colors.transparent,
-      leading: IconButton(
-        tooltip: 'Back to Live Classes',
-        onPressed: _leave,
-        icon: const Icon(Icons.arrow_back_rounded),
-      ),
-      title: const Text(
-        'Live classroom',
-        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-      ),
-      actions: [
-        if (widget.connection['instructor'] == true)
+  Widget build(BuildContext context) {
+    final desktop = MediaQuery.sizeOf(context).width >= 900;
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B1120),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF101A2D),
+        foregroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          tooltip: 'Back to Live Classes',
+          onPressed: _leave,
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        title: const Text(
+          'Live classroom',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        actions: [
+          IconButton(
+            tooltip: desktop
+                ? _chatOpen
+                      ? 'Close meeting chat'
+                      : 'Open meeting chat'
+                : 'Open meeting chat',
+            onPressed: desktop ? _toggleDesktopChat : _openMobileChat,
+            icon: Badge.count(
+              count: _unreadMessages,
+              isLabelVisible: _unreadMessages > 0,
+              child: Icon(
+                _chatOpen && desktop
+                    ? Icons.forum_rounded
+                    : Icons.forum_outlined,
+              ),
+            ),
+          ),
+          if (widget.connection['instructor'] == true)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: RoundGradeAction(
+                icon: Icons.stop_circle_outlined,
+                label: _ending ? 'Ending class...' : 'End class for everyone',
+                accent: const Color(0xFFFF8797),
+                onTap: _ending ? null : _end,
+              ),
+            ),
           Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: RoundGradeAction(
-              icon: Icons.stop_circle_outlined,
-              label: _ending ? 'Ending class...' : 'End class for everyone',
-              accent: const Color(0xFFFF8797),
-              onTap: _ending ? null : _end,
+            padding: const EdgeInsets.only(right: 12),
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFCBDAEF),
+              ),
+              onPressed: _leave,
+              icon: const Icon(Icons.logout_rounded, size: 18),
+              label: const Text('Leave'),
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.only(right: 12),
-          child: TextButton.icon(
-            style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFFCBDAEF),
+        ],
+      ),
+      body: Column(
+        children: [
+          if (_ending) const LinearProgressIndicator(minHeight: 2),
+          Expanded(
+            child: Row(
+              children: [
+                Expanded(
+                  child: LiveClassroomEmbed(
+                    connection: widget.connection,
+                    onLeave: _leave,
+                  ),
+                ),
+                if (desktop && _chatOpen)
+                  SizedBox(
+                    width: 340,
+                    child: MeetingChatPanel(
+                      service: _chatService,
+                      messages: _chatMessages,
+                      courseId: widget.courseId,
+                      sectionId: widget.sectionId,
+                      sessionId: widget.connection['sessionId'] as String,
+                      onClose: _toggleDesktopChat,
+                    ),
+                  ),
+              ],
             ),
-            onPressed: _leave,
-            icon: const Icon(Icons.logout_rounded, size: 18),
-            label: const Text('Leave'),
           ),
-        ),
-      ],
-    ),
-    body: Column(
-      children: [
-        if (_ending) const LinearProgressIndicator(minHeight: 2),
-        Expanded(
-          child: LiveClassroomEmbed(
-            connection: widget.connection,
-            onLeave: _leave,
-          ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }

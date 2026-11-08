@@ -43,7 +43,7 @@ class CourseSectionService {
     final classCode = _text(course['classCode']);
 
     if (classCode.isEmpty) {
-      throw StateError('Course class code is missing.');
+      throw StateError('The course internal section identifier is missing.');
     }
 
     final ref = _db.collection('courseSections').doc(classCode);
@@ -52,7 +52,7 @@ class CourseSectionService {
 
     if (existing.exists) {
       if (existing.data()?['courseId'] != courseId) {
-        throw StateError('Class code conflict detected.');
+        throw StateError('Section identifier conflict detected.');
       }
       return;
     }
@@ -241,7 +241,7 @@ class CourseSectionService {
       return classCode;
     }
 
-    throw StateError('Unable to generate a class code.');
+    throw StateError('Unable to generate a section identifier.');
   }
 
   Future<void> renameSection({

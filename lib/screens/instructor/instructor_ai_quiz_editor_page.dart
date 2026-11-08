@@ -986,50 +986,54 @@ class _InstructorAiQuizEditorScreenState
             ),
           ),
           const SizedBox(height: 8),
-          ...List.generate(4, (int optionIndex) {
-            final String letter = String.fromCharCode(65 + optionIndex);
+          RadioGroup<int>(
+            groupValue: question.correctAnswerIndex,
+            onChanged: (value) {
+              if (_isSaving || value == null) {
+                return;
+              }
+              setState(() {
+                question.correctAnswerIndex = value;
+              });
+            },
+            child: Column(
+              children: List.generate(4, (int optionIndex) {
+                final String letter = String.fromCharCode(65 + optionIndex);
 
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 9),
-              child: Row(
-                children: [
-                  Radio<int>(
-                    value: optionIndex,
-                    groupValue: question.correctAnswerIndex,
-                    activeColor: green,
-                    onChanged: _isSaving
-                        ? null
-                        : (int? value) {
-                            if (value == null) {
-                              return;
-                            }
-
-                            setState(() {
-                              question.correctAnswerIndex = value;
-                            });
-                          },
-                  ),
-                  SizedBox(
-                    width: 26,
-                    child: Text(
-                      letter,
-                      style: const TextStyle(
-                        color: textGrey,
-                        fontWeight: FontWeight.w800,
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 9),
+                  child: Row(
+                    children: [
+                      Radio<int>(
+                        value: optionIndex,
+                        activeColor: green,
+                        enabled: !_isSaving,
                       ),
-                    ),
+                      SizedBox(
+                        width: 26,
+                        child: Text(
+                          letter,
+                          style: const TextStyle(
+                            color: textGrey,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: question.optionControllers[optionIndex],
+                          enabled: !_isSaving,
+                          decoration: InputDecoration(
+                            hintText: 'Choice $letter',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  Expanded(
-                    child: TextField(
-                      controller: question.optionControllers[optionIndex],
-                      enabled: !_isSaving,
-                      decoration: InputDecoration(hintText: 'Choice $letter'),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
+                );
+              }),
+            ),
+          ),
           const SizedBox(height: 6),
           TextField(
             controller: question.explanationController,
@@ -1089,7 +1093,7 @@ class _EditableQuizQuestion {
   _EditableQuizQuestion({
     required String question,
     required List<String> options,
-    required int correctAnswerIndex,
+    required this.correctAnswerIndex,
     required String explanation,
     required int points,
   }) : questionController = TextEditingController(text: question),
@@ -1099,8 +1103,7 @@ class _EditableQuizQuestion {
          return TextEditingController(text: value);
        }),
        explanationController = TextEditingController(text: explanation),
-       pointsController = TextEditingController(text: points.toString()),
-       correctAnswerIndex = correctAnswerIndex;
+       pointsController = TextEditingController(text: points.toString());
 
   final TextEditingController questionController;
 

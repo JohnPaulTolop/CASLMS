@@ -1,5 +1,3 @@
-import './dashboard_hover.dart';
-
 import 'package:flutter/material.dart';
 
 /// Responsive navigation shared by the student and instructor portals.
@@ -33,7 +31,7 @@ class RoleNavigationBar extends StatelessWidget {
     ),
     _RoleDestination(
       index: 1,
-      label: instructor ? 'My Courses' : 'My Classes',
+      label: instructor ? 'My Courses' : 'Modules',
       icon: instructor ? Icons.class_outlined : Icons.folder_outlined,
       activeIcon: instructor ? Icons.class_rounded : Icons.folder_rounded,
     ),
@@ -80,6 +78,13 @@ class RoleNavigationBar extends StatelessWidget {
         label: 'Posted Grades',
         icon: Icons.lock_outline,
         activeIcon: Icons.lock,
+      ),
+    if (!instructor)
+      const _RoleDestination(
+        index: 9,
+        label: 'My Notes',
+        icon: Icons.sticky_note_2_outlined,
+        activeIcon: Icons.sticky_note_2_rounded,
       ),
   ];
 
@@ -193,6 +198,7 @@ class RoleNavigationBar extends StatelessWidget {
       allDestinations[instructor ? 5 : 6],
       if (!instructor) allDestinations[7],
       if (!instructor) allDestinations[8],
+      if (!instructor) allDestinations[9],
     ];
 
     final int? destinationIndex = await showModalBottomSheet<int>(
@@ -232,84 +238,72 @@ class _NavigationItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final Color foreground = selected ? accentColor : const Color(0xFF7B8498);
 
-    return DashboardHover(
-      accent: accentColor,
-      lift: 2,
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: destination.label,
-        child: Tooltip(
-          message: destination.label,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(18),
-              child: AnimatedContainer(
-                duration: MediaQuery.disableAnimationsOf(context)
-                    ? Duration.zero
-                    : const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
-                constraints: const BoxConstraints(minHeight: 57),
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? accentColor.withValues(alpha: 0.11)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    AnimatedScale(
-                      scale: selected ? 1.08 : 1,
-                      duration: MediaQuery.disableAnimationsOf(context)
-                          ? Duration.zero
-                          : const Duration(milliseconds: 220),
-                      curve: Curves.easeOutBack,
-                      child: AnimatedContainer(
-                        duration: MediaQuery.disableAnimationsOf(context)
-                            ? Duration.zero
-                            : const Duration(milliseconds: 180),
-                        padding: const EdgeInsets.all(5),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: destination.index >= 7
-                              ? accentColor.withValues(
-                                  alpha: selected ? .16 : .08,
-                                )
-                              : Colors.transparent,
-                        ),
-                        child: Icon(
-                          selected ? destination.activeIcon : destination.icon,
-                          size: 23,
-                          color: foreground,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    AnimatedDefaultTextStyle(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: destination.label,
+      child: Tooltip(
+        message: destination.label,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(18),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              constraints: const BoxConstraints(minHeight: 57),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+              decoration: BoxDecoration(
+                color: selected
+                    ? accentColor.withValues(alpha: 0.11)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  AnimatedScale(
+                    scale: selected ? 1.08 : 1,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutBack,
+                    child: AnimatedContainer(
                       duration: MediaQuery.disableAnimationsOf(context)
                           ? Duration.zero
                           : const Duration(milliseconds: 180),
-                      style: TextStyle(
-                        color: foreground,
-                        fontSize: 10.5,
-                        height: 1,
-                        fontWeight: selected
-                            ? FontWeight.w800
-                            : FontWeight.w600,
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: destination.index >= 7
+                            ? accentColor.withValues(
+                                alpha: selected ? .16 : .08,
+                              )
+                            : Colors.transparent,
                       ),
-                      child: Text(
-                        destination.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      child: Icon(
+                        selected ? destination.activeIcon : destination.icon,
+                        size: 23,
+                        color: foreground,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 4),
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 180),
+                    style: TextStyle(
+                      color: foreground,
+                      fontSize: 10.5,
+                      height: 1,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    ),
+                    child: Text(
+                      destination.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -414,61 +408,57 @@ class _MoreDestinationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DashboardHover(
-      accent: accentColor,
+    return Material(
+      color: selected
+          ? accentColor.withValues(alpha: 0.10)
+          : const Color(0xFFF7F9FC),
       borderRadius: BorderRadius.circular(20),
-      child: Material(
-        color: selected
-            ? accentColor.withValues(alpha: 0.10)
-            : const Color(0xFFF7F9FC),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 108),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: selected
-                    ? accentColor.withValues(alpha: 0.28)
-                    : const Color(0xFFE8ECF3),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 108),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected
+                  ? accentColor.withValues(alpha: 0.28)
+                  : const Color(0xFFE8ECF3),
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: selected
+                      ? accentColor
+                      : accentColor.withValues(alpha: 0.10),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  selected ? destination.activeIcon : destination.icon,
+                  color: selected ? Colors.white : accentColor,
+                  size: 22,
+                ),
               ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? accentColor
-                        : accentColor.withValues(alpha: 0.10),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    selected ? destination.activeIcon : destination.icon,
-                    color: selected ? Colors.white : accentColor,
-                    size: 22,
-                  ),
+              const SizedBox(height: 10),
+              Text(
+                destination.label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: selected ? accentColor : const Color(0xFF263149),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  height: 1.15,
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  destination.label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: selected ? accentColor : const Color(0xFF263149),
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    height: 1.15,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

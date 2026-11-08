@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../services/admin_assistant_service.dart';
-import '../shared/assistant_scope_banner.dart';
 
 class AdminCaslmsAssistantScreen extends StatefulWidget {
   const AdminCaslmsAssistantScreen({super.key});
@@ -199,10 +198,6 @@ class _AdminCaslmsAssistantScreenState
       ),
       body: Column(
         children: <Widget>[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: AssistantScopeBanner(color: primary),
-          ),
           _buildPrivacyNotice(),
           Expanded(child: _buildMessages()),
           _buildSuggestions(),
@@ -230,7 +225,9 @@ class _AdminCaslmsAssistantScreenState
           Expanded(
             child: Text(
               'Admin only. Answers use current Firestore records. Always '
-              'verify a record before making an official decision.',
+              'verify a record before making an official decision. This '
+              'assistant handles LMS, academic, and education-technology '
+              'questions only.',
               style: TextStyle(
                 color: Color(0xFF3730A3),
                 fontSize: 11.5,

@@ -25,40 +25,29 @@ class SubjectOverviewScreen extends StatefulWidget {
   });
 
   @override
-  State<SubjectOverviewScreen> createState() =>
-      _SubjectOverviewScreenState();
+  State<SubjectOverviewScreen> createState() => _SubjectOverviewScreenState();
 }
 
-class _SubjectOverviewScreenState
-    extends State<SubjectOverviewScreen> {
+class _SubjectOverviewScreenState extends State<SubjectOverviewScreen> {
   // ============================================================
   // DESIGN SYSTEM
   // ============================================================
 
-  static const Color primaryBlue =
-      Color(0xFF1769FF);
+  static const Color primaryBlue = Color(0xFF1769FF);
 
-  static const Color textDark =
-      Color(0xFF10182F);
+  static const Color textDark = Color(0xFF10182F);
 
-  static const Color textGrey =
-      Color(0xFF68738A);
-
-  static const Color green =
-      Color(0xFF26A65B);
+  static const Color textGrey = Color(0xFF68738A);
 
   // ============================================================
   // SERVICES
   // ============================================================
 
-  final CourseService _courseService =
-      CourseService();
+  final CourseService _courseService = CourseService();
 
-  final AssignmentService _assignmentService =
-      AssignmentService();
+  final AssignmentService _assignmentService = AssignmentService();
 
-  final QuizService _quizService =
-      QuizService();
+  final QuizService _quizService = QuizService();
 
   // ============================================================
   // TAB
@@ -110,8 +99,7 @@ class _SubjectOverviewScreenState
 
       setState(() {
         _isLoadingModules = false;
-        _moduleError =
-            'Course information is missing.';
+        _moduleError = 'Course information is missing.';
       });
 
       return;
@@ -125,10 +113,8 @@ class _SubjectOverviewScreenState
     }
 
     try {
-      final List<Map<String, dynamic>> modules =
-          await _courseService.getCourseModules(
-        widget.courseId,
-      );
+      final List<Map<String, dynamic>> modules = await _courseService
+          .getCourseModules(widget.courseId);
 
       if (!mounted) return;
 
@@ -149,8 +135,7 @@ class _SubjectOverviewScreenState
 
       setState(() {
         _isLoadingModules = false;
-        _moduleError =
-            'Unable to load course modules.';
+        _moduleError = 'Unable to load course modules.';
       });
     }
   }
@@ -165,8 +150,7 @@ class _SubjectOverviewScreenState
 
       setState(() {
         _isLoadingTasks = false;
-        _taskError =
-            'Course information is missing.';
+        _taskError = 'Course information is missing.';
       });
 
       return;
@@ -180,26 +164,16 @@ class _SubjectOverviewScreenState
     }
 
     try {
-      final List<Map<String, dynamic>> assignments =
-          await _assignmentService
-              .getCourseAssignments(
-        widget.courseId,
-      );
+      final List<Map<String, dynamic>> assignments = await _assignmentService
+          .getCourseAssignments(widget.courseId);
 
-      final List<Map<String, dynamic>> quizzes =
-          await _quizService.getCourseQuizzes(
-        widget.courseId,
-      );
+      final List<Map<String, dynamic>> quizzes = await _quizService
+          .getCourseQuizzes(widget.courseId);
 
       // Student should only see published assignments.
-      final List<Map<String, dynamic>>
-          publishedAssignments =
-          assignments.where(
+      final List<Map<String, dynamic>> publishedAssignments = assignments.where(
         (assignment) {
-          return (assignment['status'] ?? '')
-                  .toString()
-                  .trim()
-                  .toLowerCase() ==
+          return (assignment['status'] ?? '').toString().trim().toLowerCase() ==
               'published';
         },
       ).toList();
@@ -207,11 +181,9 @@ class _SubjectOverviewScreenState
       if (!mounted) return;
 
       setState(() {
-        _assignments =
-            publishedAssignments;
+        _assignments = publishedAssignments;
 
-        _quizzes =
-            quizzes;
+        _quizzes = quizzes;
 
         _isLoadingTasks = false;
         _taskError = null;
@@ -235,8 +207,7 @@ class _SubjectOverviewScreenState
 
       setState(() {
         _isLoadingTasks = false;
-        _taskError =
-            'Unable to load course tasks.';
+        _taskError = 'Unable to load course tasks.';
       });
     }
   }
@@ -255,10 +226,7 @@ class _SubjectOverviewScreenState
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints:
-                const BoxConstraints(
-              maxWidth: 1200,
-            ),
+            constraints: const BoxConstraints(maxWidth: 1200),
             child: Column(
               children: [
                 // ==================================================
@@ -266,111 +234,71 @@ class _SubjectOverviewScreenState
                 // ==================================================
 
                 Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(
-                    16,
-                    16,
-                    16,
-                    28,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
                   child: Column(
                     children: [
                       Align(
-                        alignment:
-                            Alignment.centerLeft,
+                        alignment: Alignment.centerLeft,
                         child: IconButton(
                           icon: const Icon(
-                            Icons
-                                .arrow_back_ios_new_rounded,
-                            color:
-                                Colors.white,
+                            Icons.arrow_back_ios_new_rounded,
+                            color: Colors.white,
                             size: 20,
                           ),
                           onPressed: () {
-                            Navigator.pop(
-                              context,
-                            );
+                            Navigator.pop(context);
                           },
                         ),
                       ),
 
                       Container(
-                        padding:
-                            const EdgeInsets.all(
-                          16,
-                        ),
-                        decoration:
-                            BoxDecoration(
-                          color: Colors.white
-                              .withValues(
-                            alpha: 0.18,
-                          ),
-                          borderRadius:
-                              BorderRadius.circular(
-                            24,
-                          ),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(24),
                         ),
                         child: const Icon(
-                          Icons
-                              .laptop_chromebook_rounded,
-                          color:
-                              Colors.white,
+                          Icons.laptop_chromebook_rounded,
+                          color: Colors.white,
                           size: 40,
                         ),
                       ),
 
-                      const SizedBox(
-                        height: 16,
-                      ),
+                      const SizedBox(height: 16),
 
                       Text(
                         widget.section.trim().isEmpty
                             ? widget.subjectCode
                             : '${widget.subjectCode} • ${widget.section}',
                         style: const TextStyle(
-                          color:
-                              Colors.white,
+                          color: Colors.white,
                           fontSize: 13,
-                          fontWeight:
-                              FontWeight.w700,
-                          letterSpacing:
-                              0.4,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
                         ),
                       ),
 
-                      const SizedBox(
-                        height: 8,
-                      ),
+                      const SizedBox(height: 8),
 
                       Text(
                         widget.title,
-                        textAlign:
-                            TextAlign.center,
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
-                          color:
-                              Colors.white,
+                          color: Colors.white,
                           fontSize: 26,
-                          fontWeight:
-                              FontWeight.w800,
-                          letterSpacing:
-                              -0.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
                         ),
                       ),
 
-                      const SizedBox(
-                        height: 8,
-                      ),
+                      const SizedBox(height: 8),
 
                       Text(
                         'Instructor: ${widget.instructor}',
                         style: TextStyle(
-                          color:
-                              Colors.white.withValues(
-                            alpha: 0.82,
-                          ),
+                          color: Colors.white.withValues(alpha: 0.82),
                           fontSize: 13,
-                          fontWeight:
-                              FontWeight.w500,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -380,91 +308,49 @@ class _SubjectOverviewScreenState
                 // ==================================================
                 // WHITE BODY
                 // ==================================================
-
                 Expanded(
                   child: Container(
-                    width:
-                        double.infinity,
-                    decoration:
-                        const BoxDecoration(
-                      color:
-                          Colors.white,
-                      borderRadius:
-                          BorderRadius.only(
-                        topLeft:
-                            Radius.circular(
-                          32,
-                        ),
-                        topRight:
-                            Radius.circular(
-                          32,
-                        ),
+                    width: double.infinity,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(32),
+                        topRight: Radius.circular(32),
                       ),
                     ),
                     child: Column(
                       children: [
-                        const SizedBox(
-                          height: 20,
-                        ),
+                        const SizedBox(height: 20),
 
                         // ==========================================
                         // TABS
                         // ==========================================
-
                         SingleChildScrollView(
-                          scrollDirection:
-                              Axis.horizontal,
-                          physics:
-                              const BouncingScrollPhysics(),
-                          padding:
-                              const EdgeInsets.symmetric(
-                            horizontal: 20,
-                          ),
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Row(
                             children: [
-                              _buildTab(
-                                'Lessons',
-                                0,
-                              ),
+                              _buildTab('Lessons', 0),
 
-                              const SizedBox(
-                                width: 8,
-                              ),
+                              const SizedBox(width: 8),
 
-                              _buildTab(
-                                'Tasks',
-                                1,
-                              ),
+                              _buildTab('Tasks', 1),
 
-                              const SizedBox(
-                                width: 8,
-                              ),
+                              const SizedBox(width: 8),
 
-                              _buildTab(
-                                'Resources',
-                                2,
-                              ),
+                              _buildTab('Resources', 2),
 
-                              const SizedBox(
-                                width: 8,
-                              ),
+                              const SizedBox(width: 8),
 
-                              _buildTab(
-                                'Grades',
-                                3,
-                              ),
+                              _buildTab('Grades', 3),
                             ],
                           ),
                         ),
 
-                        const SizedBox(
-                          height: 16,
-                        ),
+                        const SizedBox(height: 16),
 
-                        Expanded(
-                          child:
-                              _buildSelectedTabContent(),
-                        ),
+                        Expanded(child: _buildSelectedTabContent()),
                       ],
                     ),
                   ),
@@ -481,53 +367,29 @@ class _SubjectOverviewScreenState
   // TAB BUTTON
   // ============================================================
 
-  Widget _buildTab(
-    String title,
-    int index,
-  ) {
-    final bool isActive =
-        _selectedTabIndex ==
-            index;
+  Widget _buildTab(String title, int index) {
+    final bool isActive = _selectedTabIndex == index;
 
     return GestureDetector(
       onTap: () {
         setState(() {
-          _selectedTabIndex =
-              index;
+          _selectedTabIndex = index;
         });
       },
       child: AnimatedContainer(
-        duration:
-            const Duration(
-          milliseconds: 200,
-        ),
-        padding:
-            const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 12,
-        ),
-        decoration:
-            BoxDecoration(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        decoration: BoxDecoration(
           color: isActive
-              ? primaryBlue.withValues(
-                  alpha: 0.10,
-                )
+              ? primaryBlue.withValues(alpha: 0.10)
               : Colors.transparent,
-          borderRadius:
-              BorderRadius.circular(
-            20,
-          ),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
           title,
-          style:
-              TextStyle(
-            color: isActive
-                ? primaryBlue
-                : textGrey,
-            fontWeight: isActive
-                ? FontWeight.w800
-                : FontWeight.w600,
+          style: TextStyle(
+            color: isActive ? primaryBlue : textGrey,
+            fontWeight: isActive ? FontWeight.w800 : FontWeight.w600,
             fontSize: 14,
           ),
         ),
@@ -551,11 +413,7 @@ class _SubjectOverviewScreenState
         return const Center(
           child: Text(
             'Resources will be connected later.',
-            style: TextStyle(
-              color: textGrey,
-              fontWeight:
-                  FontWeight.w600,
-            ),
+            style: TextStyle(color: textGrey, fontWeight: FontWeight.w600),
           ),
         );
 
@@ -563,11 +421,7 @@ class _SubjectOverviewScreenState
         return const Center(
           child: Text(
             'Grades will be connected later.',
-            style: TextStyle(
-              color: textGrey,
-              fontWeight:
-                  FontWeight.w600,
-            ),
+            style: TextStyle(color: textGrey, fontWeight: FontWeight.w600),
           ),
         );
 
@@ -582,49 +436,28 @@ class _SubjectOverviewScreenState
 
   Widget _buildLessonsTab() {
     if (_isLoadingModules) {
-      return const Center(
-        child:
-            CircularProgressIndicator(
-          color:
-              primaryBlue,
-        ),
-      );
+      return const Center(child: CircularProgressIndicator(color: primaryBlue));
     }
 
     if (_moduleError != null) {
-      return _buildErrorState(
-        message:
-            _moduleError!,
-        onRetry:
-            _loadModules,
-      );
+      return _buildErrorState(message: _moduleError!, onRetry: _loadModules);
     }
 
     if (_modules.isEmpty) {
       return const Center(
         child: Column(
-          mainAxisSize:
-              MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons
-                  .menu_book_outlined,
-              color:
-                  primaryBlue,
-              size: 48,
-            ),
+            Icon(Icons.menu_book_outlined, color: primaryBlue, size: 48),
 
-            SizedBox(
-              height: 12,
-            ),
+            SizedBox(height: 12),
 
             Text(
               'No modules available',
               style: TextStyle(
                 color: textDark,
                 fontSize: 16,
-                fontWeight:
-                    FontWeight.w800,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ],
@@ -634,34 +467,17 @@ class _SubjectOverviewScreenState
 
     return RefreshIndicator(
       color: primaryBlue,
-      onRefresh:
-          _loadModules,
+      onRefresh: _loadModules,
       child: ListView.builder(
-        physics:
-            const AlwaysScrollableScrollPhysics(
-          parent:
-              BouncingScrollPhysics(),
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
         ),
-        padding:
-            const EdgeInsets.fromLTRB(
-          24,
-          12,
-          24,
-          30,
-        ),
-        itemCount:
-            _modules.length,
-        itemBuilder:
-            (
-          context,
-          index,
-        ) {
-          final Map<String, dynamic> module =
-              _modules[index];
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 30),
+        itemCount: _modules.length,
+        itemBuilder: (context, index) {
+          final Map<String, dynamic> module = _modules[index];
 
-          return _buildModuleCard(
-            module,
-          );
+          return _buildModuleCard(module);
         },
       ),
     );
@@ -671,191 +487,97 @@ class _SubjectOverviewScreenState
   // MODULE CARD
   // ============================================================
 
-  Widget _buildModuleCard(
-    Map<String, dynamic> module,
-  ) {
-    final String title =
-        (module['title'] ??
-                'Untitled Module')
-            .toString();
+  Widget _buildModuleCard(Map<String, dynamic> module) {
+    final String title = (module['title'] ?? 'Untitled Module').toString();
 
-    final String description =
-        (module['description'] ?? '')
-            .toString();
+    final String description = (module['description'] ?? '').toString();
 
-    final int order =
-        module['order'] is num
-            ? (module['order']
-                    as num)
-                .toInt()
-            : 0;
+    final int order = module['order'] is num
+        ? (module['order'] as num).toInt()
+        : 0;
 
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (
-              context,
-            ) =>
-                ModuleContentScreen(
-              title:
-                  title,
-              moduleName:
-                  order > 0
-                      ? 'Module $order'
-                      : 'Module',
+            builder: (context) => ModuleContentScreen(
+              title: title,
+              moduleName: order > 0 ? 'Module $order' : 'Module',
             ),
           ),
         );
       },
       child: Container(
-        margin:
-            const EdgeInsets.only(
-          bottom: 12,
-        ),
-        padding:
-            const EdgeInsets.all(
-          16,
-        ),
-        decoration:
-            BoxDecoration(
-          color:
-              Colors.white,
-          borderRadius:
-              BorderRadius
-                  .circular(
-            16,
-          ),
-          border:
-              Border.all(
-            color:
-                const Color(
-              0xFFE6EAF0,
-            ),
-            width:
-                1.5,
-          ),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE6EAF0), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color:
-                  Colors.black
-                      .withValues(
-                alpha:
-                    0.02,
-              ),
-              blurRadius:
-                  10,
-              offset:
-                  const Offset(
-                0,
-                4,
-              ),
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
         child: Row(
           children: [
             Container(
-              padding:
-                  const EdgeInsets.all(
-                12,
-              ),
-              decoration:
-                  BoxDecoration(
-                color:
-                    primaryBlue
-                        .withValues(
-                  alpha:
-                      0.10,
-                ),
-                borderRadius:
-                    BorderRadius
-                        .circular(
-                  12,
-                ),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: primaryBlue.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
-                Icons
-                    .menu_book_rounded,
-                color:
-                    primaryBlue,
-                size:
-                    24,
+                Icons.menu_book_rounded,
+                color: primaryBlue,
+                size: 24,
               ),
             ),
 
-            const SizedBox(
-              width: 16,
-            ),
+            const SizedBox(width: 16),
 
             Expanded(
-              child:
-                  Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment
-                        .start,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (order > 0) ...[
                     Text(
                       'MODULE $order',
-                      style:
-                          const TextStyle(
-                        color:
-                            primaryBlue,
-                        fontSize:
-                            9.5,
-                        fontWeight:
-                            FontWeight
-                                .w800,
-                        letterSpacing:
-                            0.7,
+                      style: const TextStyle(
+                        color: primaryBlue,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.7,
                       ),
                     ),
 
-                    const SizedBox(
-                      height:
-                          3,
-                    ),
+                    const SizedBox(height: 3),
                   ],
 
                   Text(
                     title,
-                    style:
-                        const TextStyle(
-                      color:
-                          textDark,
-                      fontSize:
-                          15,
-                      fontWeight:
-                          FontWeight
-                              .w800,
+                    style: const TextStyle(
+                      color: textDark,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
 
-                  if (description
-                      .trim()
-                      .isNotEmpty) ...[
-                    const SizedBox(
-                      height:
-                          4,
-                    ),
+                  if (description.trim().isNotEmpty) ...[
+                    const SizedBox(height: 4),
 
                     Text(
                       description,
-                      maxLines:
-                          2,
-                      overflow:
-                          TextOverflow
-                              .ellipsis,
-                      style:
-                          const TextStyle(
-                        color:
-                            textGrey,
-                        fontSize:
-                            12,
-                        height:
-                            1.4,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: textGrey,
+                        fontSize: 12,
+                        height: 1.4,
                       ),
                     ),
                   ],
@@ -863,14 +585,7 @@ class _SubjectOverviewScreenState
               ),
             ),
 
-            const Icon(
-              Icons
-                  .chevron_right_rounded,
-              color:
-                  Color(
-                0xFF9BA4B4,
-              ),
-            ),
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF9BA4B4)),
           ],
         ),
       ),
@@ -883,66 +598,36 @@ class _SubjectOverviewScreenState
 
   Widget _buildTasksTab() {
     if (_isLoadingTasks) {
-      return const Center(
-        child:
-            CircularProgressIndicator(
-          color:
-              primaryBlue,
-        ),
-      );
+      return const Center(child: CircularProgressIndicator(color: primaryBlue));
     }
 
     if (_taskError != null) {
-      return _buildErrorState(
-        message:
-            _taskError!,
-        onRetry:
-            _loadTasks,
-      );
+      return _buildErrorState(message: _taskError!, onRetry: _loadTasks);
     }
 
-    if (_assignments.isEmpty &&
-        _quizzes.isEmpty) {
+    if (_assignments.isEmpty && _quizzes.isEmpty) {
       return const Center(
         child: Column(
-          mainAxisSize:
-              MainAxisSize.min,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons
-                  .task_alt_rounded,
-              size: 48,
-              color:
-                  primaryBlue,
-            ),
+            Icon(Icons.task_alt_rounded, size: 48, color: primaryBlue),
 
-            SizedBox(
-              height: 12,
-            ),
+            SizedBox(height: 12),
 
             Text(
               'No tasks available',
               style: TextStyle(
                 fontSize: 16,
-                fontWeight:
-                    FontWeight.w800,
-                color:
-                    textDark,
+                fontWeight: FontWeight.w800,
+                color: textDark,
               ),
             ),
 
-            SizedBox(
-              height: 5,
-            ),
+            SizedBox(height: 5),
 
             Text(
               'Assignments and quizzes will appear here.',
-              style: TextStyle(
-                color:
-                    textGrey,
-                fontSize:
-                    12,
-              ),
+              style: TextStyle(color: textGrey, fontSize: 12),
             ),
           ],
         ),
@@ -950,25 +635,13 @@ class _SubjectOverviewScreenState
     }
 
     return RefreshIndicator(
-      color:
-          primaryBlue,
-      onRefresh:
-          _loadTasks,
-      child:
-          ListView(
-        physics:
-            const AlwaysScrollableScrollPhysics(
-          parent:
-              BouncingScrollPhysics(),
+      color: primaryBlue,
+      onRefresh: _loadTasks,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
         ),
-        padding:
-            const EdgeInsets
-                .symmetric(
-          horizontal:
-              24,
-          vertical:
-              12,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         children: [
           // ======================================================
           // ASSIGNMENTS
@@ -977,229 +650,119 @@ class _SubjectOverviewScreenState
           const Text(
             'Assignments',
             style: TextStyle(
-              fontSize:
-                  16,
-              fontWeight:
-                  FontWeight
-                      .w800,
-              color:
-                  textDark,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: textDark,
             ),
           ),
 
-          const SizedBox(
-            height:
-                14,
-          ),
+          const SizedBox(height: 14),
 
           if (_assignments.isEmpty)
-            const Text(
-              'No assignments.',
-              style: TextStyle(
-                color:
-                    textGrey,
-              ),
-            )
+            const Text('No assignments.', style: TextStyle(color: textGrey))
           else
-            ..._assignments.map(
-              (
-                assignment,
-              ) {
-                final String assignmentId =
-                    (assignment['id'] ??
-                            '')
-                        .toString();
+            ..._assignments.map((assignment) {
+              final String assignmentId = (assignment['id'] ?? '').toString();
 
-                final String title =
-                    (assignment['title'] ??
-                            'Assignment')
-                        .toString();
+              final String title = (assignment['title'] ?? 'Assignment')
+                  .toString();
 
-                final int points =
-                    assignment['points']
-                            is num
-                        ? (assignment[
-                                    'points']
-                                as num)
-                            .toInt()
-                        : 0;
+              final int points = assignment['points'] is num
+                  ? (assignment['points'] as num).toInt()
+                  : 0;
 
-                return _buildTaskCard(
-                  title:
-                      title,
-                  subtitle:
-                      '$points points • Assignment',
-                  icon:
-                      Icons.assignment_outlined,
-                  iconColor:
-                      Colors.orange,
-                  iconBg:
-                      Colors.orange.withValues(
-                    alpha:
-                        0.10,
-                  ),
-                  onTap:
-                      () async {
-                    if (assignmentId
-                        .isEmpty) {
-                      return;
-                    }
+              return _buildTaskCard(
+                title: title,
+                subtitle: '$points points • Assignment',
+                icon: Icons.assignment_outlined,
+                iconColor: Colors.orange,
+                iconBg: Colors.orange.withValues(alpha: 0.10),
+                onTap: () async {
+                  if (assignmentId.isEmpty) {
+                    return;
+                  }
 
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (
-                          context,
-                        ) =>
-                                AssignmentDetailsScreen(
-                          assignmentId:
-                              assignmentId,
-                        ),
-                      ),
-                    );
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          AssignmentDetailsScreen(assignmentId: assignmentId),
+                    ),
+                  );
 
-                    if (!mounted) return;
+                  if (!mounted) return;
 
-                    await _loadTasks();
-                  },
-                );
-              },
-            ),
+                  await _loadTasks();
+                },
+              );
+            }),
 
           const Padding(
-            padding:
-                EdgeInsets.symmetric(
-              vertical:
-                  18,
-            ),
-            child:
-                Divider(
-              height:
-                  1,
-              color:
-                  Color(
-                0xFFF0F2F5,
-              ),
-            ),
+            padding: EdgeInsets.symmetric(vertical: 18),
+            child: Divider(height: 1, color: Color(0xFFF0F2F5)),
           ),
 
           // ======================================================
           // QUIZZES
           // ======================================================
-
           const Text(
             'Quizzes',
             style: TextStyle(
-              fontSize:
-                  16,
-              fontWeight:
-                  FontWeight
-                      .w800,
-              color:
-                  textDark,
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: textDark,
             ),
           ),
 
-          const SizedBox(
-            height:
-                14,
-          ),
+          const SizedBox(height: 14),
 
           if (_quizzes.isEmpty)
-            const Text(
-              'No quizzes.',
-              style: TextStyle(
-                color:
-                    textGrey,
-              ),
-            )
+            const Text('No quizzes.', style: TextStyle(color: textGrey))
           else
-            ..._quizzes.map(
-              (
-                quiz,
-              ) {
-                final String quizId =
-                    (quiz['id'] ??
-                            '')
-                        .toString();
+            ..._quizzes.map((quiz) {
+              final String quizId = (quiz['id'] ?? '').toString();
 
-                final String title =
-                    (quiz['title'] ??
-                            'Quiz')
-                        .toString();
+              final String title = (quiz['title'] ?? 'Quiz').toString();
 
-                final int totalPoints =
-                    quiz['totalPoints']
-                            is num
-                        ? (quiz[
-                                    'totalPoints']
-                                as num)
-                            .toInt()
-                        : 0;
+              final int totalPoints = quiz['totalPoints'] is num
+                  ? (quiz['totalPoints'] as num).toInt()
+                  : 0;
 
-                final int timeLimit =
-                    quiz['timeLimit']
-                            is num
-                        ? (quiz[
-                                    'timeLimit']
-                                as num)
-                            .toInt()
-                        : 0;
+              final int timeLimit = quiz['timeLimit'] is num
+                  ? (quiz['timeLimit'] as num).toInt()
+                  : 0;
 
-                final String subtitle =
-                    timeLimit > 0
-                        ? '$totalPoints points • $timeLimit min'
-                        : '$totalPoints points • Online Quiz';
+              final String subtitle = timeLimit > 0
+                  ? '$totalPoints points • $timeLimit min'
+                  : '$totalPoints points • Online Quiz';
 
-                return _buildTaskCard(
-                  title:
-                      title,
-                  subtitle:
-                      subtitle,
-                  icon:
-                      Icons.quiz_rounded,
-                  iconColor:
-                      primaryBlue,
-                  iconBg:
-                      primaryBlue.withValues(
-                    alpha:
-                        0.10,
-                  ),
-                  onTap:
-                      () async {
-                    if (quizId.isEmpty) {
-                      return;
-                    }
+              return _buildTaskCard(
+                title: title,
+                subtitle: subtitle,
+                icon: Icons.quiz_rounded,
+                iconColor: primaryBlue,
+                iconBg: primaryBlue.withValues(alpha: 0.10),
+                onTap: () async {
+                  if (quizId.isEmpty) {
+                    return;
+                  }
 
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (
-                          context,
-                        ) =>
-                                GeneralQuizScreen(
-                          quizId:
-                              quizId,
-                          quizTitle:
-                              title,
-                        ),
-                      ),
-                    );
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          GeneralQuizScreen(quizId: quizId, quizTitle: title),
+                    ),
+                  );
 
-                    if (!mounted) return;
+                  if (!mounted) return;
 
-                    await _loadTasks();
-                  },
-                );
-              },
-            ),
+                  await _loadTasks();
+                },
+              );
+            }),
 
-          const SizedBox(
-            height:
-                30,
-          ),
+          const SizedBox(height: 30),
         ],
       ),
     );
@@ -1218,128 +781,56 @@ class _SubjectOverviewScreenState
     required VoidCallback onTap,
   }) {
     return GestureDetector(
-      onTap:
-          onTap,
-      child:
-          Container(
-        margin:
-            const EdgeInsets
-                .only(
-          bottom:
-              12,
-        ),
-        padding:
-            const EdgeInsets
-                .all(
-          16,
-        ),
-        decoration:
-            BoxDecoration(
-          color:
-              Colors.white,
-          borderRadius:
-              BorderRadius
-                  .circular(
-            16,
-          ),
-          border:
-              Border.all(
-            color:
-                const Color(
-              0xFFE6EAF0,
-            ),
-            width:
-                1.5,
-          ),
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE6EAF0), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color:
-                  Colors.black
-                      .withValues(
-                alpha:
-                    0.015,
-              ),
-              blurRadius:
-                  10,
-              offset:
-                  const Offset(
-                0,
-                4,
-              ),
+              color: Colors.black.withValues(alpha: 0.015),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
-        child:
-            Row(
+        child: Row(
           children: [
             Container(
-              padding:
-                  const EdgeInsets
-                      .all(
-                12,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(12),
               ),
-              decoration:
-                  BoxDecoration(
-                color:
-                    iconBg,
-                borderRadius:
-                    BorderRadius
-                        .circular(
-                  12,
-                ),
-              ),
-              child:
-                  Icon(
-                icon,
-                color:
-                    iconColor,
-                size:
-                    24,
-              ),
+              child: Icon(icon, color: iconColor, size: 24),
             ),
 
-            const SizedBox(
-              width:
-                  16,
-            ),
+            const SizedBox(width: 16),
 
             Expanded(
-              child:
-                  Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment
-                        .start,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style:
-                        const TextStyle(
-                      fontWeight:
-                          FontWeight
-                              .w800,
-                      fontSize:
-                          15,
-                      color:
-                          textDark,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      color: textDark,
                     ),
                   ),
 
-                  const SizedBox(
-                    height:
-                        4,
-                  ),
+                  const SizedBox(height: 4),
 
                   Text(
                     subtitle,
-                    style:
-                        const TextStyle(
-                      color:
-                          textGrey,
-                      fontSize:
-                          12,
-                      fontWeight:
-                          FontWeight
-                              .w500,
+                    style: const TextStyle(
+                      color: textGrey,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
@@ -1347,14 +838,9 @@ class _SubjectOverviewScreenState
             ),
 
             const Icon(
-              Icons
-                  .chevron_right_rounded,
-              color:
-                  Color(
-                0xFF9BA4B4,
-              ),
-              size:
-                  20,
+              Icons.chevron_right_rounded,
+              color: Color(0xFF9BA4B4),
+              size: 20,
             ),
           ],
         ),
@@ -1371,62 +857,34 @@ class _SubjectOverviewScreenState
     required Future<void> Function() onRetry,
   }) {
     return Center(
-      child:
-          Padding(
-        padding:
-            const EdgeInsets.all(
-          24,
-        ),
-        child:
-            Column(
-          mainAxisSize:
-              MainAxisSize.min,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons
-                  .error_outline_rounded,
-              color:
-                  Colors.redAccent,
-              size:
-                  42,
+              Icons.error_outline_rounded,
+              color: Colors.redAccent,
+              size: 42,
             ),
 
-            const SizedBox(
-              height:
-                  10,
-            ),
+            const SizedBox(height: 10),
 
             Text(
               message,
-              textAlign:
-                  TextAlign.center,
-              style:
-                  const TextStyle(
-                color:
-                    textGrey,
-                fontWeight:
-                    FontWeight
-                        .w600,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: textGrey,
+                fontWeight: FontWeight.w600,
               ),
             ),
 
-            const SizedBox(
-              height:
-                  10,
-            ),
+            const SizedBox(height: 10),
 
             TextButton.icon(
-              onPressed:
-                  onRetry,
-              icon:
-                  const Icon(
-                Icons
-                    .refresh_rounded,
-              ),
-              label:
-                  const Text(
-                'Try Again',
-              ),
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Try Again'),
             ),
           ],
         ),

@@ -66,7 +66,7 @@ class LearnerAssistantReport {
     if (subjectsOnly || detailsOnly) return out.toString().trim();
     final selected = tasks.where((task) {
       final status = task['status'];
-      if (missing)
+      if (missing) {
         return [
           'Missing',
           'Not complied',
@@ -74,10 +74,14 @@ class LearnerAssistantReport {
           'Awaiting instructor verification',
           'Unverified record',
         ].contains(status);
-      if (approved) return status == 'Approved / complied';
-      if (pending)
+      }
+      if (approved) {
+        return status == 'Approved / complied';
+      }
+      if (pending) {
         return status == 'Submitted — awaiting grade' ||
             status == 'Awaiting instructor verification';
+      }
       return true;
     }).toList();
     out.writeln(
@@ -92,8 +96,9 @@ class LearnerAssistantReport {
     for (final task in selected) {
       out.writeln('• ${task['subject']} / ${task['title']}: ${task['status']}');
     }
-    if (selected.isEmpty)
+    if (selected.isEmpty) {
       out.writeln('No matching published requirements found.');
+    }
     out.writeln(
       '\nSubmitted and graded work do not automatically mean approved or passed.',
     );
@@ -137,8 +142,9 @@ String assistantRequirementStatus(
   final googleForm =
       _lower(task['submissionMethod']) == 'google_form' ||
       _lower(result?['submissionType']) == 'google_form';
-  if (result == null)
+  if (result == null) {
     return googleForm ? 'Awaiting instructor verification' : 'Missing';
+  }
   final status = _lower(result['status']);
   final compliance = _lower(result['complianceStatus']);
   if (status == 'not_complied' ||
@@ -155,11 +161,14 @@ String assistantRequirementStatus(
         ? 'Approved / complied'
         : 'Awaiting instructor verification';
   }
-  if (status == 'in_progress') return 'In progress';
+  if (status == 'in_progress') {
+    return 'In progress';
+  }
   if (['graded', 'completed', 'submitted'].contains(status) &&
       result['score'] is num &&
-      (status == 'graded' || source == 'quiz'))
+      (status == 'graded' || source == 'quiz')) {
     return 'Graded';
+  }
   if (!['submitted', 'graded'].contains(status) ||
       result['submittedAt'] == null) {
     return 'Unverified record';

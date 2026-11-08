@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class CaslmsGuide {
   const CaslmsGuide(
-    this.title, 
+    this.title,
     this.steps, {
     this.planned = false,
     this.imageAsset, // NEW: Added optional image asset path
@@ -21,181 +21,125 @@ class CaslmsGuides {
   static List<CaslmsGuide> forRole(String role) {
     if (role == 'instructor') {
       return const [
+        CaslmsGuide('Create a course', [
+          'Open My Courses from the instructor dashboard.',
+          'Select Create Course.',
+          'Enter the course code, title, description, and academic details.',
+          'Save the course, then open its details.',
+        ], imageAsset: 'assets/images/instructor_create_course.png'),
+        CaslmsGuide('Add a section', [
+          'Open My Courses and choose a course.',
+          'Select Add Section.',
+          'Enter a section name and identifier, such as BSIT 1A.',
+          'Save the section, then invite students using their Campus IDs.',
+          'Add as many sections as needed; there is no fixed limit.',
+        ], imageAsset: 'assets/images/instructor_add_section.png'),
+        CaslmsGuide('Enroll students', [
+          'Open the course and identify the correct section.',
+          'Open the section and select Invite student.',
+          'Enter the student Campus ID and send the invitation.',
+          'The student accepts it from Course invitations on the dashboard.',
+          'Check the student roster before assigning activities.',
+        ], imageAsset: 'assets/images/instructor_enroll_students.png'),
+        CaslmsGuide('Upload learning materials', [
+          'Open the course and select Course Tools & Materials.',
+          'Open or create the appropriate module.',
+          'Choose the option for adding learning materials.',
+          'Select a supported file or link, then save.',
+          'Verify that students can access the published material.',
+        ], imageAsset: 'assets/images/instructor_upload_materials.png'),
+        CaslmsGuide('Create assessments', [
+          'Open the relevant course and module.',
+          'Choose Create Assessment.',
+          'Select the assessment type and enter instructions.',
+          'Set points, submission details, and the due date.',
+          'Review the assessment before publishing.',
+          'Section-specific assessment controls are being integrated.',
+        ], imageAsset: 'assets/images/instructor_create_assessment.png'),
+        CaslmsGuide('Use the AI assistant', [
+          'Open the AI Assistant tab in the instructor area.',
+          'Choose a course context if the teaching assistant is available.',
+          'Ask for lesson plans, quizzes, assignments, or learning activities.',
+          'Review the result before copying it into your materials.',
+          'AI requires a working Firebase AI service and available quota.',
+        ], imageAsset: 'assets/images/instructor_ai_assistant.png'),
         CaslmsGuide(
-          'Create a course', 
-          [
-            'Open My Courses from the instructor dashboard.',
-            'Select Create Course.',
-            'Enter the course code, title, description, and academic details.',
-            'Save the course, then open its details.',
-          ],
-          imageAsset: 'assets/images/instructor_create_course.png',
-        ),
-        CaslmsGuide(
-          'Add a section', 
-          [
-            'Open My Courses and choose a course.',
-            'Select Add Section.',
-            'Enter a section name and identifier, such as BSIT 1A.',
-            'Save the section, then invite students using their Campus IDs.',
-            'Add as many sections as needed; there is no fixed limit.',
-          ],
-          imageAsset: 'assets/images/instructor_add_section.png',
-        ),
-        CaslmsGuide(
-          'Enroll students', 
-          [
-            'Open the course and identify the correct section.',
-            'Open the section and select Invite student.',
-            'Students accept the invitation from Course invitations on their dashboard.',
-            'For original classes, use the instructor invitation workflow.',
-            'Check the student roster before assigning activities.',
-          ],
-          imageAsset: 'assets/images/instructor_enroll_students.png',
-        ),
-        CaslmsGuide(
-          'Upload learning materials', 
-          [
-            'Open the course and select Course Tools & Materials.',
-            'Open or create the appropriate module.',
-            'Choose the option for adding learning materials.',
-            'Select a supported file or link, then save.',
-            'Verify that students can access the published material.',
-          ],
-          imageAsset: 'assets/images/instructor_upload_materials.png',
-        ),
-        CaslmsGuide(
-          'Create assessments', 
-          [
-            'Open the relevant course and module.',
-            'Choose Create Assessment.',
-            'Select the assessment type and enter instructions.',
-            'Set points, submission details, and the due date.',
-            'Review the assessment before publishing.',
-            'Section-specific assessment controls are being integrated.',
-          ],
-          imageAsset: 'assets/images/instructor_create_assessment.png',
-        ),
-        CaslmsGuide(
-          'Use the AI assistant', 
-          [
-            'Open the AI Assistant tab in the instructor area.',
-            'Choose a course context if the teaching assistant is available.',
-            'Ask for lesson plans, quizzes, assignments, or learning activities.',
-            'Review the result before copying it into your materials.',
-            'AI requires a working Firebase AI service and available quota.',
-          ],
-          imageAsset: 'assets/images/instructor_ai_assistant.png',
-        ),
-        CaslmsGuide(
-          'Create grading rubrics', 
+          'Create grading rubrics',
           [
             'Choose the essay assessment you want to grade.',
             'Define criteria such as content, organization, and grammar.',
             'Assign maximum points or weights to each criterion.',
             'Review the rubric before it is used for grading.',
             'The rubric editor is part of the ongoing essay-grading feature.',
-          ], 
+          ],
           planned: true,
           imageAsset: 'assets/images/instructor_grading_rubrics.png',
         ),
+        CaslmsGuide('Check student submissions', [
+          'Open the instructor Grading area.',
+          'Select the course and assessment.',
+          'Review each available student submission.',
+          'Check the response, attachments, and submission status.',
+          'Section-specific submission separation is being integrated.',
+        ], imageAsset: 'assets/images/instructor_check_submissions.png'),
         CaslmsGuide(
-          'Check student submissions', 
-          [
-            'Open the instructor Grading area.',
-            'Select the course and assessment.',
-            'Review each available student submission.',
-            'Check the response, attachments, and submission status.',
-            'Section-specific submission separation is being integrated.',
-          ],
-          imageAsset: 'assets/images/instructor_check_submissions.png',
-        ),
-        CaslmsGuide(
-          'Review and publish grades', 
+          'Review and publish grades',
           [
             'Open an assessment submission in Grading.',
             'Review the score and instructor feedback.',
             'For AI-assisted essays, treat any AI score as a suggestion.',
             'Correct the score and feedback before approving.',
             'The full AI rubric approval workflow is still being developed.',
-          ], 
+          ],
           planned: true,
           // Assuming you will add this image later, using the root assets/images path
-          imageAsset: 'assets/images/instructor_publish_grades.png', 
+          imageAsset: 'assets/images/instructor_publish_grades.png',
         ),
       ];
     }
 
     if (role == 'student') {
       return const [
-        CaslmsGuide(
-          'Join a section', 
-          [
-            'Open the Student Dashboard.',
-            'Open Course invitations on your dashboard.',
-            'Review the course and section, then accept your instructor’s invitation.',
-            'The class appears in My Classes automatically.',
-          ],
-          imageAsset: 'assets/images/student_join_section.png',
-        ),
-        CaslmsGuide(
-          'Find learning materials', 
-          [
-            'Open your enrolled classes.',
-            'Choose the course and look for its modules.',
-            'Open a module to view available learning materials.',
-          ],
-          imageAsset: 'assets/images/student_find_materials.png',
-        ),
-        CaslmsGuide(
-          'Complete assessments', 
-          [
-            'Open Assignments or the assessment inside a course.',
-            'Read the instructions and due date.',
-            'Complete the activity and verify successful submission.',
-          ],
-          imageAsset: 'assets/images/student_complete_assessments.png',
-        ),
-        CaslmsGuide(
-          'View grades and feedback', 
-          [
-            'Open your Progress or assessment results area.',
-            'Review published results and instructor feedback.',
-            'Contact your instructor about missing or incorrect results.',
-          ],
-          imageAsset: 'assets/images/student_view_grades.png',
-        ),
+        CaslmsGuide('Join a section', [
+          'Open the Student Dashboard.',
+          'Open Course invitations on the Student Dashboard.',
+          'Review the course and section sent by your instructor.',
+          'Accept the invitation. The class appears in My Classes automatically.',
+        ], imageAsset: 'assets/images/student_join_section.png'),
+        CaslmsGuide('Find learning materials', [
+          'Open your enrolled classes.',
+          'Choose the course and look for its modules.',
+          'Open a module to view available learning materials.',
+        ], imageAsset: 'assets/images/student_find_materials.png'),
+        CaslmsGuide('Complete assessments', [
+          'Open Assignments or the assessment inside a course.',
+          'Read the instructions and due date.',
+          'Complete the activity and verify successful submission.',
+        ], imageAsset: 'assets/images/student_complete_assessments.png'),
+        CaslmsGuide('View grades and feedback', [
+          'Open your Progress or assessment results area.',
+          'Review published results and instructor feedback.',
+          'Contact your instructor about missing or incorrect results.',
+        ], imageAsset: 'assets/images/student_view_grades.png'),
       ];
     }
 
     return const [
-      CaslmsGuide(
-        'Get started', 
-        [
-          'Review the main dashboard.',
-          'Use the navigation menu to open your assigned features.',
-          'Check notifications for new actions or updates.',
-        ],
-        imageAsset: 'assets/images/general_get_started.png',
-      ),
-      CaslmsGuide(
-        'Use the system safely', 
-        [
-          'Only access records you are authorized to view.',
-          'Review information before saving important changes.',
-          'Sign out after using a shared computer.',
-        ],
-        imageAsset: 'assets/images/general_use_safely.png',
-      ),
-      CaslmsGuide(
-        'Find help', 
-        [
-          'Open Help & User Guide.',
-          'Choose a topic that matches your task.',
-          'Replay the guided tour whenever you need a refresher.',
-        ],
-        imageAsset: 'assets/images/general_find_help.png',
-      ),
+      CaslmsGuide('Get started', [
+        'Review the main dashboard.',
+        'Use the navigation menu to open your assigned features.',
+        'Check notifications for new actions or updates.',
+      ], imageAsset: 'assets/images/general_get_started.png'),
+      CaslmsGuide('Use the system safely', [
+        'Only access records you are authorized to view.',
+        'Review information before saving important changes.',
+        'Sign out after using a shared computer.',
+      ], imageAsset: 'assets/images/general_use_safely.png'),
+      CaslmsGuide('Find help', [
+        'Open Help & User Guide.',
+        'Choose a topic that matches your task.',
+        'Replay the guided tour whenever you need a refresher.',
+      ], imageAsset: 'assets/images/general_find_help.png'),
     ];
   }
 }
@@ -324,7 +268,10 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
         body: SafeArea(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 32.0,
+            ),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final bool isWide = constraints.maxWidth > 800;
@@ -340,14 +287,20 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                     decoration: BoxDecoration(
                       color: const Color(0xFFF7F9FC),
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: const Color(0xFFE6EAF0), width: 1.5),
+                      border: Border.all(
+                        color: const Color(0xFFE6EAF0),
+                        width: 1.5,
+                      ),
                     ),
-                    child: (entry.imageAsset != null && entry.imageAsset!.isNotEmpty)
+                    child:
+                        (entry.imageAsset != null &&
+                            entry.imageAsset!.isNotEmpty)
                         ? Image.asset(
                             entry.imageAsset!,
                             // CHANGED: Use contain so the entire image fits inside the bounds without cropping
-                            fit: BoxFit.contain, 
-                            errorBuilder: (context, error, stackTrace) => _buildPlaceholder(entry),
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) =>
+                                _buildPlaceholder(entry),
                           )
                         : _buildPlaceholder(entry),
                   ),
@@ -434,8 +387,11 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.build_circle_outlined,
-                                color: Colors.deepOrange, size: 22),
+                            const Icon(
+                              Icons.build_circle_outlined,
+                              color: Colors.deepOrange,
+                              size: 22,
+                            ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
@@ -461,11 +417,16 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                             style: OutlinedButton.styleFrom(
                               foregroundColor: const Color(0xFF10182F),
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 24, vertical: 18),
+                                horizontal: 24,
+                                vertical: 18,
+                              ),
                               side: const BorderSide(
-                                  color: Color(0xFFE6EAF0), width: 1.5),
+                                color: Color(0xFFE6EAF0),
+                                width: 1.5,
+                              ),
                               shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14)),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                             ),
                             child: const Text(
                               'Back',
@@ -484,9 +445,12 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                           style: FilledButton.styleFrom(
                             backgroundColor: primaryTeal,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 32, vertical: 18),
+                              horizontal: 32,
+                              vertical: 18,
+                            ),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14)),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
                             elevation: 0,
                           ),
                           icon: Icon(
@@ -498,7 +462,9 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                           label: Text(
                             last ? 'Finish Tour' : 'Next Step',
                             style: const TextStyle(
-                                fontWeight: FontWeight.w800, fontSize: 14),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
                       ],
@@ -673,7 +639,10 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                 decoration: InputDecoration(
                   hintText: 'Search help topics...',
                   hintStyle: const TextStyle(color: Color(0xFFA0A8B7)),
-                  prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF00897B)),
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    color: Color(0xFF00897B),
+                  ),
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
@@ -686,7 +655,10 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Color(0xFF00897B), width: 1.5),
+                    borderSide: const BorderSide(
+                      color: Color(0xFF00897B),
+                      width: 1.5,
+                    ),
                   ),
                 ),
               ),
@@ -701,7 +673,11 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                   ),
                   child: const Column(
                     children: [
-                      Icon(Icons.search_off_rounded, size: 48, color: Color(0xFF00897B)),
+                      Icon(
+                        Icons.search_off_rounded,
+                        size: 48,
+                        color: Color(0xFF00897B),
+                      ),
                       SizedBox(height: 16),
                       Text(
                         'No matching guide topics.',
@@ -723,8 +699,12 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                     side: const BorderSide(color: Color(0xFFE6EAF0)),
                   ),
                   child: ExpansionTile(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    collapsedShape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
@@ -763,7 +743,8 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                               ListTile(
                                 leading: CircleAvatar(
                                   radius: 12,
-                                  backgroundColor: const Color(0xFF00897B).withValues(alpha: 0.1),
+                                  backgroundColor: const Color(0xFF00897B)
+                                      .withValues(alpha: 0.1),
                                   child: Text(
                                     '${i + 1}',
                                     style: const TextStyle(
@@ -797,7 +778,10 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF00897B),
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: const BorderSide(color: Color(0xFF00897B), width: 1.5),
+                    side: const BorderSide(
+                      color: Color(0xFF00897B),
+                      width: 1.5,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),

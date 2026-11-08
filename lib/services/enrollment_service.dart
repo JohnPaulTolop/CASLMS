@@ -1,18 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-
-import '../models/course_order.dart';
-import 'live_courses_service.dart';
-
 import 'package:firebase_auth/firebase_auth.dart';
 
 class EnrollmentService {
-  Stream<List<Map<String, dynamic>>> watchMyActiveCourses() {
-    final uid = _auth.currentUser?.uid;
-    return uid == null
-        ? Stream.value([])
-        : LiveCoursesService.watch(_firestore, uid);
-  }
-
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -67,61 +56,6 @@ class EnrollmentService {
     } catch (_) {
       throw EnrollmentServiceException('Unable to load student profile.');
     }
-  }
-
-  // ============================================================
-  // NORMALIZE CLASS CODE
-  // ============================================================
-
-  String normalizeClassCode(String value) {
-    return value.trim().toUpperCase();
-  }
-
-  // ============================================================
-  // FIND COURSE BY CLASS CODE
-  // ============================================================
-
-  Future<Map<String, dynamic>?> findCourseByClassCode(String classCode) async {
-    try {
-      final String cleanCode = normalizeClassCode(classCode);
-
-      if (cleanCode.isEmpty) {
-        return null;
-      }
-
-      final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
-          .collection('courses')
-          .where('classCode', isEqualTo: cleanCode)
-          .limit(1)
-          .get();
-
-      if (snapshot.docs.isEmpty) {
-        return null;
-      }
-
-      final QueryDocumentSnapshot<Map<String, dynamic>> document =
-          snapshot.docs.first;
-
-      final Map<String, dynamic> data = document.data();
-
-      return {...data, 'id': document.id, 'courseId': document.id};
-    } on FirebaseException catch (e) {
-      throw EnrollmentServiceException(
-        e.message ?? 'Unable to search for class.',
-      );
-    } catch (_) {
-      throw EnrollmentServiceException('Unable to search for class.');
-    }
-  }
-
-  // ============================================================
-  // JOIN CLASS
-  // ============================================================
-
-  Future<Map<String, dynamic>> joinClass({required String classCode}) async {
-    throw EnrollmentServiceException(
-      'Classes are invitation-only. Accept an invitation from your instructor.',
-    );
   }
 
   // ============================================================
@@ -193,13 +127,18 @@ class EnrollmentService {
           'courseId': courseId,
 
           'enrollmentId': enrollmentDocument.id,
-          'joinedAt': enrollment['enrolledAt'] ?? enrollment['acceptedAt'],
           'sectionId': (enrollment['sectionId'] ?? course['classCode'] ?? '')
               .toString(),
         });
       }
 
-      courses.sort(compareJoinedCourses);
+      courses.sort((a, b) {
+        final String codeA = (a['code'] ?? '').toString().toUpperCase();
+
+        final String codeB = (b['code'] ?? '').toString().toUpperCase();
+
+        return codeA.compareTo(codeB);
+      });
 
       return courses;
     } on EnrollmentServiceException {

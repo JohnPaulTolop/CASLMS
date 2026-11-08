@@ -1,7 +1,3 @@
-import 'dart:async';
-
-import 'ai_router_service.dart';
-
 import 'dart:convert';
 
 import 'package:archive/archive.dart';
@@ -19,15 +15,7 @@ class FirebaseAiService {
     sb.SupabaseClient? supabaseClient,
   }) : _model =
            model ??
-           FirebaseAI.googleAI().generativeModel(
-             model: 'gemini-3.7-flash',
-             generationConfig: GenerationConfig(
-               maxOutputTokens: 1200,
-               thinkingConfig: ThinkingConfig.withThinkingLevel(
-                 ThinkingLevel.low,
-               ),
-             ),
-           ),
+           FirebaseAI.googleAI().generativeModel(model: 'gemini-3.7-flash'),
        _firestore = firestore ?? FirebaseFirestore.instance,
        _supabase = supabaseClient ?? sb.Supabase.instance.client;
 
@@ -54,6 +42,8 @@ class FirebaseAiService {
   // Limit extracted text so one huge Office document does not
   // consume an excessive number of tokens or time out.
   static const int _maximumExtractedCharacters = 120000;
+
+  static const int _maximumAiAttempts = 3;
 
   // Shared by all FirebaseAiService instances in the app.
   // When Gemini tells us to wait because of quota, CASLMS avoids
@@ -107,18 +97,7 @@ class FirebaseAiService {
 
   Future<String> testConnection() async {
     try {
-      if (AiRouterService.enabled) {
-        return await AiRouterService().complete(
-          task: 'teaching_chat',
-          messages: [
-            {
-              'role': 'user',
-              'content': 'Reply with exactly: CASLMS AI CONNECTED',
-            },
-          ],
-        );
-      }
-      final GenerateContentResponse response = await _generateContentBounded(
+      final GenerateContentResponse response = await _generateContentWithRetry(
         model: _model,
         contents: [
           Content.text(
@@ -200,12 +179,13 @@ POSSIBLE LEARNING OBJECTIVES
 - List learning objectives that are directly supported by the material.
 ''');
 
-      final String analysis = await _generatePrepared(
-        prepared: prepared,
-        prompt: prompt,
+      final GenerateContentResponse response = await _generateContentWithRetry(
         model: _model,
-        task: 'material_summary',
+        contents: [_buildContent(prepared, prompt)],
       );
+
+      final String analysis = (response.text ?? '').trim();
+
       if (analysis.isEmpty) {
         throw FirebaseAiServiceException('Gemini returned an empty analysis.');
       }
@@ -213,9 +193,7 @@ POSSIBLE LEARNING OBJECTIVES
       await resourceReference.update({
         'aiProcessingStatus': 'ready',
         'aiAnalysisSummary': analysis,
-        'aiModel': AiRouterService.enabled && prepared.inlinePart == null
-            ? 'ai-router'
-            : 'gemini-3.7-flash',
+        'aiModel': 'gemini-3.7-flash',
         'aiSourceBytes': prepared.sourceBytes,
         'aiInputMode': prepared.inputMode,
         'aiTextExtracted': prepared.textExtracted,
@@ -333,8 +311,6 @@ POSSIBLE LEARNING OBJECTIVES
     final GenerativeModel quizModel = FirebaseAI.googleAI().generativeModel(
       model: 'gemini-3.7-flash',
       generationConfig: GenerationConfig(
-        maxOutputTokens: 500 + questionCount * 300,
-        thinkingConfig: ThinkingConfig.withThinkingLevel(ThinkingLevel.low),
         responseMimeType: 'application/json',
         responseSchema: quizSchema,
       ),
@@ -371,13 +347,13 @@ Difficulty guidance:
 ''');
 
     try {
-      final String rawJson = await _generatePrepared(
-        prepared: prepared,
-        prompt: prompt,
+      final GenerateContentResponse response = await _generateContentWithRetry(
         model: quizModel,
-        task: 'quiz',
-        questionCount: questionCount,
+        contents: [_buildContent(prepared, prompt)],
       );
+
+      final String rawJson = (response.text ?? '').trim();
+
       if (rawJson.isEmpty) {
         throw FirebaseAiServiceException('Gemini returned an empty quiz.');
       }
@@ -485,49 +461,6 @@ Difficulty guidance:
   // ============================================================
   // BUILD GEMINI CONTENT
   // ============================================================
-
-  Future<String> _generatePrepared({
-    required _PreparedAiInput prepared,
-    required TextPart prompt,
-    required GenerativeModel model,
-    required String task,
-    int? questionCount,
-  }) async {
-    if (AiRouterService.enabled && prepared.inlinePart == null) {
-      final source = prepared.extractedText ?? '';
-      if (source.length + prompt.text.length > 32000) {
-        throw FirebaseAiServiceException(
-          'This material is too long for the text AI request. Split it into smaller documents.',
-        );
-      }
-      try {
-        return await AiRouterService().complete(
-          task: task,
-          questionCount: questionCount,
-          messages: [
-            {
-              'role': 'user',
-              'content': '${prompt.text}\n\nSOURCE MATERIAL:\n$source',
-            },
-          ],
-        );
-      } on AiRouterException catch (error) {
-        throw FirebaseAiServiceException(error.message, isTemporary: true);
-      }
-    }
-    final response = await _generateContentBounded(
-      model: model,
-      contents: [_buildContent(prepared, prompt)],
-    );
-    if (response.candidates.any(
-      (candidate) => candidate.finishReason == FinishReason.maxTokens,
-    )) {
-      throw FirebaseAiServiceException(
-        'The response reached its length limit. Use a shorter material or fewer questions.',
-      );
-    }
-    return (response.text ?? '').trim();
-  }
 
   Content _buildContent(_PreparedAiInput prepared, TextPart prompt) {
     final InlineDataPart? inlinePart = prepared.inlinePart;
@@ -1250,157 +1183,167 @@ Difficulty guidance:
   }
 
   // ============================================================
-  // BOUNDED GEMINI REQUEST + FRIENDLY ERROR HANDLING
+  // GEMINI RETRY + FRIENDLY ERROR HANDLING
   // ============================================================
 
-  Future<GenerateContentResponse> _generateContentBounded({
+  Future<GenerateContentResponse> _generateContentWithRetry({
     required GenerativeModel model,
     required List<Content> contents,
   }) async {
     _throwIfQuotaCooldownActive();
 
-    try {
-      final GenerateContentResponse response = await model
-          .generateContent(contents)
-          .timeout(const Duration(seconds: 75));
+    for (int attempt = 1; attempt <= _maximumAiAttempts; attempt++) {
+      try {
+        final GenerateContentResponse response = await model.generateContent(
+          contents,
+        );
 
-      // A successful response proves any previous local cooldown
-      // is no longer relevant.
-      _quotaBlockedUntil = null;
-      _dailyQuotaExhaustedForSession = false;
+        // A successful response proves any previous local cooldown
+        // is no longer relevant.
+        _quotaBlockedUntil = null;
+        _dailyQuotaExhaustedForSession = false;
 
-      return response;
-    } on TimeoutException {
-      throw FirebaseAiServiceException(
-        'AI processing took too long. Please retry.',
-        isTemporary: true,
-      );
-    } catch (e, stackTrace) {
-      if (e is FirebaseAiServiceException) {
-        rethrow;
-      }
+        return response;
+      } catch (e, stackTrace) {
+        if (e is FirebaseAiServiceException) {
+          rethrow;
+        }
 
-      final String rawError = e.toString();
+        final String rawError = e.toString();
 
-      // --------------------------------------------------------
-      // DEBUG: SHOW THE REAL FIREBASE AI / GEMINI ERROR
-      //
-      // This only prints in debug builds. It helps us see the
-      // original FirebaseAIException instead of only the short
-      // user-friendly snackbar message.
-      //
-      // Do not expose this raw error directly to students/users.
-      // --------------------------------------------------------
-
-      if (kDebugMode) {
-        debugPrint('============================================');
-
-        debugPrint('CASLMS GEMINI RAW ERROR');
-
-        debugPrint(rawError);
-
-        debugPrint('============================================');
-
-        debugPrintStack(stackTrace: stackTrace);
-      }
-
-      // --------------------------------------------------------
-      // QUOTA / RATE LIMIT
-      // --------------------------------------------------------
-
-      if (_isQuotaError(rawError)) {
-        // ------------------------------------------------------
-        // DAILY FREE-TIER QUOTA
+        // --------------------------------------------------------
+        // DEBUG: SHOW THE REAL FIREBASE AI / GEMINI ERROR
         //
-        // Gemini can return a RetryInfo delay of only a few
-        // seconds even when one of the violated quota IDs is:
+        // This only prints in debug builds. It helps us see the
+        // original FirebaseAIException instead of only the short
+        // user-friendly snackbar message.
         //
-        // GenerateRequestsPerDayPerProjectPerModel-FreeTier
-        //
-        // In that situation, showing "wait 4 seconds" is
-        // misleading. Detect the daily quota ID directly.
-        // ------------------------------------------------------
+        // Do not expose this raw error directly to students/users.
+        // --------------------------------------------------------
 
-        if (_isDailyQuotaError(rawError)) {
-          _dailyQuotaExhaustedForSession = true;
-          _quotaBlockedUntil = null;
+        if (kDebugMode) {
+          debugPrint('============================================');
+
+          debugPrint('CASLMS GEMINI RAW ERROR');
+
+          debugPrint(rawError);
+
+          debugPrint('============================================');
+
+          debugPrintStack(stackTrace: stackTrace);
+        }
+
+        // --------------------------------------------------------
+        // QUOTA / RATE LIMIT
+        // --------------------------------------------------------
+
+        if (_isQuotaError(rawError)) {
+          // ------------------------------------------------------
+          // DAILY FREE-TIER QUOTA
+          //
+          // Gemini can return a RetryInfo delay of only a few
+          // seconds even when one of the violated quota IDs is:
+          //
+          // GenerateRequestsPerDayPerProjectPerModel-FreeTier
+          //
+          // In that situation, showing "wait 4 seconds" is
+          // misleading. Detect the daily quota ID directly.
+          // ------------------------------------------------------
+
+          if (_isDailyQuotaError(rawError)) {
+            _dailyQuotaExhaustedForSession = true;
+            _quotaBlockedUntil = null;
+
+            throw FirebaseAiServiceException(
+              'Daily AI limit reached.\n\n'
+              'The Gemini free-tier request quota for today has been used. '
+              'Please try again after the daily quota resets.',
+              isTemporary: true,
+            );
+          }
+
+          // ------------------------------------------------------
+          // SHORT-TERM RATE LIMIT
+          // ------------------------------------------------------
+
+          final int seconds = (_extractRetryAfterSeconds(rawError) ?? 60)
+              .clamp(1, 3600)
+              .toInt();
+
+          _quotaBlockedUntil = DateTime.now().add(Duration(seconds: seconds));
 
           throw FirebaseAiServiceException(
-            'Daily AI limit reached.\n\n'
-            'The Gemini free-tier request quota for today has been used. '
-            'Please try again after the daily quota resets.',
+            'AI request limit reached. '
+            'Please wait about $seconds seconds and try again.',
+            isTemporary: true,
+            retryAfterSeconds: seconds,
+          );
+        }
+
+        // --------------------------------------------------------
+        // TEMPORARY 503 / UNAVAILABLE / DEADLINE
+        // --------------------------------------------------------
+
+        if (_isTemporaryServiceError(rawError)) {
+          if (attempt < _maximumAiAttempts) {
+            final int waitSeconds = attempt == 1 ? 2 : 4;
+
+            await Future<void>.delayed(Duration(seconds: waitSeconds));
+
+            continue;
+          }
+
+          throw FirebaseAiServiceException(
+            'Gemini is temporarily busy and could not finish processing '
+            'the material after several attempts. Please try again later.',
             isTemporary: true,
           );
         }
 
-        // ------------------------------------------------------
-        // SHORT-TERM RATE LIMIT
-        // ------------------------------------------------------
+        final String lower = rawError.toLowerCase();
 
-        final int seconds = (_extractRetryAfterSeconds(rawError) ?? 60)
-            .clamp(1, 3600)
-            .toInt();
+        if (lower.contains('413') ||
+            lower.contains('request entity too large') ||
+            lower.contains('payload too large')) {
+          throw FirebaseAiServiceException(
+            'This learning material is too large for the current AI request. '
+            'Use a smaller file or split it into parts.',
+          );
+        }
 
-        _quotaBlockedUntil = DateTime.now().add(Duration(seconds: seconds));
+        if (lower.contains('app check') ||
+            lower.contains('permission-denied') ||
+            lower.contains('permission denied') ||
+            lower.contains('403')) {
+          throw FirebaseAiServiceException(
+            'CASLMS AI authorization was rejected. '
+            'Please restart the app and try again.',
+          );
+        }
+
+        // --------------------------------------------------------
+        // UNKNOWN GEMINI ERROR
+        //
+        // During development, expose the original Firebase AI error
+        // on screen so the real cause can be diagnosed. Release builds
+        // still show a safe user-friendly message.
+        // --------------------------------------------------------
+
+        if (kDebugMode) {
+          throw FirebaseAiServiceException('DEBUG GEMINI ERROR:\n\n$rawError');
+        }
 
         throw FirebaseAiServiceException(
-          'AI request limit reached. '
-          'Please wait about $seconds seconds and try again.',
-          isTemporary: true,
-          retryAfterSeconds: seconds,
+          'Gemini could not complete this request. '
+          'Please try again later.',
         );
       }
-
-      // --------------------------------------------------------
-      // TEMPORARY 503 / UNAVAILABLE / DEADLINE
-      // --------------------------------------------------------
-
-      if (_isTemporaryServiceError(rawError)) {
-        throw FirebaseAiServiceException(
-          'Gemini is temporarily busy and could not finish processing '
-          'the material within its time budget. Please try again later.',
-          isTemporary: true,
-        );
-      }
-
-      final String lower = rawError.toLowerCase();
-
-      if (lower.contains('413') ||
-          lower.contains('request entity too large') ||
-          lower.contains('payload too large')) {
-        throw FirebaseAiServiceException(
-          'This learning material is too large for the current AI request. '
-          'Use a smaller file or split it into parts.',
-        );
-      }
-
-      if (lower.contains('app check') ||
-          lower.contains('permission-denied') ||
-          lower.contains('permission denied') ||
-          lower.contains('403')) {
-        throw FirebaseAiServiceException(
-          'CASLMS AI authorization was rejected. '
-          'Please restart the app and try again.',
-        );
-      }
-
-      // --------------------------------------------------------
-      // UNKNOWN GEMINI ERROR
-      //
-      // During development, expose the original Firebase AI error
-      // on screen so the real cause can be diagnosed. Release builds
-      // still show a safe user-friendly message.
-      // --------------------------------------------------------
-
-      if (kDebugMode) {
-        throw FirebaseAiServiceException('DEBUG GEMINI ERROR:\n\n$rawError');
-      }
-
-      throw FirebaseAiServiceException(
-        'Gemini could not complete this request. '
-        'Please try again later.',
-      );
     }
+
+    throw FirebaseAiServiceException(
+      'Gemini could not complete this request. Please try again.',
+      isTemporary: true,
+    );
   }
 
   void _throwIfQuotaCooldownActive() {

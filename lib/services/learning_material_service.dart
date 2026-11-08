@@ -1,7 +1,3 @@
-import 'dart:async';
-
-import 'activity_log_service.dart';
-
 import 'dart:developer' as developer;
 
 import 'dart:typed_data';
@@ -608,12 +604,6 @@ class LearningMaterialService {
       };
 
       await resourceReference.set(data);
-      unawaited(
-        ActivityLogService(
-          auth: _auth,
-          firestore: _firestore,
-        ).source('material_uploaded', resourceId),
-      );
 
       if (normalizedStatus == 'published') {
         await _createPublishedNotificationsBestEffort(resourceId);

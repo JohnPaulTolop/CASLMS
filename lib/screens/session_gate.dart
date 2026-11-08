@@ -11,6 +11,7 @@ import 'student/student_main_page.dart';
 
 class SessionGate extends StatefulWidget {
   const SessionGate({super.key, this.notificationId, this.authService});
+
   final String? notificationId;
   final CampusAuthService? authService;
 
@@ -58,6 +59,7 @@ class _AuthenticatedRoleGate extends StatefulWidget {
     this.notificationId,
     required this.authService,
   });
+
   final String? notificationId;
   final String userId;
   final CampusAuthService authService;
@@ -67,8 +69,6 @@ class _AuthenticatedRoleGate extends StatefulWidget {
 }
 
 class _AuthenticatedRoleGateState extends State<_AuthenticatedRoleGate> {
-  // This state is keyed by UID. Token renewal must reuse the same stream and
-  // preserve the mounted dashboard, current tab and unsaved profile form.
   late final Stream<Map<String, dynamic>?> _profile = widget.authService
       .watchProfile(widget.userId);
   CampusAuthService get _authService => widget.authService;
