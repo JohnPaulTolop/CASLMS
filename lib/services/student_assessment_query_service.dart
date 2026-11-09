@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'section_audience_service.dart';
+
 /// Authorized student assessment queries for legacy and section-based classes.
 /// Legacy assessments must have an explicit sectionId: '' to be queryable.
 class StudentAssessmentQueryService {
@@ -14,10 +16,7 @@ class StudentAssessmentQueryService {
   final FirebaseAuth _auth;
 
   Future<List<QueryDocumentSnapshot<Map<String, dynamic>>>>
-  getVisibleAssessments({
-    required String courseId,
-    String? moduleId,
-  }) async {
+  getVisibleAssessments({required String courseId, String? moduleId}) async {
     final String uid = _auth.currentUser?.uid ?? '';
     final String cleanCourseId = courseId.trim();
     if (uid.isEmpty || cleanCourseId.isEmpty) {
@@ -37,7 +36,8 @@ class StudentAssessmentQueryService {
     }
 
     final String sectionId = (data['sectionId'] ?? '').toString().trim();
-    final Map<String, QueryDocumentSnapshot<Map<String, dynamic>>> documents = {};
+    final Map<String, QueryDocumentSnapshot<Map<String, dynamic>>> documents =
+        {};
 
     // Always load course-wide legacy work, including for section students.
     // Then load only the student's own section, if assigned.
@@ -47,6 +47,13 @@ class StudentAssessmentQueryService {
           .collection('assessments')
           .where('courseId', isEqualTo: cleanCourseId)
           .where('status', whereIn: const ['published', 'closed'])
+          .where(
+            'sectionIds',
+            arrayContainsAny: <String>[
+              SectionAudienceService.allSections,
+              sectionId,
+            ],
+          )
           .where('sectionId', isEqualTo: scope);
       if (moduleId != null && moduleId.trim().isNotEmpty) {
         request = request.where('moduleId', isEqualTo: moduleId.trim());

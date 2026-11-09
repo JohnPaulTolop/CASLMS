@@ -1,9 +1,28 @@
+import '../shared/page_loading_state.dart';
+import '../../services/instructor_workspace_context.dart';
+import '../../services/course_section_service.dart';
+import '../../services/section_audience_service.dart';
+import '../../models/course_order.dart';
+import '../shared/course_workspace_layout.dart';
+import '../shared/workspace_widgets.dart';
+import '../shared/live_classes_page.dart';
+import '../shared/learner_assistant_page.dart';
+import 'instructor_course_sections_page.dart';
+import 'instructor_course_content.dart';
+import 'instructor_create_assessment_page.dart';
+import 'instructor_assessment_grading_page.dart';
+import 'instructor_semester_grades_page.dart';
+import '../../core/app_colors.dart';
+
+import 'dart:async';
+
+import 'invite_student_dialog.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/course_invitation_service.dart';
-import 'instructor_ui.dart';
 
 import 'instructor_chat_page.dart';
 import 'instructor_module_builder_page.dart';
@@ -15,6 +34,7 @@ class InstructorClassDetailsScreen extends StatefulWidget {
   // ============================================================
 
   final String courseId;
+  final String? sectionId;
   final String courseCode;
   final String courseTitle;
   final String classCode;
@@ -32,6 +52,7 @@ class InstructorClassDetailsScreen extends StatefulWidget {
   const InstructorClassDetailsScreen({
     super.key,
     this.courseId = '',
+    this.sectionId,
     this.courseCode = '',
     this.courseTitle = '',
     this.classCode = '',
@@ -53,16 +74,14 @@ class _InstructorClassDetailsScreenState
   // DESIGN SYSTEM
   // ============================================================
 
-  static const Color teal = Color(0xFF00897B);
-  static const Color darkTeal = Color(0xFF00695C);
-  static const Color background = Color(0xFFF5F8FC);
-  static const Color heading = Color(0xFF172B4D);
-  static const Color secondaryText = Color(0xFF6B7C93);
-  static const Color borderColor = Color(0xFFE5ECF3);
+  Color get teal => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get heading => AppColors.resolve(context, AppColors.darkText);
+  Color get secondaryText =>
+      AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
 
-  static const Color red = Color(0xFFFF4B4B);
-  static const Color orange = Color(0xFFFF9418);
-  static const Color green = Color(0xFF26A65B);
+  Color get red => AppColors.resolve(context, AppColors.error);
+  Color get orange => AppColors.resolve(context, AppColors.amber);
 
   // ============================================================
   // FIREBASE
@@ -76,10 +95,21 @@ class _InstructorClassDetailsScreenState
   // STATE
   // ============================================================
 
+  final List<StreamSubscription> _changes = [];
+  String? _watchedCourseId;
+  final _context = InstructorWorkspaceContext.instance;
+  List<Map<String, dynamic>> _sections = [];
+  String? _resolvedCourseId;
+  bool _initialSectionApplied = false;
+  bool _changingSection = false;
+  String? get _sectionId =>
+      _context.courseId == _courseId ? _context.sectionId : null;
+  Timer? _refreshTimer;
+  int _loadGeneration = 0;
   bool _isLoading = true;
   String? _errorMessage;
 
-  bool _overviewExpanded = false;
+  final List<Map<String, dynamic>> _materials = [];
 
   Map<String, dynamic>? _course;
   List<Map<String, dynamic>> _modules = [];
@@ -153,8 +183,9 @@ class _InstructorClassDetailsScreenState
   // LOAD COURSE
   // ============================================================
 
-  Future<void> _loadCourseData() async {
-    if (mounted) {
+  Future<void> _loadCourseData({bool showLoading = true}) async {
+    final generation = ++_loadGeneration;
+    if (mounted && showLoading) {
       setState(() {
         _isLoading = true;
         _errorMessage = null;
@@ -169,6 +200,7 @@ class _InstructorClassDetailsScreenState
       }
 
       final String courseId = await _resolveCourseId();
+      if (!mounted || generation != _loadGeneration) return;
 
       final DocumentSnapshot<Map<String, dynamic>> courseDocument =
           await _firestore.collection('courses').doc(courseId).get();
@@ -185,12 +217,53 @@ class _InstructorClassDetailsScreenState
       if (ownerId != instructorId) {
         throw Exception('You can only manage your own courses.');
       }
+      if (!mounted || generation != _loadGeneration) return;
+      if (ModalRoute.of(context)?.isCurrent == false) return;
+      _resolvedCourseId = courseId;
+      final selectionRevision = _context.beginCourse(instructorId, courseId);
+      final sections = await CourseSectionService().getSections(courseId);
+      if (!mounted ||
+          generation != _loadGeneration ||
+          _auth.currentUser?.uid != instructorId) {
+        return;
+      }
+      if (!_context.commitSections(
+        selectionRevision,
+        instructorId,
+        courseId,
+        sections,
+        requested: _initialSectionApplied ? null : widget.sectionId,
+      )) {
+        return;
+      }
+      _initialSectionApplied = true;
+      _sections = sections.where((row) => row['status'] == 'active').toList();
+      _watchChanges(courseId);
+      final workspaceSnapshots = await Future.wait([
+        _firestore
+            .collection('modules')
+            .where('courseId', isEqualTo: courseId)
+            .get(),
+        _firestore
+            .collection('enrollments')
+            .where('courseId', isEqualTo: courseId)
+            .get(),
+        _firestore
+            .collection('assessments')
+            .where('courseId', isEqualTo: courseId)
+            .get(),
+        _firestore
+            .collection('assessmentSubmissions')
+            .where('courseId', isEqualTo: courseId)
+            .get(),
+        _firestore
+            .collection('moduleResources')
+            .where('courseId', isEqualTo: courseId)
+            .get(),
+      ]);
+      final materialSnapshot = workspaceSnapshots[4];
 
-      final QuerySnapshot<Map<String, dynamic>> moduleSnapshot =
-          await _firestore
-              .collection('modules')
-              .where('courseId', isEqualTo: courseId)
-              .get();
+      final moduleSnapshot = workspaceSnapshots[0];
 
       final List<Map<String, dynamic>> modules = moduleSnapshot.docs
           .map(
@@ -208,45 +281,49 @@ class _InstructorClassDetailsScreenState
         return aOrder.compareTo(bOrder);
       });
 
-      final QuerySnapshot<Map<String, dynamic>> enrollmentSnapshot =
-          await _firestore
-              .collection('enrollments')
-              .where('courseId', isEqualTo: courseId)
-              .get();
+      final enrollmentSnapshot = workspaceSnapshots[1];
 
       final List<Map<String, dynamic>> students = [];
 
-      for (final enrollmentDocument in enrollmentSnapshot.docs) {
-        final Map<String, dynamic> enrollment = enrollmentDocument.data();
-        final String enrollmentStatus = (enrollment['status'] ?? '')
-            .toString()
-            .trim()
-            .toLowerCase();
+      await Future.wait(
+        enrollmentSnapshot.docs.map((enrollmentDocument) async {
+          final Map<String, dynamic> enrollment = enrollmentDocument.data();
+          final String enrollmentStatus = (enrollment['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
 
-        if (enrollmentStatus != 'active') continue;
+          if (enrollmentStatus != 'active') return;
+          if (_sectionId != null &&
+              _sectionId!.isNotEmpty &&
+              (enrollment['sectionId'] ?? courseData['classCode'] ?? '') !=
+                  _sectionId) {
+            return;
+          }
 
-        final String studentId = (enrollment['studentId'] ?? '')
-            .toString()
-            .trim();
+          final String studentId = (enrollment['studentId'] ?? '')
+              .toString()
+              .trim();
 
-        if (studentId.isEmpty) continue;
+          if (studentId.isEmpty) return;
 
-        Map<String, dynamic>? userData;
-        try {
-          final DocumentSnapshot<Map<String, dynamic>> userDocument =
-              await _firestore.collection('users').doc(studentId).get();
-          userData = userDocument.data();
-        } catch (_) {
-          userData = null;
-        }
+          Map<String, dynamic>? userData;
+          try {
+            final DocumentSnapshot<Map<String, dynamic>> userDocument =
+                await _firestore.collection('users').doc(studentId).get();
+            userData = userDocument.data();
+          } catch (_) {
+            userData = null;
+          }
 
-        students.add({
-          ...enrollment,
-          ...?userData,
-          'studentId': studentId,
-          'enrollmentId': enrollmentDocument.id,
-        });
-      }
+          students.add({
+            ...enrollment,
+            ...?userData,
+            'studentId': studentId,
+            'enrollmentId': enrollmentDocument.id,
+          });
+        }),
+      );
 
       students.sort((a, b) {
         final String aName = (a['name'] ?? a['studentName'] ?? '')
@@ -261,11 +338,7 @@ class _InstructorClassDetailsScreenState
       final List<Map<String, dynamic>> courseInvitations =
           await _invitationService.getCourseInvitations(courseId: courseId);
 
-      final QuerySnapshot<Map<String, dynamic>> assessmentSnapshot =
-          await _firestore
-              .collection('assessments')
-              .where('courseId', isEqualTo: courseId)
-              .get();
+      final assessmentSnapshot = workspaceSnapshots[2];
 
       final List<Map<String, dynamic>> assessments = assessmentSnapshot.docs
           .map(
@@ -277,11 +350,7 @@ class _InstructorClassDetailsScreenState
           )
           .toList();
 
-      final QuerySnapshot<Map<String, dynamic>> submissionSnapshot =
-          await _firestore
-              .collection('assessmentSubmissions')
-              .where('courseId', isEqualTo: courseId)
-              .get();
+      final submissionSnapshot = workspaceSnapshots[3];
 
       final List<Map<String, dynamic>> assessmentSubmissions =
           submissionSnapshot.docs
@@ -294,24 +363,72 @@ class _InstructorClassDetailsScreenState
               )
               .toList();
 
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
 
+      if (_auth.currentUser?.uid != instructorId ||
+          _context.courseId != courseId) {
+        return;
+      }
       setState(() {
+        _errorMessage = null;
         _course = {
           ...courseData,
           'id': courseDocument.id,
           'courseId': courseDocument.id,
         };
+        _materials
+          ..clear()
+          ..addAll(
+            materialSnapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}),
+          );
+        _materials.sort(
+          (a, b) =>
+              courseDate(b['createdAt']).compareTo(courseDate(a['createdAt'])),
+        );
         _modules = modules;
         _students = students;
-        _courseInvitations = courseInvitations;
-        _assessments = assessments;
-        _assessmentSubmissions = assessmentSubmissions;
+        _courseInvitations = courseInvitations
+            .where(
+              (invitation) =>
+                  _sectionId == null ||
+                  _sectionId!.isEmpty ||
+                  (invitation['sectionId'] ?? courseData['classCode'] ?? '') ==
+                      _sectionId,
+            )
+            .toList();
+        _assessments = assessments
+            .where(
+              (assessment) =>
+                  _sectionId == null ||
+                  _sectionId!.isEmpty ||
+                  (assessment['sectionId'] ?? '').toString().isEmpty ||
+                  assessment['sectionId'] == _sectionId,
+            )
+            .toList();
+        _assessmentSubmissions = assessmentSubmissions
+            .where(
+              (submission) =>
+                  _sectionId == null ||
+                  _sectionId!.isEmpty ||
+                  ((submission['sectionId'] ?? '').toString().isNotEmpty
+                      ? submission['sectionId'] == _sectionId
+                      : enrollmentSnapshot.docs.any((document) {
+                          final enrollment = document.data();
+                          return enrollment['studentId'] ==
+                                  submission['studentId'] &&
+                              (enrollment['sectionId'] ??
+                                      courseData['classCode'] ??
+                                      '') ==
+                                  _sectionId;
+                        })),
+            )
+            .toList();
         _isLoading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
+        _context.clearCourse(_courseId);
         _isLoading = false;
         _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
@@ -323,7 +440,10 @@ class _InstructorClassDetailsScreenState
   // ============================================================
 
   String get _courseId =>
-      (_course?['courseId'] ?? _course?['id'] ?? widget.courseId)
+      (_resolvedCourseId ??
+              _course?['courseId'] ??
+              _course?['id'] ??
+              widget.courseId)
           .toString()
           .trim();
 
@@ -369,14 +489,21 @@ class _InstructorClassDetailsScreenState
           courseId: _courseId,
           courseCode: _courseCode,
           courseTitle: _courseTitle,
+          initialSectionId: _sectionId,
+          sections: _sections,
         ),
       ),
     );
 
-    if (mounted) await _loadCourseData();
+    if (mounted) await _loadCourseData(showLoading: false);
   }
 
-  Future<void> _openModule(Map<String, dynamic> module) async {
+  Future<void> _openModule(
+    Map<String, dynamic> module, {
+    String focusResourceId = '',
+    int initialTab = 0,
+    String focusAssessmentId = '',
+  }) async {
     final String moduleId = (module['moduleId'] ?? module['id'] ?? '')
         .toString()
         .trim();
@@ -392,6 +519,9 @@ class _InstructorClassDetailsScreenState
       context,
       MaterialPageRoute(
         builder: (context) => InstructorModuleDetailScreen(
+          focusResourceId: focusResourceId,
+          initialTab: initialTab,
+          focusAssessmentId: focusAssessmentId,
           courseId: _courseId,
           moduleId: moduleId,
           courseCode: _courseCode,
@@ -451,51 +581,70 @@ class _InstructorClassDetailsScreenState
 
   Future<void> _inviteStudent() async {
     if (_isSendingInvitation || _courseId.isEmpty) return;
-
-    final String? campusId = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => const _InviteStudentDialog(),
-    );
-
-    if (!mounted || campusId == null || campusId.trim().isEmpty) return;
-
     setState(() => _isSendingInvitation = true);
-
-    try {
-      final invitation = await _invitationService.inviteStudentByCampusId(
-        courseId: _courseId,
-        campusId: campusId,
-      );
-
-      if (!mounted) return;
-
-      final String studentName =
-          (invitation['studentName'] ?? invitation['studentCampusId'] ?? '')
-              .toString()
-              .trim();
-
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              studentName.isEmpty
-                  ? 'Course invitation sent.'
-                  : 'Invitation sent to $studentName.',
-            ),
-            backgroundColor: green,
-            behavior: SnackBarBehavior.floating,
+    final sent = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) =>
+          InviteStudentDialog(courseId: _courseId, sectionId: _sectionId),
+    );
+    if (!mounted) return;
+    setState(() => _isSendingInvitation = false);
+    if (sent == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Invitation sent. The roster updates when the student accepts.',
           ),
-        );
-
-      await _loadCourseData();
-    } on CourseInvitationException catch (error) {
-      _showError(error.message);
-    } catch (_) {
-      _showError('Unable to send the course invitation.');
-    } finally {
-      if (mounted) setState(() => _isSendingInvitation = false);
+        ),
+      );
     }
+  }
+
+  void _watchChanges(String courseId) {
+    if (_watchedCourseId == courseId) return;
+    _watchedCourseId = courseId;
+    for (final change in _changes) {
+      change.cancel();
+    }
+    _changes.clear();
+    for (final collection in [
+      'enrollments',
+      'courseInvitations',
+      'courseSections',
+    ]) {
+      _changes.add(
+        _firestore
+            .collection(collection)
+            .where('courseId', isEqualTo: courseId)
+            .snapshots()
+            .listen(
+              (_) {
+                _refreshTimer?.cancel();
+                _refreshTimer = Timer(const Duration(milliseconds: 180), () {
+                  if (mounted && ModalRoute.of(context)?.isCurrent != false) {
+                    _loadCourseData(showLoading: false);
+                  }
+                });
+              },
+              onError: (Object error) {
+                if (mounted) {
+                  _showError('Unable to sync the roster. Please refresh.');
+                }
+              },
+            ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _loadGeneration++;
+    _refreshTimer?.cancel();
+    for (final change in _changes) {
+      change.cancel();
+    }
+    super.dispose();
   }
 
   Future<void> _cancelInvitation(Map<String, dynamic> invitation) async {
@@ -571,119 +720,18 @@ class _InstructorClassDetailsScreenState
       width: double.infinity,
       padding: padding,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: heading.withValues(alpha: 0.035),
-            blurRadius: 16,
-            offset: const Offset(0, 5),
-          ),
-        ],
       ),
       child: child,
-    );
-  }
-
-  Widget _sectionHeading(String title, String subtitle, {Widget? trailing}) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: heading,
-                ),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                subtitle,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: secondaryText,
-                  height: 1.4,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (trailing != null) ...[const SizedBox(width: 12), trailing],
-      ],
-    );
-  }
-
-  Widget _compactStat(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F8FC),
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 19),
-          const SizedBox(height: 7),
-          Text(
-            value,
-            style: const TextStyle(
-              color: heading,
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: secondaryText,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _overviewChip(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE7F6F3),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: darkTeal, size: 15),
-          const SizedBox(width: 7),
-          Text(
-            label,
-            style: const TextStyle(
-              color: darkTeal,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
   Widget _leadingAvatar(
     String name,
     IconData fallbackIcon, {
-    Color color = teal,
+    Color color = AppColors.primaryBlue,
   }) {
     final displayName = name.trim();
 
@@ -695,7 +743,11 @@ class _InstructorClassDetailsScreenState
           color: color.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(14),
         ),
-        child: Icon(fallbackIcon, color: color, size: 22),
+        child: Icon(
+          fallbackIcon,
+          color: AppColors.resolve(context, color),
+          size: 22,
+        ),
       );
     }
 
@@ -717,9 +769,9 @@ class _InstructorClassDetailsScreenState
       child: Text(
         initials,
         style: TextStyle(
-          color: color,
+          color: AppColors.resolve(context, color),
           fontSize: 14,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -735,7 +787,7 @@ class _InstructorClassDetailsScreenState
     return Container(
       margin: const EdgeInsets.only(top: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: borderColor),
       ),
@@ -759,10 +811,10 @@ class _InstructorClassDetailsScreenState
                         title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: heading,
                           fontSize: 13,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 5),
@@ -770,7 +822,7 @@ class _InstructorClassDetailsScreenState
                         subtitle,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: secondaryText,
                           fontSize: 11,
                           height: 1.4,
@@ -801,7 +853,7 @@ class _InstructorClassDetailsScreenState
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: const Color(0xFFE7F6F3),
+              color: AppColors.resolve(context, AppColors.greenTint),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(icon, size: 30, color: teal),
@@ -810,9 +862,9 @@ class _InstructorClassDetailsScreenState
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               color: heading,
             ),
           ),
@@ -820,11 +872,7 @@ class _InstructorClassDetailsScreenState
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: secondaryText,
-              fontSize: 12,
-              height: 1.5,
-            ),
+            style: TextStyle(color: secondaryText, fontSize: 12, height: 1.5),
           ),
         ],
       ),
@@ -835,320 +883,366 @@ class _InstructorClassDetailsScreenState
   // COLLAPSIBLE OVERVIEW
   // ============================================================
 
-  Widget _buildCollapsibleOverview() {
-    final bool isActive = _courseStatus == 'active';
-
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: heading.withValues(alpha: 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: () {
-              setState(() {
-                _overviewExpanded = !_overviewExpanded;
-              });
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(15),
-              child: Row(
-                children: [
-                  Container(
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF00796B), Color(0xFF26A69A)],
-                      ),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(
-                      Icons.co_present_rounded,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _courseTitle.isEmpty
-                              ? 'Class workspace'
-                              : _courseTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: heading,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          '${_students.length} students'
-                          '${_courseCode.isNotEmpty ? ' • $_courseCode' : ''}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: secondaryText,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? const Color(0xFFE3F6EF)
-                          : const Color(0xFFFFF1DB),
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Text(
-                      _courseStatus.isEmpty
-                          ? 'Unknown'
-                          : _courseStatus.toUpperCase(),
-                      style: TextStyle(
-                        color: isActive
-                            ? const Color(0xFF13805D)
-                            : const Color(0xFF9A6B13),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  AnimatedRotation(
-                    turns: _overviewExpanded ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 250),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: secondaryText,
-                      size: 23,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          AnimatedCrossFade(
-            duration: const Duration(milliseconds: 250),
-            sizeCurve: Curves.easeInOut,
-            crossFadeState: _overviewExpanded
-                ? CrossFadeState.showFirst
-                : CrossFadeState.showSecond,
-            firstChild: Padding(
-              padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Divider(color: borderColor, height: 1),
-                  const SizedBox(height: 14),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (_semester.isNotEmpty)
-                        _overviewChip(Icons.calendar_today_outlined, _semester),
-                      if (_academicYear.isNotEmpty)
-                        _overviewChip(Icons.school_outlined, _academicYear),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _compactStat(
-                          'Students',
-                          '${_students.length}',
-                          Icons.people_alt_outlined,
-                          teal,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _compactStat(
-                          'Modules',
-                          '${_modules.length}',
-                          Icons.menu_book_outlined,
-                          teal,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _compactStat(
-                          'Assessments',
-                          '${_assessments.length}',
-                          Icons.assignment_outlined,
-                          teal,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_courseDescription.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Text(
-                      _courseDescription,
-                      style: const TextStyle(
-                        color: secondaryText,
-                        fontSize: 11.5,
-                        height: 1.45,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            secondChild: const SizedBox(width: double.infinity, height: 0),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ============================================================
   // BUILD
   // ============================================================
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 4,
-      child: instructorScaffold(
-        context: context,
-        backgroundColor: background,
-        appBar: AppBar(
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.transparent,
-          leading: IconButton(
-            tooltip: 'Back',
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.arrow_back_rounded, color: heading),
-          ),
-          title: const Text(
-            'Course Details',
-            style: TextStyle(
-              color: heading,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          actions: [
-            IconButton(
-              tooltip: 'Refresh course',
-              onPressed: _loadCourseData,
-              icon: const Icon(Icons.refresh_rounded, color: teal),
-            ),
-            const SizedBox(width: 6),
-          ],
-          bottom: const PreferredSize(
-            preferredSize: Size.fromHeight(1),
-            child: Divider(height: 1, color: borderColor),
-          ),
-        ),
-        body: _buildBody(),
-      ),
-    );
-  }
-
-  // ============================================================
-  // BODY
-  // ============================================================
-
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: teal));
-    }
-
+    if (_isLoading) return const PageLoadingState();
     if (_errorMessage != null) {
-      return _buildErrorState();
+      return Scaffold(
+        appBar: AppBar(title: const Text('Course')),
+        body: _buildErrorState(),
+      );
     }
-
-    return SafeArea(
-      top: false,
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1200),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                child: _buildCollapsibleOverview(),
-              ),
-              Container(
-                margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: borderColor),
-                ),
-                child: const TabBar(
-                  isScrollable: false,
-                  dividerColor: Colors.transparent,
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  indicator: BoxDecoration(
-                    color: Color(0xFFE4F5F1),
-                    borderRadius: BorderRadius.all(Radius.circular(10)),
-                  ),
-                  labelPadding: EdgeInsets.symmetric(horizontal: 4),
-                  labelColor: darkTeal,
-                  unselectedLabelColor: secondaryText,
-                  labelStyle: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
-                  unselectedLabelStyle: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  tabs: [
-                    Tab(height: 36, text: 'Roster'),
-                    Tab(height: 36, text: 'Modules'),
-                    Tab(height: 36, text: 'Grades'),
-                    Tab(height: 36, text: 'Settings'),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: TabBarView(
+    return AbsorbPointer(
+      absorbing: _changingSection,
+      child: CourseWorkspaceLayout(
+        title: _courseTitle,
+        subtitle: [
+          _courseCode,
+          _semester,
+          _academicYear,
+          if (_sectionId?.isNotEmpty == true) 'Section workspace',
+        ].where((value) => value.isNotEmpty).join(' • '),
+        onRefresh: () => _loadCourseData(showLoading: false),
+        toolbarActions: [
+          IconButton(
+            tooltip: 'Course information',
+            icon: const Icon(Icons.info_outline_rounded),
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              builder: (context) => SizedBox(
+                height: MediaQuery.sizeOf(context).height * .8,
+                child: Column(
                   children: [
-                    _buildRosterTab(),
-                    _buildModulesTab(),
-                    _buildGradesTab(),
-                    _buildSettingsTab(),
+                    Row(
+                      children: [
+                        const SizedBox(width: 20),
+                        const Expanded(child: Text('Course information')),
+                        IconButton(
+                          tooltip: 'Close',
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ),
+                    if (_courseDescription.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(_courseDescription),
+                      ),
+                    Expanded(child: _buildSettingsTab()),
                   ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
+        actions: [
+          SizedBox(
+            width: 230,
+            child: DropdownButtonFormField<String>(
+              key: ValueKey(_sectionId),
+              initialValue: _sectionId ?? '',
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Viewing section',
+                filled: true,
+                fillColor: AppColors.resolve(
+                  context,
+                  AppColors.link,
+                ).withValues(alpha: .08),
+              ),
+              items: [
+                const DropdownMenuItem(value: '', child: Text('All sections')),
+                for (final row in _sections)
+                  DropdownMenuItem(
+                    value: row['id'].toString(),
+                    child: Text(
+                      row['name']?.toString() ?? 'Section',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+              ],
+              onChanged: _changingSection
+                  ? null
+                  : (value) async {
+                      final uid = _auth.currentUser?.uid;
+                      if (uid == null) return;
+                      final revision = _context.beginCourse(uid, _courseId);
+                      _context.commitSections(
+                        revision,
+                        uid,
+                        _courseId,
+                        _sections,
+                        requested: value,
+                      );
+                      setState(() => _changingSection = true);
+                      await _loadCourseData(showLoading: false);
+                      if (mounted) setState(() => _changingSection = false);
+                    },
+            ),
+          ),
+          FilledButton.tonalIcon(
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      InstructorCourseSectionsScreen(courseId: _courseId),
+                ),
+              );
+              if (mounted) await _loadCourseData(showLoading: false);
+            },
+            icon: const Icon(Icons.groups_outlined),
+            label: const Text('Sections'),
+          ),
+          OutlinedButton.icon(
+            onPressed: _openLiveClass,
+            icon: const Icon(Icons.video_call_outlined),
+            label: const Text('Live classroom'),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => Scaffold(
+                  appBar: AppBar(title: const Text('Back to course')),
+                  body: LearnerAssistantScreen(
+                    role: 'instructor',
+                    initialPrompt:
+                        'Help me plan a lesson for "$_courseTitle" ($_courseCode).',
+                  ),
+                ),
+              ),
+            ),
+            icon: const Icon(Icons.auto_awesome_rounded),
+            label: const Text('Ask AI'),
+          ),
+        ],
+        labels: const ['Content', 'Activities', 'Grades', 'Students'],
+        pages: [
+          InstructorCourseContent(
+            sectionScoped: _sectionId?.isNotEmpty == true,
+            modules: _modules,
+            materials: _materials,
+            assessments: _assessments,
+            onCreate: _createModule,
+            onManage: _openModule,
+            onMaterial: (module, material) =>
+                _openModule(module, focusResourceId: material['id'].toString()),
+            onAssessment: _openAssessment,
+          ),
+          _buildActivitiesTab(),
+          _buildGradesTab(),
+          _buildRosterTab(),
+        ],
       ),
     );
   }
+
+  Future<void> _openLiveClass() async {
+    try {
+      var sectionId = _sectionId;
+      if (sectionId == null || sectionId.isEmpty) {
+        final sections = (await CourseSectionService().getSections(_courseId))
+            .where((section) => section['status'] != 'archived')
+            .toList();
+        if (!mounted) return;
+        if (sections.isEmpty) {
+          _showError(
+            'Add an active section before opening the live classroom.',
+          );
+          return;
+        }
+        final section = sections.length == 1
+            ? sections.first
+            : await showModalBottomSheet<Map<String, dynamic>>(
+                context: context,
+                builder: (context) => SafeArea(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.all(20),
+                        child: Text(
+                          'Choose a class section',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      for (final section in sections)
+                        ListTile(
+                          title: Text(
+                            (section['name'] ?? 'Section').toString(),
+                          ),
+                          subtitle: Text(
+                            (section['identifier'] ?? '').toString(),
+                          ),
+                          onTap: () => Navigator.pop(context, section),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+        if (section == null || !mounted) return;
+        sectionId = section['id'].toString();
+        final uid = _auth.currentUser?.uid;
+        if (uid == null) return;
+        final revision = _context.beginCourse(uid, _courseId);
+        _context.commitSections(
+          revision,
+          uid,
+          _courseId,
+          sections,
+          requested: sectionId,
+        );
+        await _loadCourseData(showLoading: false);
+      }
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              LiveClassesScreen(courseId: _courseId, sectionId: sectionId),
+        ),
+      );
+    } catch (_) {
+      _showError('Unable to open the live classroom. Please try again.');
+    }
+  }
+
+  Future<void> _openAssessment(Map<String, dynamic> assessment) async {
+    final id = (assessment['assessmentId'] ?? assessment['id'] ?? '')
+        .toString();
+    if (id.isEmpty) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => InstructorAssessmentGradingScreen(assessmentId: id),
+      ),
+    );
+    if (mounted) await _loadCourseData(showLoading: false);
+  }
+
+  Future<void> _newAssessment() async {
+    if (_modules.isEmpty) return;
+    final module = _modules.length == 1
+        ? _modules.first
+        : await showModalBottomSheet<Map<String, dynamic>>(
+            context: context,
+            builder: (context) => SafeArea(
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text(
+                      'Choose a module',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  for (final module in _modules)
+                    ListTile(
+                      title: Text((module['title'] ?? 'Module').toString()),
+                      onTap: () => Navigator.pop(context, module),
+                    ),
+                ],
+              ),
+            ),
+          );
+    if (module == null || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => InstructorCreateAssessmentScreen(
+          courseId: _courseId,
+          moduleId: (module['moduleId'] ?? module['id']).toString(),
+          courseCode: _courseCode,
+          courseTitle: _courseTitle,
+          moduleTitle: (module['title'] ?? '').toString(),
+          sections: _sections,
+          moduleSectionIds: SectionAudienceService.stored(module),
+          initialSectionId: _sectionId,
+        ),
+      ),
+    );
+    if (mounted) await _loadCourseData(showLoading: false);
+  }
+
+  Widget _buildActivitiesTab() => ListView(
+    padding: CourseWorkspaceLayout.pagePadding(context),
+    children: [
+      Align(
+        alignment: Alignment.centerRight,
+        child: FilledButton.icon(
+          onPressed: _modules.isEmpty ? null : _newAssessment,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Create assessment'),
+        ),
+      ),
+      const SizedBox(height: 16),
+      if (_assessments.isEmpty)
+        const WorkspaceEmptyState(
+          icon: Icons.assignment_outlined,
+          title: 'No activities yet',
+          message: 'Add a module in Content, then create an assessment.',
+        ),
+      for (final assessment in _assessments)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: WorkspaceSurface(
+            padding: const EdgeInsets.all(8),
+            child: ListTile(
+              title: Text(
+                (assessment['title'] ?? 'Untitled assessment').toString(),
+              ),
+              subtitle: Text(
+                [
+                  (assessment['assessmentType'] ?? 'Assessment').toString(),
+                  (assessment['status'] ?? 'draft').toString(),
+                ].join(' • '),
+              ),
+              onTap: () => _openAssessment(assessment),
+              trailing: PopupMenuButton<String>(
+                tooltip: 'Assessment actions',
+                onSelected: (action) {
+                  if (action == 'grade') {
+                    _openAssessment(assessment);
+                    return;
+                  }
+                  final index = _modules.indexWhere(
+                    (module) =>
+                        (module['moduleId'] ?? module['id']) ==
+                        assessment['moduleId'],
+                  );
+                  if (index >= 0) {
+                    _openModule(
+                      _modules[index],
+                      initialTab: 1,
+                      focusAssessmentId: (assessment['id'] ?? '').toString(),
+                    );
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'manage',
+                    child: Text('Manage assessment'),
+                  ),
+                  PopupMenuItem(
+                    value: 'grade',
+                    child: Text('View submissions'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
 
   // ============================================================
   // TAB CONTENTS
@@ -1164,7 +1258,7 @@ class _InstructorClassDetailsScreenState
         .toList();
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+      padding: CourseWorkspaceLayout.pagePadding(context, top: 18, bottom: 24),
       children: [
         if (pendingInvitations.isNotEmpty) ...[
           _buildPendingInvitations(pendingInvitations),
@@ -1174,14 +1268,13 @@ class _InstructorClassDetailsScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _sectionHeading(
-                'Student Roster',
-                'Students currently enrolled in this course.',
-                trailing: FilledButton.icon(
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
                   onPressed: _isSendingInvitation ? null : _inviteStudent,
                   style: FilledButton.styleFrom(
                     backgroundColor: teal,
-                    foregroundColor: Colors.white,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 13,
                       vertical: 12,
@@ -1236,7 +1329,7 @@ class _InstructorClassDetailsScreenState
                     trailing: IconButton(
                       tooltip: 'Message student',
                       onPressed: () => _openStudentChat(student),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.chat_bubble_outline_rounded,
                         color: teal,
                         size: 20,
@@ -1264,14 +1357,14 @@ class _InstructorClassDetailsScreenState
         children: [
           Row(
             children: [
-              const Icon(Icons.outgoing_mail, color: orange, size: 20),
+              Icon(Icons.outgoing_mail, color: orange, size: 20),
               const SizedBox(width: 8),
               Text(
                 '${invitations.length} pending '
                 '${invitations.length == 1 ? 'invitation' : 'invitations'}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: heading,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
               ),
@@ -1292,7 +1385,7 @@ class _InstructorClassDetailsScreenState
             final bool busy = _busyInvitationIds.contains(invitationId);
 
             return _contentCard(
-              leading: const CircleAvatar(
+              leading: CircleAvatar(
                 radius: 16,
                 backgroundColor: Color(0xFFFFF2DF),
                 child: Icon(Icons.schedule_rounded, color: orange, size: 17),
@@ -1305,7 +1398,7 @@ class _InstructorClassDetailsScreenState
                 onPressed: busy ? null : () => _cancelInvitation(invitation),
                 child: Text(
                   busy ? 'Cancelling...' : 'Cancel',
-                  style: const TextStyle(color: red),
+                  style: TextStyle(color: red),
                 ),
               ),
             );
@@ -1315,204 +1408,78 @@ class _InstructorClassDetailsScreenState
     );
   }
 
-  Widget _buildModulesTab() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-      children: [
-        _panel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _sectionHeading(
-                'Course Modules',
-                'Open a module to manage its assessments.',
-                trailing: FilledButton.icon(
-                  onPressed: _createModule,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: teal,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 13,
-                      vertical: 12,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('Add Module'),
+  Widget _buildGradesTab() => ListView(
+    padding: CourseWorkspaceLayout.pagePadding(context),
+    children: [
+      Align(
+        alignment: Alignment.centerRight,
+        child: FilledButton.icon(
+          onPressed: () async {
+            await Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => InstructorSemesterGradesScreen(
+                  courseId: _courseId,
+                  sectionId: _sectionId,
                 ),
               ),
-              const SizedBox(height: 18),
-              if (_modules.isEmpty)
-                _emptyState(
-                  icon: Icons.menu_book_outlined,
-                  title: 'No modules yet',
-                  message: 'Create the first module for this course.',
-                )
-              else
-                ..._modules.map((module) {
-                  final String title = (module['title'] ?? '')
-                      .toString()
-                      .trim();
-                  final String description = (module['description'] ?? '')
-                      .toString()
-                      .trim();
-                  final String status = (module['status'] ?? 'draft')
-                      .toString()
-                      .trim()
-                      .toLowerCase();
-                  final int order = (module['order'] as num?)?.toInt() ?? 0;
-                  final String moduleId =
-                      (module['moduleId'] ?? module['id'] ?? '').toString();
-
-                  final int assessmentCount = _assessments.where((assessment) {
-                    return (assessment['moduleId'] ?? '').toString() ==
-                        moduleId;
-                  }).length;
-
-                  return _contentCard(
-                    leading: _leadingAvatar('', Icons.menu_book_rounded),
-                    title: order > 0
-                        ? 'MODULE $order: ${title.isEmpty ? 'Untitled' : title}'
-                        : (title.isEmpty ? 'Untitled' : title),
-                    subtitle: [
-                      if (description.isNotEmpty) description,
-                      'Assessments: $assessmentCount • Status: ${status.toUpperCase()}',
-                    ].join('\n'),
-                    trailing: const Icon(
-                      Icons.chevron_right_rounded,
-                      color: secondaryText,
-                    ),
-                    onTap: () => _openModule(module),
-                  );
-                }),
-            ],
-          ),
+            );
+            if (mounted) await _loadCourseData(showLoading: false);
+          },
+          icon: const Icon(Icons.calculate_outlined),
+          label: const Text('Semester grades'),
         ),
-      ],
-    );
-  }
-
-  Widget _buildGradesTab() {
-    final int submitted = _assessmentSubmissions.where((submission) {
-      final String status = (submission['status'] ?? '')
-          .toString()
-          .toLowerCase();
-      return status == 'submitted';
-    }).length;
-
-    final int graded = _assessmentSubmissions.where((submission) {
-      return (submission['status'] ?? '').toString().toLowerCase() == 'graded';
-    }).length;
-
-    final int published = _assessments.where((assessment) {
-      return (assessment['status'] ?? '').toString().toLowerCase() ==
-          'published';
-    }).length;
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _compactStat(
-                'Published',
-                '$published',
-                Icons.assignment_turned_in_outlined,
-                teal,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _compactStat(
-                'To Grade',
-                '$submitted',
-                Icons.pending_actions_rounded,
-                orange,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _compactStat(
-                'Graded',
-                '$graded',
-                Icons.verified_outlined,
-                green,
-              ),
-            ),
-          ],
+      ),
+      const SizedBox(height: 16),
+      if (_assessments.isEmpty)
+        const WorkspaceEmptyState(
+          icon: Icons.grade_outlined,
+          title: 'No assessments to grade',
+          message:
+              'Published activities and student submissions will appear here.',
         ),
-        const SizedBox(height: 18),
-        _panel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _sectionHeading(
-                'Assessment Grading',
-                'External assessment submissions and grades.',
+      for (final assessment in _assessments)
+        Builder(
+          builder: (context) {
+            final id = (assessment['assessmentId'] ?? assessment['id'])
+                .toString();
+            final submissions = _assessmentSubmissions
+                .where((row) => row['assessmentId'] == id)
+                .toList();
+            final pending = submissions
+                .where((row) => row['status'] == 'submitted')
+                .length;
+            final graded = submissions
+                .where((row) => row['status'] == 'graded')
+                .length;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: WorkspaceSurface(
+                padding: const EdgeInsets.all(8),
+                child: ListTile(
+                  leading: const Icon(Icons.grading_outlined),
+                  title: Text((assessment['title'] ?? 'Assessment').toString()),
+                  subtitle: Text('$pending to grade • $graded graded'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () => _openAssessment(assessment),
+                ),
               ),
-              const SizedBox(height: 14),
-              if (_assessmentSubmissions.isEmpty)
-                _emptyState(
-                  icon: Icons.grade_outlined,
-                  title: 'No assessment submissions yet',
-                  message: 'Student submissions will appear here after the student external-assessment workflow is connected.',
-                )
-              else
-                ..._assessmentSubmissions.map((submission) {
-                  final String studentName = (submission['studentName'] ?? '')
-                      .toString();
-                  final String status = (submission['status'] ?? 'submitted')
-                      .toString()
-                      .toLowerCase();
-                  final dynamic score = submission['score'];
-                  final bool isGraded = status == 'graded';
-
-                  return _contentCard(
-                    leading: _leadingAvatar(
-                      studentName,
-                      isGraded
-                          ? Icons.check_circle_outline_rounded
-                          : Icons.pending_actions_rounded,
-                      color: isGraded ? green : orange,
-                    ),
-                    title: studentName,
-                    subtitle: 'Status: ${status.toUpperCase()}',
-                    trailing: Text(
-                      score is num ? '$score' : status.toUpperCase(),
-                      style: TextStyle(
-                        color: isGraded ? green : orange,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  );
-                }),
-            ],
-          ),
+            );
+          },
         ),
-      ],
-    );
-  }
+    ],
+  );
 
   Widget _buildSettingsTab() {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+      padding: CourseWorkspaceLayout.pagePadding(context, top: 18, bottom: 24),
       children: [
         _panel(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _sectionHeading(
-                'Course Information',
-                'Current information stored in Firestore.',
-              ),
-              const SizedBox(height: 16),
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(18),
                   border: Border.all(color: borderColor),
                 ),
@@ -1523,25 +1490,31 @@ class _InstructorClassDetailsScreenState
                       title: 'Course Code',
                       value: _courseCode,
                     ),
-                    const Divider(height: 1, color: borderColor),
+                    Divider(height: 1, color: borderColor),
+                    _buildSettingTile(
+                      icon: Icons.mail_outline_rounded,
+                      title: 'Enrollment',
+                      value: 'By instructor invitation',
+                    ),
+                    Divider(height: 1, color: borderColor),
                     _buildSettingTile(
                       icon: Icons.person_outline_rounded,
                       title: 'Instructor',
                       value: _instructorName,
                     ),
-                    const Divider(height: 1, color: borderColor),
+                    Divider(height: 1, color: borderColor),
                     _buildSettingTile(
                       icon: Icons.calendar_today_outlined,
                       title: 'Semester',
                       value: _semester,
                     ),
-                    const Divider(height: 1, color: borderColor),
+                    Divider(height: 1, color: borderColor),
                     _buildSettingTile(
                       icon: Icons.school_outlined,
                       title: 'Academic Year',
                       value: _academicYear,
                     ),
-                    const Divider(height: 1, color: borderColor),
+                    Divider(height: 1, color: borderColor),
                     _buildSettingTile(
                       icon: Icons.visibility_outlined,
                       title: 'Status',
@@ -1567,24 +1540,20 @@ class _InstructorClassDetailsScreenState
       leading: Icon(icon, color: teal, size: 21),
       title: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           color: heading,
           fontSize: 12.5,
           fontWeight: FontWeight.w700,
         ),
       ),
-      trailing: SizedBox(
-        width: 160,
-        child: Text(
-          value.isEmpty ? '—' : value,
-          textAlign: TextAlign.right,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: secondaryText,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-          ),
+      subtitle: Text(
+        value.isEmpty ? '—' : value,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: secondaryText,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -1603,15 +1572,12 @@ class _InstructorClassDetailsScreenState
         padding: const EdgeInsets.all(30),
         children: [
           const SizedBox(height: 110),
-          const Icon(Icons.error_outline_rounded, color: red, size: 50),
+          Icon(Icons.error_outline_rounded, color: red, size: 50),
           const SizedBox(height: 13),
           Text(
             _errorMessage ?? 'Unable to load course information.',
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: secondaryText,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(color: secondaryText, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 20),
           Center(
@@ -1627,101 +1593,6 @@ class _InstructorClassDetailsScreenState
           ),
         ],
       ),
-    );
-  }
-}
-
-class _InviteStudentDialog extends StatefulWidget {
-  const _InviteStudentDialog();
-
-  @override
-  State<_InviteStudentDialog> createState() => _InviteStudentDialogState();
-}
-
-class _InviteStudentDialogState extends State<_InviteStudentDialog> {
-  static const Color teal = Color(0xFF00897B);
-
-  final TextEditingController _campusIdController = TextEditingController();
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-
-  @override
-  void dispose() {
-    _campusIdController.dispose();
-    super.dispose();
-  }
-
-  void _submit() {
-    if (_formKey.currentState?.validate() != true) return;
-    Navigator.of(context)
-        .pop(_campusIdController.text.trim().replaceAll(RegExp(r'\s+'), ''));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Row(
-        children: [
-          Icon(Icons.person_add_alt_1_rounded, color: teal),
-          SizedBox(width: 10),
-          Expanded(child: Text('Invite Student')),
-        ],
-      ),
-      content: SizedBox(
-        width: 420,
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Enter the Campus ID registered to the student’s CASLMS account.',
-              ),
-              const SizedBox(height: 17),
-              TextFormField(
-                controller: _campusIdController,
-                autofocus: true,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.done,
-                onFieldSubmitted: (_) => _submit(),
-                decoration: const InputDecoration(
-                  labelText: 'Student Campus ID',
-                  hintText: 'Enter 5–12 digits',
-                  prefixIcon: Icon(Icons.badge_outlined),
-                ),
-                validator: (value) {
-                  final campusId = (value ?? '').trim().replaceAll(
-                    RegExp(r'\s+'),
-                    '',
-                  );
-                  if (campusId.isEmpty) return 'Enter the student Campus ID.';
-                  if (!RegExp(r'^\d{5,12}$').hasMatch(campusId)) {
-                    return 'Campus ID must contain 5–12 numeric digits.';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'The student must accept the invitation before enrollment becomes active.',
-                style: TextStyle(color: Color(0xFF6B7C93), fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton.icon(
-          onPressed: _submit,
-          icon: const Icon(Icons.send_rounded),
-          label: const Text('Send Invitation'),
-          style: FilledButton.styleFrom(backgroundColor: teal),
-        ),
-      ],
     );
   }
 }

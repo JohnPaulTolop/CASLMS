@@ -1,6 +1,9 @@
+import '../../core/app_colors.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../services/admin_assistant_service.dart';
+import '../shared/assistant_scope_banner.dart';
 
 class AdminCaslmsAssistantScreen extends StatefulWidget {
   const AdminCaslmsAssistantScreen({super.key});
@@ -12,10 +15,10 @@ class AdminCaslmsAssistantScreen extends StatefulWidget {
 
 class _AdminCaslmsAssistantScreenState
     extends State<AdminCaslmsAssistantScreen> {
-  static const Color primary = Color(0xFF4F46E5);
+  static const Color primary = AppColors.primaryBlue;
   static const Color background = Color(0xFFF7F8FC);
-  static const Color darkText = Color(0xFF17203A);
-  static const Color mutedText = Color(0xFF68738A);
+  static const Color darkText = AppColors.darkText;
+  static const Color mutedText = AppColors.secondaryText;
   static const Color border = Color(0xFFE4E7EF);
 
   final AdminAssistantService _assistant = AdminAssistantService();
@@ -171,7 +174,7 @@ class _AdminCaslmsAssistantScreenState
                     style: TextStyle(
                       color: darkText,
                       fontSize: 17,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   Text(
@@ -198,6 +201,10 @@ class _AdminCaslmsAssistantScreenState
       ),
       body: Column(
         children: <Widget>[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
+            child: AssistantScopeBanner(color: primary),
+          ),
           _buildPrivacyNotice(),
           Expanded(child: _buildMessages()),
           _buildSuggestions(),
@@ -213,7 +220,7 @@ class _AdminCaslmsAssistantScreenState
       margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        color: const Color(0xFFEEF2FF),
+        color: AppColors.blueTint,
         borderRadius: BorderRadius.circular(13),
         border: Border.all(color: const Color(0xFFC7D2FE)),
       ),
@@ -225,9 +232,7 @@ class _AdminCaslmsAssistantScreenState
           Expanded(
             child: Text(
               'Admin only. Answers use current Firestore records. Always '
-              'verify a record before making an official decision. This '
-              'assistant handles LMS, academic, and education-technology '
-              'questions only.',
+              'verify a record before making an official decision.',
               style: TextStyle(
                 color: Color(0xFF3730A3),
                 fontSize: 11.5,
@@ -425,15 +430,6 @@ class _MessageBubble extends StatelessWidget {
                               ? const Color(0xFFFECACA)
                               : _AdminCaslmsAssistantScreenState.border,
                         ),
-                  boxShadow: isUser
-                      ? null
-                      : <BoxShadow>[
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.025),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
                 ),
                 child: SelectableText(
                   message.text,
@@ -464,11 +460,7 @@ class _AssistantAvatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: <Color>[Color(0xFF4F46E5), Color(0xFF7C3AED)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: AppColors.primaryBlue,
         borderRadius: BorderRadius.circular(size * 0.34),
       ),
       alignment: Alignment.center,

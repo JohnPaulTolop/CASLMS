@@ -1,14 +1,19 @@
+import '../shared/page_loading_state.dart';
+import 'instructor_task_widgets.dart';
+import '../../services/instructor_workspace_context.dart';
+import '../shared/workspace_widgets.dart';
+import '../../core/app_colors.dart';
 import '../shared/grading_ui.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter/material.dart';
 
-import 'instructor_ui.dart';
-
 import '../../services/assessment_service.dart';
 import '../../services/course_section_service.dart';
+import '../../services/section_audience_service.dart';
 import '../../services/firebase_ai_service.dart';
 import '../../services/learning_material_service.dart';
 import '../../services/notification_service.dart';
@@ -25,6 +30,8 @@ class InstructorModuleDetailScreen extends StatefulWidget {
   final String courseTitle;
   final String moduleTitle;
   final String focusResourceId;
+  final String focusAssessmentId;
+  final int initialTab;
 
   const InstructorModuleDetailScreen({
     super.key,
@@ -34,6 +41,8 @@ class InstructorModuleDetailScreen extends StatefulWidget {
     required this.courseTitle,
     required this.moduleTitle,
     this.focusResourceId = '',
+    this.focusAssessmentId = '',
+    this.initialTab = 0,
   });
 
   @override
@@ -72,17 +81,16 @@ class _InstructorModuleDetailScreenState
   // DESIGN
   // ============================================================
 
-  static const Color primaryTeal = Color(0xFF00897B);
-  static const Color background = Color(0xFFF7F9FC);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
-  static const Color borderColor = Color(0xFFE6EAF0);
+  Color get primaryTeal => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
 
-  static const Color green = Color(0xFF26A65B);
-  static const Color orange = Color(0xFFFF9418);
-  static const Color red = Color(0xFFFF4B4B);
-  static const Color blue = Color(0xFF1769FF);
-  static const Color purple = Color(0xFF7B4DFF);
+  Color get green => AppColors.resolve(context, AppColors.green);
+  Color get orange => AppColors.resolve(context, AppColors.amber);
+  Color get red => AppColors.resolve(context, AppColors.error);
+  Color get blue => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get purple => AppColors.resolve(context, AppColors.purple);
 
   // ============================================================
   // SERVICES
@@ -110,6 +118,34 @@ class _InstructorModuleDetailScreenState
   List<Map<String, dynamic>> _materials = [];
 
   List<Map<String, dynamic>> _assessments = [];
+  String? _activeSectionId;
+  List<Map<String, dynamic>> _activeSections = [];
+  String get _sectionLabel => _activeSectionId == null
+      ? 'All sections'
+      : _activeSections
+            .firstWhere((s) => s['id'] == _activeSectionId)['name']
+            .toString();
+  String get _assignedSectionLabel {
+    final module = _module;
+    if (module == null) return 'Unavailable';
+    try {
+      return SectionAudienceService.label(
+        SectionAudienceService.stored(module),
+        _activeSections,
+      );
+    } on FormatException {
+      return 'Invalid audience';
+    }
+  }
+
+  List<Map<String, dynamic>> get _visibleAssessments => _assessments
+      .where(
+        (a) =>
+            _activeSectionId == null ||
+            (a['sectionId'] ?? '').toString().isEmpty ||
+            a['sectionId'] == _activeSectionId,
+      )
+      .toList();
 
   final Set<String> _busyMaterialIds = {};
 
@@ -137,6 +173,26 @@ class _InstructorModuleDetailScreenState
     }
 
     try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final sections = await CourseSectionService().getSections(
+        widget.courseId,
+      );
+      if (!mounted ||
+          uid == null ||
+          FirebaseAuth.instance.currentUser?.uid != uid) {
+        return;
+      }
+      final selection = InstructorWorkspaceContext.instance;
+      final activeSections = sections
+          .where((row) => row['status'] == 'active')
+          .toList();
+      final requested =
+          selection.userId == uid && selection.courseId == widget.courseId
+          ? selection.sectionId
+          : null;
+      final activeSectionId = activeSections.any((s) => s['id'] == requested)
+          ? requested
+          : null;
       // ========================================================
       // MODULE
       // ========================================================
@@ -199,24 +255,44 @@ class _InstructorModuleDetailScreenState
       }
 
       setState(() {
+        _activeSections = activeSections;
+        _activeSectionId = activeSectionId;
         _module = {
           ...moduleData,
           'id': moduleDocument.id,
           'moduleId': moduleDocument.id,
         };
 
-        _materials = widget.focusResourceId.isEmpty
-            ? materials
-            : materials
-                  .where(
-                    (material) =>
-                        (material['resourceId'] ??
-                            material['materialId'] ??
-                            material['id']) ==
-                        widget.focusResourceId,
-                  )
-                  .toList();
-        _assessments = assessments;
+        _materials = List<Map<String, dynamic>>.from(materials);
+        _assessments = List<Map<String, dynamic>>.from(assessments);
+        if (widget.focusResourceId.isNotEmpty) {
+          _materials.sort(
+            (a, b) =>
+                ((b['resourceId'] ?? b['materialId'] ?? b['id']) ==
+                            widget.focusResourceId
+                        ? 1
+                        : 0)
+                    .compareTo(
+                      (a['resourceId'] ?? a['materialId'] ?? a['id']) ==
+                              widget.focusResourceId
+                          ? 1
+                          : 0,
+                    ),
+          );
+        }
+        if (widget.focusAssessmentId.isNotEmpty) {
+          _assessments.sort(
+            (a, b) =>
+                ((b['assessmentId'] ?? b['id']) == widget.focusAssessmentId
+                        ? 1
+                        : 0)
+                    .compareTo(
+                      (a['assessmentId'] ?? a['id']) == widget.focusAssessmentId
+                          ? 1
+                          : 0,
+                    ),
+          );
+        }
 
         _isLoading = false;
         _errorMessage = null;
@@ -263,6 +339,9 @@ class _InstructorModuleDetailScreenState
           courseId: widget.courseId,
           moduleId: widget.moduleId,
           moduleTitle: _moduleTitle,
+          sections: _activeSections,
+          moduleSectionIds: SectionAudienceService.stored(_module!),
+          initialSectionId: _activeSectionId,
         ),
       ),
     );
@@ -390,7 +469,7 @@ class _InstructorModuleDetailScreenState
 
       builder: (dialogContext) {
         return AlertDialog(
-          icon: const Icon(Icons.delete_outline_rounded, color: red, size: 34),
+          icon: Icon(Icons.delete_outline_rounded, color: red, size: 34),
 
           title: const Text('Delete Learning Material'),
 
@@ -419,7 +498,7 @@ class _InstructorModuleDetailScreenState
 
               style: FilledButton.styleFrom(
                 backgroundColor: red,
-                foregroundColor: Colors.white,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
 
               child: const Text('Delete'),
@@ -459,7 +538,7 @@ class _InstructorModuleDetailScreenState
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Learning material deleted.'),
           backgroundColor: red,
           behavior: SnackBarBehavior.floating,
@@ -493,6 +572,9 @@ class _InstructorModuleDetailScreenState
           courseCode: widget.courseCode,
           courseTitle: widget.courseTitle,
           moduleTitle: _moduleTitle,
+          sections: _activeSections,
+          moduleSectionIds: SectionAudienceService.stored(_module!),
+          initialSectionId: _activeSectionId,
         ),
       ),
     );
@@ -509,7 +591,7 @@ class _InstructorModuleDetailScreenState
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Assessment created successfully.'),
           backgroundColor: primaryTeal,
           behavior: SnackBarBehavior.floating,
@@ -559,7 +641,7 @@ class _InstructorModuleDetailScreenState
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('AI quiz draft updated.'),
           backgroundColor: primaryTeal,
           behavior: SnackBarBehavior.floating,
@@ -666,7 +748,8 @@ class _InstructorModuleDetailScreenState
         );
       }
 
-      if (currentStatus == 'published') {
+      if (currentStatus == 'published' &&
+          (data['quizVersion'] ?? '').toString().trim().isNotEmpty) {
         throw AssessmentServiceException('This AI quiz is already published.');
       }
 
@@ -829,54 +912,68 @@ class _InstructorModuleDetailScreenState
       }
 
       // Require the instructor to select the target section.
-      final String? selectedSectionId = await showDialog<String>(
-        context: context,
-        builder: (BuildContext dialogContext) {
-          return AlertDialog(
-            icon: const Icon(Icons.groups_rounded, color: primaryTeal),
-            title: const Text('Select Quiz Section'),
-            content: SizedBox(
-              width: 430,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 360),
-                child: ListView(
-                  shrinkWrap: true,
-                  children: activeSections.map((section) {
-                    final String id = (section['id'] ?? '').toString().trim();
-                    final String name = (section['name'] ?? 'Unnamed section')
-                        .toString()
-                        .trim();
-                    final String identifier = (section['identifier'] ?? '')
-                        .toString()
-                        .trim();
+      final selection = InstructorWorkspaceContext.instance;
+      final inheritedSection =
+          selection.userId == FirebaseAuth.instance.currentUser?.uid &&
+              selection.courseId == widget.courseId &&
+              activeSections.any((row) => row['id'] == selection.sectionId)
+          ? selection.sectionId
+          : null;
+      final String? selectedSectionId =
+          inheritedSection ??
+          await showDialog<String>(
+            context: context,
+            builder: (BuildContext dialogContext) {
+              return AlertDialog(
+                icon: Icon(Icons.groups_rounded, color: primaryTeal),
+                title: const Text('Select Quiz Section'),
+                content: SizedBox(
+                  width: 430,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 360),
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: activeSections.map((section) {
+                        final String id = (section['id'] ?? '')
+                            .toString()
+                            .trim();
+                        final String name =
+                            (section['name'] ?? 'Unnamed section')
+                                .toString()
+                                .trim();
+                        final String identifier = (section['identifier'] ?? '')
+                            .toString()
+                            .trim();
 
-                    return ListTile(
-                      leading: const Icon(
-                        Icons.class_outlined,
-                        color: primaryTeal,
-                      ),
-                      title: Text(name),
-                      subtitle: identifier.isEmpty ? null : Text(identifier),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () {
-                        Navigator.of(dialogContext).pop(id);
-                      },
-                    );
-                  }).toList(),
+                        return ListTile(
+                          leading: Icon(
+                            Icons.class_outlined,
+                            color: primaryTeal,
+                          ),
+                          title: Text(name),
+                          subtitle: identifier.isEmpty
+                              ? null
+                              : Text(identifier),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: () {
+                            Navigator.of(dialogContext).pop(id);
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(dialogContext).pop();
-                },
-                child: const Text('Cancel'),
-              ),
-            ],
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                    },
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              );
+            },
           );
-        },
-      );
 
       if (!mounted || selectedSectionId == null) {
         return;
@@ -901,11 +998,7 @@ class _InstructorModuleDetailScreenState
 
         builder: (BuildContext dialogContext) {
           return AlertDialog(
-            icon: const Icon(
-              Icons.publish_rounded,
-              color: primaryTeal,
-              size: 34,
-            ),
+            icon: Icon(Icons.publish_rounded, color: primaryTeal, size: 34),
 
             title: const Text('Publish AI Quiz?'),
 
@@ -917,7 +1010,7 @@ class _InstructorModuleDetailScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
 
                 children: [
-                  const Text(
+                  Text(
                     'CASLMS checked the quiz and found no blocking validation errors.',
                     style: TextStyle(color: textGrey, height: 1.45),
                   ),
@@ -946,7 +1039,7 @@ class _InstructorModuleDetailScreenState
                       color: primaryTeal.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Text(
+                    child: Text(
                       'After publishing, enrolled students will be able to see this quiz. '
                       'The student quiz-taking screen is implemented in the next phase.',
                       style: TextStyle(
@@ -980,7 +1073,7 @@ class _InstructorModuleDetailScreenState
 
                 style: FilledButton.styleFrom(
                   backgroundColor: primaryTeal,
-                  foregroundColor: Colors.white,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
                 ),
               ),
             ],
@@ -1004,8 +1097,12 @@ class _InstructorModuleDetailScreenState
       }
 
       final String? idToken = await publishingUser.getIdToken(true);
+      final appCheck = await FirebaseAppCheck.instance.getToken(true);
 
-      if (idToken == null || idToken.isEmpty) {
+      if (idToken == null ||
+          idToken.isEmpty ||
+          appCheck == null ||
+          appCheck.isEmpty) {
         throw AssessmentServiceException(
           'Unable to verify your instructor account.',
         );
@@ -1013,7 +1110,10 @@ class _InstructorModuleDetailScreenState
 
       final response = await sb.Supabase.instance.client.functions.invoke(
         'assessment-submission',
-        headers: <String, String>{'Authorization': 'Bearer $idToken'},
+        headers: <String, String>{
+          'Authorization': 'Bearer $idToken',
+          'X-Firebase-AppCheck': appCheck,
+        },
         body: <String, dynamic>{
           'action': 'publish_ai_quiz',
           'sectionId': selectedSectionId,
@@ -1065,7 +1165,7 @@ class _InstructorModuleDetailScreenState
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('AI quiz published successfully.'),
           backgroundColor: primaryTeal,
           behavior: SnackBarBehavior.floating,
@@ -1090,7 +1190,7 @@ class _InstructorModuleDetailScreenState
             width: 100,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: textGrey,
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
@@ -1100,7 +1200,7 @@ class _InstructorModuleDetailScreenState
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 color: textDark,
                 fontSize: 11.5,
                 fontWeight: FontWeight.w700,
@@ -1220,7 +1320,7 @@ class _InstructorModuleDetailScreenState
                 Navigator.pop(dialogContext, true);
               },
 
-              child: const Text('Delete', style: TextStyle(color: red)),
+              child: Text('Delete', style: TextStyle(color: red)),
             ),
           ],
         );
@@ -1245,7 +1345,7 @@ class _InstructorModuleDetailScreenState
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Assessment deleted.'),
           backgroundColor: red,
           behavior: SnackBarBehavior.floating,
@@ -1276,7 +1376,7 @@ class _InstructorModuleDetailScreenState
         return AlertDialog(
           title: Row(
             children: [
-              const Icon(Icons.auto_awesome_rounded, color: primaryTeal),
+              Icon(Icons.auto_awesome_rounded, color: primaryTeal),
               const SizedBox(width: 10),
               Expanded(child: Text(title)),
             ],
@@ -1367,11 +1467,7 @@ class _InstructorModuleDetailScreenState
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          icon: const Icon(
-            Icons.auto_awesome_rounded,
-            color: primaryTeal,
-            size: 34,
-          ),
+          icon: Icon(Icons.auto_awesome_rounded, color: primaryTeal, size: 34),
           title: Text(
             forceReanalyze
                 ? 'Re-analyze Material with AI?'
@@ -1405,7 +1501,7 @@ class _InstructorModuleDetailScreenState
               label: Text(forceReanalyze ? 'Re-analyze' : 'Analyze'),
               style: FilledButton.styleFrom(
                 backgroundColor: primaryTeal,
-                foregroundColor: Colors.white,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
             ),
           ],
@@ -1499,11 +1595,7 @@ class _InstructorModuleDetailScreenState
                 void Function(void Function()) setDialogState,
               ) {
                 return AlertDialog(
-                  icon: const Icon(
-                    Icons.quiz_rounded,
-                    color: primaryTeal,
-                    size: 34,
-                  ),
+                  icon: Icon(Icons.quiz_rounded, color: primaryTeal, size: 34),
 
                   title: const Text('Generate AI Quiz Draft'),
 
@@ -1515,14 +1607,14 @@ class _InstructorModuleDetailScreenState
                       crossAxisAlignment: CrossAxisAlignment.start,
 
                       children: [
-                        const Text(
+                        Text(
                           'Gemini will create multiple-choice questions using only this PDF.',
                           style: TextStyle(color: textGrey, height: 1.45),
                         ),
 
                         const SizedBox(height: 20),
 
-                        const Text(
+                        Text(
                           'Number of questions',
                           style: TextStyle(
                             color: textDark,
@@ -1569,7 +1661,7 @@ class _InstructorModuleDetailScreenState
 
                         const SizedBox(height: 18),
 
-                        const Text(
+                        Text(
                           'Difficulty',
                           style: TextStyle(
                             color: textDark,
@@ -1635,7 +1727,9 @@ class _InstructorModuleDetailScreenState
 
                       style: FilledButton.styleFrom(
                         backgroundColor: primaryTeal,
-                        foregroundColor: Colors.white,
+                        foregroundColor: Theme.of(context)
+                            .colorScheme
+                            .onPrimary,
                       ),
                     ),
                   ],
@@ -1656,7 +1750,7 @@ class _InstructorModuleDetailScreenState
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text('Gemini is generating the quiz draft...'),
         backgroundColor: primaryTeal,
         behavior: SnackBarBehavior.floating,
@@ -1825,7 +1919,7 @@ class _InstructorModuleDetailScreenState
 
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Row(
+          title: Row(
             children: [
               Icon(Icons.auto_awesome_rounded, color: primaryTeal),
 
@@ -1846,10 +1940,10 @@ class _InstructorModuleDetailScreenState
                 Text(
                   draft.title,
 
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: textDark,
                     fontSize: 17,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
 
@@ -1858,11 +1952,7 @@ class _InstructorModuleDetailScreenState
                 Text(
                   draft.instructions,
 
-                  style: const TextStyle(
-                    color: textGrey,
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
+                  style: TextStyle(color: textGrey, fontSize: 12, height: 1.4),
                 ),
 
                 const SizedBox(height: 8),
@@ -1872,7 +1962,7 @@ class _InstructorModuleDetailScreenState
                   '${_capitalize(draft.difficulty)} \u2022 '
                   '${draft.totalPoints} points',
 
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: primaryTeal,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
@@ -1899,7 +1989,10 @@ class _InstructorModuleDetailScreenState
                         padding: const EdgeInsets.all(14),
 
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
+                          color: AppColors.resolve(
+                            context,
+                            AppColors.background,
+                          ),
 
                           borderRadius: BorderRadius.circular(14),
 
@@ -1913,9 +2006,9 @@ class _InstructorModuleDetailScreenState
                             Text(
                               '${index + 1}. ${question.question}',
 
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: textDark,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 height: 1.4,
                               ),
                             ),
@@ -1974,7 +2067,7 @@ class _InstructorModuleDetailScreenState
                               Text(
                                 'Explanation: ${question.explanation}',
 
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: textGrey,
                                   fontSize: 10.5,
                                   height: 1.4,
@@ -2045,7 +2138,7 @@ class _InstructorModuleDetailScreenState
 
               style: FilledButton.styleFrom(
                 backgroundColor: primaryTeal,
-                foregroundColor: Colors.white,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
             ),
           ],
@@ -2436,385 +2529,199 @@ class _InstructorModuleDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    return instructorScaffold(
-      context: context,
-      backgroundColor: background,
-
-      appBar: AppBar(
-        backgroundColor: background,
-        elevation: 0,
-        centerTitle: true,
-
-        leading: IconButton(
-          onPressed: () {
-            Navigator.pop(context);
-          },
-
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 20,
-            color: textDark,
-          ),
-        ),
-
-        title: const Text(
-          'Module Management',
-          style: TextStyle(
-            color: textDark,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-
-            onPressed: () {
-              _loadPage();
-            },
-
-            icon: const Icon(Icons.refresh_rounded, color: textDark),
-          ),
-
-          IconButton(
-            tooltip: 'Retry missing notifications',
-            onPressed: _retryingNotifications ? null : _retryNotifications,
-            icon: _retryingNotifications
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(
-                    Icons.notifications_active_outlined,
-                    color: textDark,
-                  ),
-          ),
-
-          const SizedBox(width: 8),
-        ],
-      ),
-
-      body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1000),
-
-            child: _buildBody(),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // BODY
-  // ============================================================
-
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: primaryTeal));
-    }
-
+    if (_isLoading) return const PageLoadingState();
     if (_errorMessage != null) {
-      return _buildErrorState();
+      return Scaffold(
+        appBar: AppBar(title: const Text('Module')),
+        body: _buildErrorState(),
+      );
     }
-
-    return RefreshIndicator(
-      onRefresh: _loadPage,
-      color: primaryTeal,
-
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-
-        padding: const EdgeInsets.fromLTRB(24, 12, 24, 40),
-
-        children: [
-          _buildModuleHeader(),
-
-          const SizedBox(height: 28),
-
-          // ====================================================
-          // LEARNING MATERIALS
-          // ====================================================
-          _buildLearningMaterialHeader(),
-
-          const SizedBox(height: 16),
-
-          if (_materials.isEmpty)
-            _buildEmptyMaterials()
-          else
-            ..._materials.map(_buildMaterialCard),
-
-          const SizedBox(height: 30),
-
-          // ====================================================
-          // ASSESSMENTS
-          // ====================================================
-          Row(
-            children: [
-              const Expanded(
+    return InstructorTaskScaffold(
+      title: _moduleTitle,
+      highlightHeading: true,
+      subtitle: [
+        'Viewing: $_sectionLabel',
+        widget.courseCode,
+        widget.courseTitle,
+        _moduleStatus,
+      ].where((value) => value.isNotEmpty).join(' • '),
+      actions: [
+        IconButton(
+          tooltip: 'Refresh module',
+          onPressed: () => _loadPage(showLoading: false),
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+        IconButton(
+          tooltip: 'Module information',
+          icon: const Icon(Icons.info_outline_rounded),
+          onPressed: () => showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            builder: (context) => SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-
                   children: [
-                    Text(
-                      'Assessments',
-                      style: TextStyle(
-                        color: textDark,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Module information',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Close',
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
                     ),
-
-                    SizedBox(height: 3),
-
-                    Text(
-                      'Create assessments and manage student submissions.',
-                      style: TextStyle(color: textGrey, fontSize: 11.5),
-                    ),
+                    _buildModuleHeader(),
+                    const SizedBox(height: 20),
+                    _buildFutureAiCard(),
                   ],
                 ),
               ),
-
-              const SizedBox(width: 12),
-
-              ElevatedButton.icon(
-                onPressed: _createAssessment,
-
-                icon: const Icon(
-                  Icons.add_rounded,
-                  color: Colors.white,
-                  size: 18,
-                ),
-
-                label: const Text(
-                  'Create',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryTeal,
-                  elevation: 0,
-
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          if (_assessments.isEmpty)
-            _buildEmptyAssessments()
-          else
-            ..._assessments.map(_buildAssessmentCard),
-
-          const SizedBox(height: 20),
-
-          _buildFutureAiCard(),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // MODULE HEADER
-  // ============================================================
-
-  Widget _buildModuleHeader() {
-    final bool published = _moduleStatus == 'published';
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-
-      decoration: BoxDecoration(
-        color: primaryTeal,
-
-        borderRadius: BorderRadius.circular(22),
-      ),
-
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-
-              borderRadius: BorderRadius.circular(17),
             ),
-
-            child: const Icon(
-              Icons.menu_book_rounded,
-              color: Colors.white,
-              size: 29,
-            ),
-          ),
-
-          const SizedBox(width: 15),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-
-              children: [
-                Text(
-                  widget.courseCode.isEmpty
-                      ? (_moduleOrder > 0 ? 'MODULE $_moduleOrder' : 'MODULE')
-                      : '${widget.courseCode}'
-                            '${_moduleOrder > 0 ? ' \u2022 MODULE $_moduleOrder' : ''}',
-
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-
-                const SizedBox(height: 5),
-
-                Text(
-                  _moduleTitle,
-
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                Text(
-                  widget.courseTitle,
-
-                  style: const TextStyle(color: Colors.white70, fontSize: 11),
-                ),
-
-                if (_moduleDescription.isNotEmpty) ...[
-                  const SizedBox(height: 10),
-
-                  Text(
-                    _moduleDescription,
-
-                    maxLines: 3,
-
-                    overflow: TextOverflow.ellipsis,
-
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                      height: 1.45,
-                    ),
-                  ),
-                ],
-
-                const SizedBox(height: 12),
-
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 5,
-                  ),
-
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-
-                  child: Text(
-                    published ? 'PUBLISHED' : 'DRAFT',
-
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // LEARNING MATERIAL HEADER
-  // ============================================================
-
-  Widget _buildLearningMaterialHeader() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-
-      children: [
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-
-            children: [
-              Text(
-                'Learning Materials',
-                style: TextStyle(
-                  color: textDark,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-
-              SizedBox(height: 3),
-
-              Text(
-                'Upload files or attach external learning resources.',
-                style: TextStyle(color: textGrey, fontSize: 11.5),
-              ),
-            ],
           ),
         ),
-
-        const SizedBox(width: 12),
-
-        ElevatedButton.icon(
-          onPressed: _addLearningMaterial,
-
-          icon: const Icon(Icons.add_rounded, color: Colors.white, size: 18),
-
-          label: const Text(
-            'Add Material',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
-          ),
-
-          style: ElevatedButton.styleFrom(
-            backgroundColor: primaryTeal,
-            foregroundColor: Colors.white,
-            elevation: 0,
-
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
+        IconButton(
+          tooltip: 'Retry missing notifications',
+          onPressed: _retryingNotifications ? null : _retryNotifications,
+          icon: const Icon(Icons.notifications_active_outlined),
         ),
       ],
+      body: ListView(
+        padding: InstructorTaskScaffold.paddingOf(context),
+        children: [
+          InstructorFormSection(
+            title: 'Viewing section: $_sectionLabel',
+            description:
+                'Module assigned to: $_assignedSectionLabel. The selector below '
+                'only filters this instructor view; it does not change who can access the module.',
+            child: DropdownButtonFormField<String>(
+              key: ValueKey(_activeSectionId),
+              initialValue: _activeSectionId ?? '',
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'View section'),
+              items: [
+                const DropdownMenuItem(value: '', child: Text('All sections')),
+                for (final row in _activeSections)
+                  DropdownMenuItem(
+                    value: row['id'].toString(),
+                    child: Text(row['name'].toString()),
+                  ),
+              ],
+              onChanged: (value) async {
+                final uid = FirebaseAuth.instance.currentUser?.uid;
+                if (uid == null) return;
+                final selection = InstructorWorkspaceContext.instance;
+                final revision = selection.beginCourse(uid, widget.courseId);
+                try {
+                  final verified = await CourseSectionService().getSections(
+                    widget.courseId,
+                  );
+                  if (!mounted ||
+                      FirebaseAuth.instance.currentUser?.uid != uid) {
+                    return;
+                  }
+                  if (!selection.commitSections(
+                    revision,
+                    uid,
+                    widget.courseId,
+                    verified,
+                    requested: value,
+                  )) {
+                    return;
+                  }
+                  setState(() {
+                    _activeSections = verified
+                        .where((r) => r['status'] == 'active')
+                        .toList();
+                    _activeSectionId = selection.sectionId;
+                  });
+                } catch (_) {
+                  if (mounted) {
+                    _showError(
+                      'Unable to validate this section. Please refresh.',
+                    );
+                  }
+                }
+              },
+            ),
+          ),
+          const SizedBox(height: 24),
+          for (final assessmentFirst
+              in (widget.focusAssessmentId.isNotEmpty || widget.initialTab == 1
+                  ? [true, false]
+                  : [false, true])) ...[
+            Text(
+              assessmentFirst
+                  ? 'Assessments'
+                  : 'Learning materials • All sections',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            if (assessmentFirst) ...[
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton.tonalIcon(
+                  onPressed: _createAssessment,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Create assessment'),
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (_visibleAssessments.isEmpty)
+                _buildEmptyAssessments()
+              else
+                ..._visibleAssessments.map(_buildAssessmentCard),
+            ] else ...[
+              _buildLearningMaterialHeader(),
+              const SizedBox(height: 16),
+              if (_materials.isEmpty)
+                _buildEmptyMaterials()
+              else
+                ..._materials.map(_buildMaterialCard),
+            ],
+            const SizedBox(height: 28),
+          ],
+        ],
+      ),
     );
   }
 
-  // ============================================================
-  // MATERIAL CARD
-  // ============================================================
+  Widget _buildModuleHeader() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(_moduleTitle, style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 8),
+      Text(widget.courseTitle),
+      const SizedBox(height: 8),
+      Text(
+        'Module $_moduleOrder • $_moduleStatus',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      if (_moduleDescription.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        Text(_moduleDescription),
+      ],
+    ],
+  );
+
+  Widget _buildLearningMaterialHeader() => Align(
+    alignment: Alignment.centerRight,
+    child: FilledButton.icon(
+      onPressed: _addLearningMaterial,
+      icon: const Icon(Icons.add_rounded),
+      label: const Text('Add material'),
+    ),
+  );
 
   Widget _buildMaterialCard(Map<String, dynamic> material) {
     final String materialId = _materialId(material);
@@ -2874,7 +2781,7 @@ class _InstructorModuleDetailScreenState
       padding: const EdgeInsets.all(16),
 
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
 
         borderRadius: BorderRadius.circular(18),
 
@@ -2926,10 +2833,10 @@ class _InstructorModuleDetailScreenState
 
                         overflow: TextOverflow.ellipsis,
 
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: textDark,
                           fontSize: 14,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -2954,7 +2861,7 @@ class _InstructorModuleDetailScreenState
                         style: TextStyle(
                           color: statusColor,
                           fontSize: 8.5,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -2966,7 +2873,7 @@ class _InstructorModuleDetailScreenState
                 Text(
                   details.join(' \u2022 '),
 
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: textGrey,
                     fontSize: 10.5,
                     fontWeight: FontWeight.w600,
@@ -3007,7 +2914,7 @@ class _InstructorModuleDetailScreenState
                           style: TextStyle(
                             color: aiStatusColor,
                             fontSize: 8.5,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
@@ -3025,7 +2932,7 @@ class _InstructorModuleDetailScreenState
 
                     overflow: TextOverflow.ellipsis,
 
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: textGrey,
                       fontSize: 10.5,
                       height: 1.4,
@@ -3038,7 +2945,7 @@ class _InstructorModuleDetailScreenState
 
                   Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.attach_file_rounded,
                         color: textGrey,
                         size: 14,
@@ -3054,10 +2961,7 @@ class _InstructorModuleDetailScreenState
 
                           overflow: TextOverflow.ellipsis,
 
-                          style: const TextStyle(
-                            color: textGrey,
-                            fontSize: 9.5,
-                          ),
+                          style: TextStyle(color: textGrey, fontSize: 9.5),
                         ),
                       ),
                     ],
@@ -3070,7 +2974,7 @@ class _InstructorModuleDetailScreenState
 
                   Row(
                     children: [
-                      const Icon(Icons.link_rounded, color: blue, size: 14),
+                      Icon(Icons.link_rounded, color: blue, size: 14),
 
                       const SizedBox(width: 4),
 
@@ -3082,7 +2986,7 @@ class _InstructorModuleDetailScreenState
 
                           overflow: TextOverflow.ellipsis,
 
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: blue,
                             fontSize: 9.5,
                             fontWeight: FontWeight.w600,
@@ -3102,7 +3006,7 @@ class _InstructorModuleDetailScreenState
           // MANAGEMENT MENU
           // ====================================================
           if (busy)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(11),
 
               child: SizedBox(
@@ -3153,7 +3057,7 @@ class _InstructorModuleDetailScreenState
 
               itemBuilder: (context) => [
                 if (status != 'published')
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'publish',
 
                     child: Row(
@@ -3168,7 +3072,7 @@ class _InstructorModuleDetailScreenState
                   ),
 
                 if (status != 'draft')
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'draft',
 
                     child: Row(
@@ -3187,7 +3091,7 @@ class _InstructorModuleDetailScreenState
                   ),
 
                 if (canAnalyzeMaterial && !hasSavedAiAnalysis)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'analyze_ai',
 
                     child: Row(
@@ -3206,7 +3110,7 @@ class _InstructorModuleDetailScreenState
                   ),
 
                 if (hasSavedAiAnalysis)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'view_ai_analysis',
 
                     child: Row(
@@ -3225,7 +3129,7 @@ class _InstructorModuleDetailScreenState
                   ),
 
                 if (hasSavedAiAnalysis)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'reanalyze_ai',
 
                     child: Row(
@@ -3242,7 +3146,7 @@ class _InstructorModuleDetailScreenState
                   ),
 
                 if (canGenerateAiQuiz)
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'generate_ai_quiz',
 
                     child: Row(
@@ -3258,7 +3162,7 @@ class _InstructorModuleDetailScreenState
 
                 const PopupMenuDivider(),
 
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'delete',
 
                   child: Row(
@@ -3282,90 +3186,11 @@ class _InstructorModuleDetailScreenState
   // EMPTY MATERIALS
   // ============================================================
 
-  Widget _buildEmptyMaterials() {
-    return Container(
-      width: double.infinity,
-
-      padding: const EdgeInsets.all(28),
-
-      decoration: BoxDecoration(
-        color: Colors.white,
-
-        borderRadius: BorderRadius.circular(18),
-
-        border: Border.all(color: borderColor),
-      ),
-
-      child: Column(
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-
-            decoration: BoxDecoration(
-              color: primaryTeal.withValues(alpha: 0.10),
-
-              shape: BoxShape.circle,
-            ),
-
-            child: const Icon(
-              Icons.library_books_outlined,
-              color: primaryTeal,
-              size: 28,
-            ),
-          ),
-
-          const SizedBox(height: 13),
-
-          const Text(
-            'No learning materials yet',
-
-            style: TextStyle(
-              color: textDark,
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-
-          const SizedBox(height: 5),
-
-          const Text(
-            'Upload PDFs, documents, presentations, images, videos, or add an external learning link.',
-
-            textAlign: TextAlign.center,
-
-            style: TextStyle(color: textGrey, fontSize: 11.5, height: 1.5),
-          ),
-
-          const SizedBox(height: 17),
-
-          ElevatedButton.icon(
-            onPressed: _addLearningMaterial,
-
-            icon: const Icon(Icons.upload_file_rounded, color: Colors.white),
-
-            label: const Text(
-              'Add Learning Material',
-
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryTeal,
-              elevation: 0,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // ASSESSMENT CARD
-  // ============================================================
+  Widget _buildEmptyMaterials() => const WorkspaceEmptyState(
+    icon: Icons.description_outlined,
+    title: 'No learning materials yet',
+    message: 'Use Add material to upload a file or attach a learning resource.',
+  );
 
   Widget _buildAssessmentCard(Map<String, dynamic> assessment) {
     final String title = (assessment['title'] ?? 'Assessment').toString();
@@ -3410,7 +3235,7 @@ class _InstructorModuleDetailScreenState
       padding: const EdgeInsets.all(16),
 
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
 
         borderRadius: BorderRadius.circular(18),
 
@@ -3456,10 +3281,10 @@ class _InstructorModuleDetailScreenState
                           child: Text(
                             title,
 
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: textDark,
                               fontSize: 14,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
@@ -3484,7 +3309,7 @@ class _InstructorModuleDetailScreenState
                             style: TextStyle(
                               color: statusColor,
                               fontSize: 8.5,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
@@ -3497,7 +3322,7 @@ class _InstructorModuleDetailScreenState
                       '${_capitalize(type)} \u2022 '
                       '$points points',
 
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: textGrey,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -3509,7 +3334,7 @@ class _InstructorModuleDetailScreenState
                     Text(
                       'Due ${_formatDate(assessment['dueAt'])}',
 
-                      style: const TextStyle(color: textGrey, fontSize: 10.5),
+                      style: TextStyle(color: textGrey, fontSize: 10.5),
                     ),
 
                     const SizedBox(height: 6),
@@ -3543,7 +3368,7 @@ class _InstructorModuleDetailScreenState
 
                             overflow: TextOverflow.ellipsis,
 
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: primaryTeal,
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
@@ -3593,7 +3418,7 @@ class _InstructorModuleDetailScreenState
 
                 itemBuilder: (context) => [
                   if (isAiGeneratedQuiz)
-                    const PopupMenuItem(
+                    PopupMenuItem(
                       value: 'edit_ai_quiz',
 
                       child: Row(
@@ -3613,7 +3438,7 @@ class _InstructorModuleDetailScreenState
 
                   if (isAiGeneratedQuiz) const PopupMenuDivider(),
 
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'grading',
 
                     child: Row(
@@ -3633,7 +3458,12 @@ class _InstructorModuleDetailScreenState
 
                   const PopupMenuDivider(),
 
-                  if (status != 'published')
+                  if (status != 'published' ||
+                      (isAiGeneratedQuiz &&
+                          (assessment['quizVersion'] ?? '')
+                              .toString()
+                              .trim()
+                              .isEmpty))
                     PopupMenuItem(
                       value: 'publish',
                       child: Text(
@@ -3657,7 +3487,7 @@ class _InstructorModuleDetailScreenState
 
                   const PopupMenuDivider(),
 
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'delete',
 
                     child: Text('Delete', style: TextStyle(color: red)),
@@ -3669,7 +3499,7 @@ class _InstructorModuleDetailScreenState
 
           const SizedBox(height: 14),
 
-          const Divider(height: 1, color: borderColor),
+          Divider(height: 1, color: borderColor),
 
           const SizedBox(height: 13),
 
@@ -3698,13 +3528,13 @@ class _InstructorModuleDetailScreenState
                     ? 'Review & Edit Quiz'
                     : 'Submissions & Grading',
 
-                style: const TextStyle(fontWeight: FontWeight.w800),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
 
               style: OutlinedButton.styleFrom(
-                foregroundColor: primaryTeal,
+                foregroundColor: AppColors.resolve(context, AppColors.link),
 
-                side: const BorderSide(color: primaryTeal, width: 1.3),
+                side: BorderSide(color: primaryTeal, width: 1.3),
 
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -3721,90 +3551,11 @@ class _InstructorModuleDetailScreenState
   // EMPTY ASSESSMENTS
   // ============================================================
 
-  Widget _buildEmptyAssessments() {
-    return Container(
-      width: double.infinity,
-
-      padding: const EdgeInsets.all(28),
-
-      decoration: BoxDecoration(
-        color: Colors.white,
-
-        borderRadius: BorderRadius.circular(18),
-
-        border: Border.all(color: borderColor),
-      ),
-
-      child: Column(
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-
-            decoration: BoxDecoration(
-              color: primaryTeal.withValues(alpha: 0.10),
-
-              shape: BoxShape.circle,
-            ),
-
-            child: const Icon(
-              Icons.assignment_outlined,
-              color: primaryTeal,
-              size: 28,
-            ),
-          ),
-
-          const SizedBox(height: 13),
-
-          const Text(
-            'No assessments yet',
-
-            style: TextStyle(
-              color: textDark,
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-
-          const SizedBox(height: 5),
-
-          const Text(
-            'Create a quiz, activity, assignment, or exam using an external link.',
-
-            textAlign: TextAlign.center,
-
-            style: TextStyle(color: textGrey, fontSize: 11.5, height: 1.5),
-          ),
-
-          const SizedBox(height: 17),
-
-          ElevatedButton.icon(
-            onPressed: _createAssessment,
-
-            icon: const Icon(Icons.add_rounded, color: Colors.white),
-
-            label: const Text(
-              'Create Assessment',
-
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryTeal,
-              elevation: 0,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // FUTURE AI
-  // ============================================================
+  Widget _buildEmptyAssessments() => const WorkspaceEmptyState(
+    icon: Icons.assignment_outlined,
+    title: 'No assessments yet',
+    message: 'Create an assessment to define its instructions, grading, and availability.',
+  );
 
   Widget _buildFutureAiCard() {
     final int eligibleCount = _materials
@@ -3834,7 +3585,7 @@ class _InstructorModuleDetailScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
 
         children: [
-          const Icon(Icons.auto_awesome_rounded, color: primaryTeal, size: 22),
+          Icon(Icons.auto_awesome_rounded, color: primaryTeal, size: 22),
 
           const SizedBox(width: 12),
 
@@ -3843,13 +3594,13 @@ class _InstructorModuleDetailScreenState
               crossAxisAlignment: CrossAxisAlignment.start,
 
               children: [
-                const Text(
+                Text(
                   'AI Source Preparation',
 
                   style: TextStyle(
                     color: primaryTeal,
                     fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
 
@@ -3859,7 +3610,7 @@ class _InstructorModuleDetailScreenState
                   '$eligibleCount AI-eligible material${eligibleCount == 1 ? '' : 's'} \u2022 '
                   '$pendingCount pending \u2022 $readyCount ready',
 
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: textDark,
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
@@ -3868,7 +3619,7 @@ class _InstructorModuleDetailScreenState
 
                 const SizedBox(height: 5),
 
-                const Text(
+                Text(
                   'AI analysis and quiz drafting support PDF, TXT, DOCX, PPTX, XLSX, '
                   'JPG/JPEG, PNG, WEBP, MP4, and WEBM. Open a material menu (\u22EE), '
                   'analyze it once, then reuse the saved analysis or generate a quiz. '
@@ -3902,7 +3653,7 @@ class _InstructorModuleDetailScreenState
         children: [
           const SizedBox(height: 100),
 
-          const Icon(Icons.error_outline_rounded, color: red, size: 48),
+          Icon(Icons.error_outline_rounded, color: red, size: 48),
 
           const SizedBox(height: 12),
 
@@ -3911,10 +3662,7 @@ class _InstructorModuleDetailScreenState
 
             textAlign: TextAlign.center,
 
-            style: const TextStyle(
-              color: textGrey,
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(color: textGrey, fontWeight: FontWeight.w600),
           ),
 
           const SizedBox(height: 18),

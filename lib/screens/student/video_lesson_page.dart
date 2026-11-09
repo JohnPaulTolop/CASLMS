@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_theme.dart';
+
 class VideoLessonScreen extends StatelessWidget {
   const VideoLessonScreen({super.key});
 
@@ -8,7 +10,8 @@ class VideoLessonScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.black, // Dark background specifically for the video player header
+        backgroundColor: Colors
+            .black, // Dark background specifically for the video player header
         foregroundColor: Colors.white,
         elevation: 0,
         title: const Text(
@@ -27,7 +30,7 @@ class VideoLessonScreen extends StatelessWidget {
         children: [
           // 1. Video Player Placeholder
           _buildVideoPlayerMock(),
-          
+
           // 2. Custom Tabs
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -43,7 +46,7 @@ class VideoLessonScreen extends StatelessWidget {
               ],
             ),
           ),
-          
+
           // 3. Tab Content
           Expanded(
             child: SingleChildScrollView(
@@ -54,18 +57,30 @@ class VideoLessonScreen extends StatelessWidget {
                 children: [
                   const Text(
                     'About this video',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     'This video demonstrates how to implement Firebase Authentication using Email/Password in an Android application.',
-                    style: TextStyle(fontSize: 14, color: Colors.grey[600], height: 1.5),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                      height: 1.5,
+                    ),
                   ),
-                  
+
                   const SizedBox(height: 32),
                   const Text(
                     'Related Module',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   _buildRelatedModuleCard(context),
@@ -95,45 +110,68 @@ class VideoLessonScreen extends StatelessWidget {
                 color: Colors.black.withValues(alpha: 0.5),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 48),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.white,
+                size: 48,
+              ),
             ),
-            
+
             // Mock Video Controls (Bottom)
             Positioned(
               bottom: 0,
               left: 0,
               right: 0,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
-                  ),
+                  color: Colors.black.withValues(alpha: 0.8),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.pause_rounded, color: Colors.white, size: 20),
+                    const Icon(
+                      Icons.pause_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     const SizedBox(width: 12),
                     const Text(
                       '02:15 / 18:30',
-                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     const Spacer(),
                     const Text(
                       '1.0x',
-                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     const SizedBox(width: 16),
-                    const Icon(Icons.subtitles_outlined, color: Colors.white, size: 20),
+                    const Icon(
+                      Icons.subtitles_outlined,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     const SizedBox(width: 16),
-                    const Icon(Icons.fullscreen_rounded, color: Colors.white, size: 20),
+                    const Icon(
+                      Icons.fullscreen_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ],
                 ),
               ),
             ),
-            
+
             // Mock Progress Bar
             Positioned(
               bottom: 0,
@@ -142,8 +180,11 @@ class VideoLessonScreen extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: 0.15, // 02:15 / 18:30 roughly
                 backgroundColor: Colors.white.withValues(alpha: 0.3),
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.redAccent), // Standard video progress color
-                minHeight: 3,
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Colors.redAccent,
+                ), // Standard video progress color
+                minHeight: AppTheme.progressBarHeight,
+                borderRadius: BorderRadius.circular(8),
               ),
             ),
           ],
@@ -191,13 +232,6 @@ class VideoLessonScreen extends StatelessWidget {
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.02),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
         ),
         child: Row(
           children: [
@@ -207,16 +241,33 @@ class VideoLessonScreen extends StatelessWidget {
                 color: const Color(0xFFE3F2FD),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.description_rounded, color: Colors.blueAccent),
+              child: const Icon(
+                Icons.description_rounded,
+                color: Colors.blueAccent,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Module 5', style: TextStyle(fontSize: 12, color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Module 5',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blueAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  const Text('Firebase Authentication', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
+                  const Text(
+                    'Firebase Authentication',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
                 ],
               ),
             ),

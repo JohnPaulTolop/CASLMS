@@ -1,3 +1,5 @@
+import '../../core/app_colors.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -7,7 +9,8 @@ import '../../services/chat_service.dart';
 import 'instructor_chat_page.dart';
 
 class InstructorMessagesScreen extends StatefulWidget {
-  const InstructorMessagesScreen({super.key});
+  const InstructorMessagesScreen({super.key, this.chatService});
+  final ChatService? chatService;
 
   @override
   State<InstructorMessagesScreen> createState() =>
@@ -19,159 +22,132 @@ class _InstructorMessagesScreenState extends State<InstructorMessagesScreen> {
   // DESIGN SYSTEM
   // ============================================================
 
-  static const Color primaryTeal = Color(0xFF00897B);
+  Color get primaryTeal => AppColors.resolve(context, AppColors.primaryBlue);
 
-  static const Color background = Color(0xFFF7F9FC);
+  Color get background => AppColors.resolve(context, AppColors.background);
 
-  static const Color textDark = Color(0xFF10182F);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
 
-  static const Color textGrey = Color(0xFF68738A);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
 
-  static const Color borderColor = Color(0xFFE6EAF0);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
 
   // ============================================================
   // SERVICE
   // ============================================================
 
-  final ChatService _chatService = ChatService();
+  late final ChatService _chatService = widget.chatService ?? ChatService();
 
   // ============================================================
   // CACHE
   // ============================================================
-
-  final Map<String, Future<Map<String, dynamic>?>> _courseFutures = {};
 
   // ============================================================
   // STATE
   // ============================================================
 
   String _searchQuery = '';
+  Widget? _conversation;
+  String? _selectedStudent;
+  int _openGeneration = 0;
+  late Stream<List<Map<String, dynamic>>> _conversations = _chatService
+      .watchInstructorConversations();
+  bool get _desktop =>
+      MediaQuery.sizeOf(context).width >= 1100 &&
+      MediaQuery.textScalerOf(context).scale(14) / 14 <= 1.4;
 
   // ============================================================
   // GET COURSE FUTURE
   // ============================================================
-
-  Future<Map<String, dynamic>?> _getCourseFuture(String courseId) {
-    return _courseFutures.putIfAbsent(
-      courseId,
-      () => _chatService.getCourseById(courseId),
-    );
-  }
 
   // ============================================================
   // BUILD
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
-    return instructorScaffold(
-      context: context,
-      backgroundColor: background,
-
-      appBar: AppBar(
-        backgroundColor: background,
-
-        elevation: 0,
-
-        foregroundColor: textDark,
-
-        centerTitle: true,
-
-        title: const Text(
-          'Messages',
-
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-        ),
-
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-
-            onPressed: () {
-              setState(() {
-                _courseFutures.clear();
-              });
-            },
-
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-
-          const SizedBox(width: 6),
-        ],
+  Widget build(BuildContext context) => instructorScaffold(
+    context: context,
+    title: 'Messages',
+    subtitle: 'Keep your classroom conversations close.',
+    actions: [
+      IconButton(
+        tooltip: 'Refresh messages',
+        onPressed: () => setState(() {
+          _conversations = _chatService.watchInstructorConversations();
+        }),
+        icon: const Icon(Icons.refresh_rounded),
       ),
-
-      body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 900),
-
-            child: Column(
-              children: [
-                // ================================================
-                // SEARCH
-                // ================================================
-
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
-
-                  child: TextField(
-                    onChanged: (value) {
-                      setState(() {
-                        _searchQuery = value;
-                      });
-                    },
-
-                    decoration: InputDecoration(
-                      hintText: 'Search student...',
-
-                      prefixIcon: const Icon(
-                        Icons.search_rounded,
-
-                        color: primaryTeal,
+    ],
+    body: Padding(
+      padding: const EdgeInsets.fromLTRB(22, 0, 22, 20),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final list = Column(
+            children: [
+              TextField(
+                onChanged: (v) => setState(() => _searchQuery = v),
+                decoration: const InputDecoration(
+                  hintText: 'Search students',
+                  prefixIcon: Icon(Icons.search_rounded),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(child: _buildConversationList()),
+            ],
+          );
+          if (!_desktop || box.maxWidth < 700) return list;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(width: 300, child: list),
+              const SizedBox(width: 20),
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant,
                       ),
-
-                      filled: true,
-
-                      fillColor: Colors.white,
-
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-
-                        borderSide: const BorderSide(color: borderColor),
-                      ),
-
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-
-                        borderSide: const BorderSide(color: borderColor),
-                      ),
-
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(15),
-
-                        borderSide: const BorderSide(
-                          color: primaryTeal,
-
-                          width: 1.5,
-                        ),
-                      ),
+                      borderRadius: BorderRadius.circular(20),
                     ),
+                    child:
+                        _conversation ??
+                        const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(28),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.forum_outlined, size: 36),
+                                SizedBox(height: 14),
+                                Text(
+                                  'A conversation starts here',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Choose a student to open your messages.',
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                   ),
                 ),
-
-                // ================================================
-                // CONVERSATIONS
-                // ================================================
-                Expanded(child: _buildConversationList()),
-              ],
-            ),
-          ),
-        ),
+              ),
+            ],
+          );
+        },
       ),
-    );
-  }
+    ),
+  );
 
   // ============================================================
   // CONVERSATION LIST
@@ -179,18 +155,16 @@ class _InstructorMessagesScreenState extends State<InstructorMessagesScreen> {
 
   Widget _buildConversationList() {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _chatService.watchInstructorConversations(),
+      stream: _conversations,
 
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData) {
-          return const Center(
-            child: CircularProgressIndicator(color: primaryTeal),
-          );
+          return Center(child: CircularProgressIndicator(color: primaryTeal));
         }
 
         if (snapshot.hasError) {
-          return const Center(
+          return Center(
             child: Padding(
               padding: EdgeInsets.all(30),
 
@@ -305,13 +279,7 @@ class _InstructorMessagesScreenState extends State<InstructorMessagesScreen> {
                 shape: BoxShape.circle,
               ),
 
-              child: const Icon(
-                Icons.forum_outlined,
-
-                color: primaryTeal,
-
-                size: 34,
-              ),
+              child: Icon(Icons.forum_outlined, color: primaryTeal, size: 34),
             ),
 
             const SizedBox(height: 15),
@@ -319,12 +287,12 @@ class _InstructorMessagesScreenState extends State<InstructorMessagesScreen> {
             Text(
               noSearch ? 'No conversations yet' : 'No matching students',
 
-              style: const TextStyle(
+              style: TextStyle(
                 color: textDark,
 
                 fontSize: 17,
 
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
 
@@ -337,7 +305,7 @@ class _InstructorMessagesScreenState extends State<InstructorMessagesScreen> {
 
               textAlign: TextAlign.center,
 
-              style: const TextStyle(color: textGrey, fontSize: 12),
+              style: TextStyle(color: textGrey, fontSize: 12),
             ),
           ],
         ),
@@ -370,219 +338,203 @@ class _InstructorMessagesScreenState extends State<InstructorMessagesScreen> {
         ? '?'
         : studentName.trim()[0].toUpperCase();
 
-    return FutureBuilder<Map<String, dynamic>?>(
-      future: _getCourseFuture(courseId),
+    const String courseLabel = 'Direct conversation';
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
 
-      builder: (context, _) {
-        const String courseLabel = 'Direct conversation';
+      onTap: () async {
+        await _openConversation(
+          courseId: courseId,
 
-        return InkWell(
+          studentId: studentId,
+
+          studentName: studentName,
+
+          instructorId: instructorId,
+
+          instructorName: instructorName,
+        );
+      },
+
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 11),
+
+        padding: const EdgeInsets.all(15),
+
+        decoration: BoxDecoration(
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(18),
+        ),
 
-          onTap: () async {
-            await _openConversation(
-              courseId: courseId,
+        child: Row(
+          children: [
+            // ================================================
+            // AVATAR
+            // ================================================
 
-              studentId: studentId,
+            Stack(
+              clipBehavior: Clip.none,
 
-              studentName: studentName,
-
-              instructorId: instructorId,
-
-              instructorName: instructorName,
-            );
-          },
-
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 11),
-
-            padding: const EdgeInsets.all(15),
-
-            decoration: BoxDecoration(
-              color: Colors.white,
-
-              borderRadius: BorderRadius.circular(18),
-
-              border: Border.all(color: borderColor),
-            ),
-
-            child: Row(
               children: [
-                // ================================================
-                // AVATAR
-                // ================================================
+                CircleAvatar(
+                  radius: 24,
 
-                Stack(
-                  clipBehavior: Clip.none,
+                  backgroundColor: primaryTeal.withValues(alpha: 0.10),
 
-                  children: [
-                    CircleAvatar(
-                      radius: 24,
+                  child: Text(
+                    initial,
 
-                      backgroundColor: primaryTeal.withValues(alpha: 0.10),
+                    style: TextStyle(
+                      color: primaryTeal,
 
-                      child: Text(
-                        initial,
+                      fontWeight: FontWeight.w700,
 
-                        style: const TextStyle(
-                          color: primaryTeal,
-
-                          fontWeight: FontWeight.w800,
-
-                          fontSize: 16,
-                        ),
-                      ),
+                      fontSize: 16,
                     ),
-
-                    // ============================================
-                    // PER-CONVERSATION UNREAD BADGE
-                    // ============================================
-                    StreamBuilder<int>(
-                      stream: _chatService.watchConversationUnreadCount(
-                        courseId: courseId,
-
-                        instructorId: instructorId,
-
-                        studentId: studentId,
-                      ),
-
-                      builder: (context, unreadSnapshot) {
-                        final int unread = unreadSnapshot.data ?? 0;
-
-                        if (unread <= 0) {
-                          return const SizedBox.shrink();
-                        }
-
-                        return Positioned(
-                          top: -4,
-
-                          right: -5,
-
-                          child: Container(
-                            constraints: const BoxConstraints(
-                              minWidth: 19,
-
-                              minHeight: 19,
-                            ),
-
-                            padding: const EdgeInsets.symmetric(horizontal: 5),
-
-                            alignment: Alignment.center,
-
-                            decoration: BoxDecoration(
-                              color: Colors.redAccent,
-
-                              borderRadius: BorderRadius.circular(20),
-
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-
-                            child: Text(
-                              unread > 99 ? '99+' : unread.toString(),
-
-                              style: const TextStyle(
-                                color: Colors.white,
-
-                                fontSize: 8.5,
-
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-
-                const SizedBox(width: 14),
-
-                // ================================================
-                // TEXT
-                // ================================================
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              studentName,
-
-                              maxLines: 1,
-
-                              overflow: TextOverflow.ellipsis,
-
-                              style: const TextStyle(
-                                color: textDark,
-
-                                fontSize: 14.5,
-
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-
-                          if (lastMessageAt != null)
-                            Text(
-                              _formatTime(lastMessageAt),
-
-                              style: const TextStyle(
-                                color: textGrey,
-
-                                fontSize: 9.5,
-                              ),
-                            ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 3),
-
-                      Text(
-                        courseLabel.isEmpty ? 'Course' : courseLabel,
-
-                        maxLines: 1,
-
-                        overflow: TextOverflow.ellipsis,
-
-                        style: const TextStyle(
-                          color: primaryTeal,
-
-                          fontSize: 10.5,
-
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-
-                      const SizedBox(height: 5),
-
-                      Text(
-                        lastMessage.isEmpty ? 'No messages yet' : lastMessage,
-
-                        maxLines: 1,
-
-                        overflow: TextOverflow.ellipsis,
-
-                        style: const TextStyle(color: textGrey, fontSize: 12),
-                      ),
-                    ],
                   ),
                 ),
 
-                const SizedBox(width: 8),
+                // ============================================
+                // PER-CONVERSATION UNREAD BADGE
+                // ============================================
+                StreamBuilder<int>(
+                  stream: _chatService.watchConversationUnreadCount(
+                    courseId: courseId,
 
-                const Icon(
-                  Icons.chevron_right_rounded,
+                    instructorId: instructorId,
 
-                  color: Color(0xFF9BA4B4),
+                    studentId: studentId,
+                  ),
+
+                  builder: (context, unreadSnapshot) {
+                    final int unread = unreadSnapshot.data ?? 0;
+
+                    if (unread <= 0) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return Positioned(
+                      top: -4,
+
+                      right: -5,
+
+                      child: Container(
+                        constraints: const BoxConstraints(
+                          minWidth: 19,
+
+                          minHeight: 19,
+                        ),
+
+                        padding: const EdgeInsets.symmetric(horizontal: 5),
+
+                        alignment: Alignment.center,
+
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+
+                          borderRadius: BorderRadius.circular(20),
+
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+
+                        child: Text(
+                          unread > 99 ? '99+' : unread.toString(),
+
+                          style: const TextStyle(
+                            color: Colors.white,
+
+                            fontSize: 8.5,
+
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
-          ),
-        );
-      },
+
+            const SizedBox(width: 14),
+
+            // ================================================
+            // TEXT
+            // ================================================
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          studentName,
+
+                          maxLines: 1,
+
+                          overflow: TextOverflow.ellipsis,
+
+                          style: TextStyle(
+                            color: _selectedStudent == studentId
+                                ? primaryTeal
+                                : textDark,
+
+                            fontSize: 14.5,
+
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+
+                      if (lastMessageAt != null)
+                        Text(
+                          _formatTime(lastMessageAt),
+
+                          style: TextStyle(color: textGrey, fontSize: 9.5),
+                        ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 3),
+
+                  Text(
+                    courseLabel.isEmpty ? 'Course' : courseLabel,
+
+                    maxLines: 1,
+
+                    overflow: TextOverflow.ellipsis,
+
+                    style: TextStyle(
+                      color: primaryTeal,
+
+                      fontSize: 10.5,
+
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+
+                  const SizedBox(height: 5),
+
+                  Text(
+                    lastMessage.isEmpty ? 'No messages yet' : lastMessage,
+
+                    maxLines: 1,
+
+                    overflow: TextOverflow.ellipsis,
+
+                    style: TextStyle(color: textGrey, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 8),
+
+            const Icon(Icons.chevron_right_rounded, color: Color(0xFF9BA4B4)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -597,6 +549,7 @@ class _InstructorMessagesScreenState extends State<InstructorMessagesScreen> {
     required String instructorId,
     required String instructorName,
   }) async {
+    final generation = ++_openGeneration;
     try {
       final Map<String, dynamic>? student = await _chatService.getUserById(
         studentId,
@@ -606,27 +559,32 @@ class _InstructorMessagesScreenState extends State<InstructorMessagesScreen> {
         return;
       }
 
+      if (generation != _openGeneration) return;
       final String studentEmail = (student?['email'] ?? '').toString();
 
-      await Navigator.push(
-        context,
-
-        MaterialPageRoute(
-          builder: (context) => InstructorChatScreen(
-            courseId: courseId,
-
-            studentId: studentId,
-
-            studentName: studentName,
-
-            studentEmail: studentEmail,
-
-            instructorId: instructorId,
-
-            instructorName: instructorName,
-          ),
-        ),
+      final chat = InstructorChatScreen(
+        key: ValueKey('chat-$studentId'),
+        courseId: courseId,
+        studentId: studentId,
+        studentName: studentName,
+        studentEmail: studentEmail,
+        instructorId: instructorId,
+        instructorName: instructorName,
+        embedded: _desktop,
+        chatService: _chatService,
+        onClose: () => setState(() {
+          _conversation = null;
+          _selectedStudent = null;
+        }),
       );
+      if (_desktop) {
+        setState(() {
+          _selectedStudent = studentId;
+          _conversation = chat;
+        });
+      } else {
+        await Navigator.push(context, MaterialPageRoute(builder: (_) => chat));
+      }
     } on ChatServiceException catch (e) {
       if (!mounted) {
         return;

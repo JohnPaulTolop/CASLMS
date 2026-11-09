@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 
+import 'section_audience_service.dart';
+
 class AssessmentSubmissionService {
   AssessmentSubmissionService({
     FirebaseFirestore? firestore,
@@ -61,7 +63,7 @@ class AssessmentSubmissionService {
     return {...data, 'id': document.id, 'assessmentId': document.id};
   }
 
-  Future<void> _requireEnrollment({
+  Future<Map<String, dynamic>> _requireEnrollment({
     required String courseId,
     required String studentId,
   }) async {
@@ -80,6 +82,7 @@ class AssessmentSubmissionService {
         'You do not have an active enrollment in this course.',
       );
     }
+    return enrollment;
   }
 
   String buildSubmissionId({
@@ -138,7 +141,25 @@ class AssessmentSubmissionService {
       );
     }
 
-    await _requireEnrollment(courseId: courseId, studentId: studentId);
+    final enrollment = await _requireEnrollment(
+      courseId: courseId,
+      studentId: studentId,
+    );
+    final moduleDocument = await _firestore
+        .collection('modules')
+        .doc(moduleId)
+        .get();
+    final module = moduleDocument.data();
+    if (module == null ||
+        !SectionAudienceService.studentCanAccess(
+          enrollment: enrollment,
+          module: module,
+          child: assessment,
+        )) {
+      throw AssessmentSubmissionException(
+        'This assessment is not assigned to your section.',
+      );
+    }
 
     final dueValue = assessment['dueAt'];
 
@@ -219,6 +240,30 @@ class AssessmentSubmissionService {
             'submissionId': document.id,
           };
         })
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getMyCourseSubmissions({
+    required String courseId,
+  }) async {
+    final student = await _requireRole('student');
+    final cleanCourseId = courseId.trim();
+    if (cleanCourseId.isEmpty) return [];
+
+    final snapshot = await _firestore
+        .collection(submissionsCollection)
+        .where('studentId', isEqualTo: student['id'])
+        .get();
+
+    return snapshot.docs
+        .where((document) => document.data()['courseId'] == cleanCourseId)
+        .map(
+          (document) => <String, dynamic>{
+            ...document.data(),
+            'id': document.id,
+            'submissionId': document.id,
+          },
+        )
         .toList();
   }
 

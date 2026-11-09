@@ -1,0 +1,35 @@
+    match /calendarEvents/{eventId} {
+      function activeCourse(courseId) {
+        return courseId != '' && courseExists(courseId) &&
+          get(/databases/$(database)/documents/courses/$(courseId)).data.status == 'active';
+      }
+      function enrolled(courseId) {
+        let path = /databases/$(database)/documents/enrollments/$(courseId + '_' + request.auth.uid);
+        return isStudent() && exists(path) && get(path).data.status == 'active' &&
+          get(path).data.courseId == courseId && get(path).data.studentId == request.auth.uid;
+      }
+      function readable(data) {
+        return isActive() && (isAdmin() || data.courseId == '' ||
+          (activeCourse(data.courseId) && (ownsCourse(data.courseId) || enrolled(data.courseId))));
+      }
+      function valid(data) {
+        return data.keys().hasOnly(['title', 'description', 'courseId', 'startAt', 'endAt', 'allDay', 'ownerId', 'creatorRole', 'createdAt', 'updatedAt']) &&
+          data.keys().hasAll(['title', 'description', 'courseId', 'startAt', 'endAt', 'allDay', 'ownerId', 'creatorRole', 'createdAt', 'updatedAt']) &&
+          data.title is string && data.title.size() > 0 && data.title.size() <= 120 &&
+          data.description is string && data.description.size() <= 1000 && data.courseId is string &&
+          data.startAt is timestamp && data.endAt is timestamp && data.endAt >= data.startAt &&
+          data.endAt - data.startAt <= duration.value(31, 'd') && data.allDay is bool &&
+          data.ownerId is string && data.creatorRole in ['admin', 'instructor'] && data.createdAt is timestamp &&
+          data.updatedAt == request.time &&
+          ((isAdmin() && (data.courseId == '' || activeCourse(data.courseId))) ||
+           (isInstructor() && activeCourse(data.courseId) && ownsCourse(data.courseId)));
+      }
+      allow get, list: if readable(resource.data);
+      allow create: if valid(request.resource.data) && request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.creatorRole == currentUser().role && request.resource.data.createdAt == request.time;
+      allow update: if valid(request.resource.data) &&
+        request.resource.data.ownerId == resource.data.ownerId && request.resource.data.creatorRole == resource.data.creatorRole &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        (isAdmin() || (isInstructor() && resource.data.ownerId == request.auth.uid && ownsCourse(resource.data.courseId)));
+      allow delete: if isAdmin() || (isInstructor() && resource.data.ownerId == request.auth.uid && ownsCourse(resource.data.courseId));
+    }

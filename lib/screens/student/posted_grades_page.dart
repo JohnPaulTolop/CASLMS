@@ -1,3 +1,7 @@
+import '../../core/app_colors.dart';
+import '../shared/workspace_widgets.dart';
+import '../shared/workspace_shell.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../models/gradebook_models.dart';
@@ -11,9 +15,7 @@ class PostedGradesScreen extends StatefulWidget {
     this.initialCourseId = '',
     this.initialTermId = '',
   });
-
-  final String initialCourseId;
-  final String initialTermId;
+  final String initialCourseId, initialTermId;
   final GradebookApi? api;
   @override
   State<PostedGradesScreen> createState() => _PostedGradesScreenState();
@@ -95,41 +97,42 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    backgroundColor: gradeBackground,
-    appBar: AppBar(
-      title: const Text(
-        'Posted Grades',
-        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-      ),
-      automaticallyImplyLeading: false,
-      backgroundColor: Colors.white,
-      surfaceTintColor: Colors.transparent,
-      actions: [
-        if (_revealed.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: RoundGradeAction(
-              icon: Icons.visibility_off_outlined,
-              label: 'Hide all grades',
-              accent: gradeBlue,
-              onTap: () => setState(_revealed.clear),
-            ),
-          ),
-        RoundGradeAction(
-          icon: Icons.refresh_rounded,
-          label: 'Refresh and hide grades',
-          accent: gradeBlue,
-          onTap: _loading ? null : () => _load(_termId),
-        ),
-        const SizedBox(width: 16),
-      ],
-    ),
+    backgroundColor: AppColors.resolve(context, gradeBackground),
     body: RefreshIndicator(
       onRefresh: () => _load(_termId),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.fromLTRB(
+          workspaceInset(MediaQuery.sizeOf(context).width),
+          0,
+          workspaceInset(MediaQuery.sizeOf(context).width),
+          32,
+        ),
         children: [
+          WorkspaceHeading(
+            showEyebrow: false,
+            inlineActions: true,
+            title: 'Posted grades',
+            subtitle:
+                'Choose a semester, then securely reveal your posted grades.',
+            eyebrow: 'YOUR SEMESTER',
+            actions: [
+              if (_revealed.isNotEmpty)
+                RoundGradeAction(
+                  icon: Icons.visibility_off_outlined,
+                  label: 'Hide all grades',
+                  accent: gradeBlue,
+                  onTap: () => setState(_revealed.clear),
+                ),
+              RoundGradeAction(
+                icon: Icons.refresh_rounded,
+                label: 'Refresh and hide grades',
+                accent: gradeBlue,
+                onTap: _loading ? null : () => _load(_termId),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
           const GradeEntrance(
             child: GradeHero(
               title: 'Your grades, kept private.',
@@ -146,14 +149,14 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
                   label: 'Enrolled subjects',
                   value: '${_subjects.length}',
                   icon: Icons.menu_book_outlined,
-                  color: gradeBlue,
+                  color: AppColors.resolve(context, gradeBlue),
                 ),
                 (
                   label: 'Grades posted',
                   value:
                       '${_subjects.where((subject) => subject.posted).length}',
                   icon: Icons.verified_outlined,
-                  color: gradeTeal,
+                  color: AppColors.resolve(context, gradeTeal),
                 ),
                 (
                   label: 'Grades hidden',
@@ -190,23 +193,18 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
               ),
             ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'Your subjects',
             style: TextStyle(
-              color: gradeInk,
+              color: AppColors.resolve(context, gradeInk),
               fontSize: 18,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 14),
           if (_loading)
             const GradeSurface(
-              child: Center(
-                child: Padding(
-                  padding: EdgeInsets.all(32),
-                  child: CircularProgressIndicator(),
-                ),
-              ),
+              child: WorkspaceLoadingState(label: 'Loading posted grades…'),
             )
           else if (_error != null)
             GradeStateMessage(
@@ -221,13 +219,29 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
               message: 'No enrolled subjects for this semester.',
             )
           else
-            ..._subjects
-                .where(
-                  (subject) =>
-                      widget.initialCourseId.isEmpty ||
-                      subject.courseId == widget.initialCourseId,
-                )
-                .map(_subjectCard),
+            LayoutBuilder(
+              builder: (context, box) {
+                final columns =
+                    box.maxWidth >= 840 &&
+                        MediaQuery.textScalerOf(context).scale(14) < 23
+                    ? 2
+                    : 1;
+                return Wrap(
+                  spacing: 16,
+                  children: [
+                    for (final subject in _subjects.where(
+                      (subject) =>
+                          widget.initialCourseId.isEmpty ||
+                          subject.courseId == widget.initialCourseId,
+                    ))
+                      SizedBox(
+                        width: (box.maxWidth - (columns - 1) * 16) / columns,
+                        child: _subjectCard(subject),
+                      ),
+                  ],
+                );
+              },
+            ),
         ],
       ),
     ),
@@ -242,10 +256,16 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
           children: [
             Row(
               children: [
-                const CircleAvatar(
+                CircleAvatar(
                   radius: 24,
-                  backgroundColor: Color(0xFFEDF3FF),
-                  child: Icon(Icons.menu_book_outlined, color: gradeBlue),
+                  backgroundColor: AppColors.resolve(
+                    context,
+                    AppColors.blueTint,
+                  ),
+                  child: Icon(
+                    Icons.menu_book_outlined,
+                    color: AppColors.resolve(context, gradeBlue),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -254,16 +274,19 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
                     children: [
                       Text(
                         subject.code,
-                        style: const TextStyle(
-                          color: gradeInk,
+                        style: TextStyle(
+                          color: AppColors.resolve(context, gradeInk),
                           fontSize: 17,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         subject.title,
-                        style: const TextStyle(color: gradeMuted, fontSize: 13),
+                        style: TextStyle(
+                          color: AppColors.resolve(context, gradeMuted),
+                          fontSize: 13,
+                        ),
                       ),
                     ],
                   ),
@@ -277,12 +300,12 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
               width: double.infinity,
               decoration: BoxDecoration(
                 color: grade == null
-                    ? const Color(0xFFF7F9FD)
+                    ? AppColors.resolve(context, AppColors.background)
                     : gradeTeal.withValues(alpha: .06),
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: grade == null
-                      ? gradeBorder
+                      ? AppColors.resolve(context, gradeBorder)
                       : gradeTeal.withValues(alpha: .2),
                 ),
               ),
@@ -291,15 +314,19 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
                 children: [
                   // Replace sensitive text immediately; no outgoing animation may retain a grade.
                   if (grade == null)
-                    const Row(
+                    Row(
                       children: [
-                        Icon(Icons.lock_outline, size: 18, color: gradeMuted),
+                        Icon(
+                          Icons.lock_outline,
+                          size: 18,
+                          color: AppColors.resolve(context, gradeMuted),
+                        ),
                         SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             'Grade: [ Hidden ]',
                             style: TextStyle(
-                              color: gradeMuted,
+                              color: AppColors.resolve(context, gradeMuted),
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -312,9 +339,9 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
                       child: Text(
                         'Grade: ${grade.grade} · ${grade.result}${grade.description.isEmpty || grade.description == grade.result ? '' : ' · ${grade.description}'}',
                         key: ValueKey('revealed-${subject.courseId}'),
-                        style: const TextStyle(
-                          color: gradeTeal,
-                          fontWeight: FontWeight.w800,
+                        style: TextStyle(
+                          color: AppColors.resolve(context, gradeTeal),
+                          fontWeight: FontWeight.w700,
                           fontSize: 20,
                         ),
                       ),
@@ -326,8 +353,8 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
                         : subject.posted
                         ? 'Your instructor has posted this grade. Verify to view it.'
                         : 'Your instructor has not posted a final grade yet.',
-                    style: const TextStyle(
-                      color: gradeMuted,
+                    style: TextStyle(
+                      color: AppColors.resolve(context, gradeMuted),
                       fontSize: 12,
                       height: 1.5,
                     ),
@@ -339,16 +366,16 @@ class _PostedGradesScreenState extends State<PostedGradesScreen>
             Align(
               alignment: Alignment.centerRight,
               child: !subject.posted
-                  ? const GradeBadge(
+                  ? GradeBadge(
                       'Not posted yet',
-                      color: gradeMuted,
+                      color: AppColors.resolve(context, gradeMuted),
                       icon: Icons.schedule_outlined,
                     )
                   : grade == null
                   ? FilledButton.icon(
                       key: ValueKey('reveal-${subject.courseId}'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: gradeBlue,
+                        backgroundColor: AppColors.resolve(context, gradeBlue),
                         padding: const EdgeInsets.symmetric(
                           horizontal: 22,
                           vertical: 16,
@@ -422,20 +449,24 @@ class _RevealDialogState extends State<_RevealDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-    backgroundColor: Colors.white,
-    title: const Column(
+    scrollable: true,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    backgroundColor: AppColors.resolve(context, Colors.white),
+    title: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CircleAvatar(
           radius: 26,
-          backgroundColor: Color(0xFFEDF3FF),
-          child: Icon(Icons.lock_person_outlined, color: gradeBlue),
+          backgroundColor: AppColors.resolve(context, AppColors.blueTint),
+          child: Icon(
+            Icons.lock_person_outlined,
+            color: AppColors.resolve(context, gradeBlue),
+          ),
         ),
         SizedBox(height: 16),
         Text(
           'Reveal your grade',
-          style: TextStyle(fontWeight: FontWeight.w800),
+          style: TextStyle(fontWeight: FontWeight.w700),
         ),
       ],
     ),

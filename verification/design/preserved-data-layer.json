@@ -1,0 +1,214 @@
+[
+  {
+    "File": "firebase_options.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "config\\academic_catalog.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "config\\supabase_config.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "models\\admin_records.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "models\\course_order.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "models\\gradebook_models.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "models\\notification_target.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\activity_log_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\admin_assistant_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\admin_catalog.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\ai_router_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\ai_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\announcement_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\assessment_artifact_submission_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\assessment_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\assessment_submission_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\assignment_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\auth_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\campus_auth_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\chat_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\course_invitation_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\course_section_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\course_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\enrollment_membership.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\enrollment_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\firebase_ai_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\firestore_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\instructor_approval_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\instructor_course_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\instructor_registration_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\instructor_teaching_ai_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\learner_assistant_report.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\learner_assistant_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\learning_material_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\live_class_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\live_courses_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\module_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\moodle_api_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\notification_navigation_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\notification_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\password_reset_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\profile_picture_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\progress_calculator.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\progress_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\quiz_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\roster_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\school_chat_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\semester_grades_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\storage_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\student_assessment_query_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\student_profile_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\supabase_service.dart",
+    "Unchanged": true
+  },
+  {
+    "File": "services\\user_service.dart",
+    "Unchanged": true
+  }
+]

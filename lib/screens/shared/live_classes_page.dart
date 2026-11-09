@@ -1,12 +1,14 @@
+import '../../core/app_colors.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../../services/live_class_service.dart';
 import '../../services/meeting_chat_service.dart';
-import 'meeting_chat_panel.dart';
 import 'live_classroom_embed.dart';
 import 'grading_ui.dart';
+import 'meeting_chat_panel.dart';
 
 class LiveClassesScreen extends StatefulWidget {
   const LiveClassesScreen({super.key, required this.courseId, this.sectionId});
@@ -134,19 +136,19 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
     final stateColor = live
         ? gradeTeal
         : transitioning
-        ? const Color(0xFFB76A00)
+        ? AppColors.amber
         : gradeMuted;
     return Scaffold(
-      backgroundColor: gradeBackground,
+      backgroundColor: AppColors.resolve(context, gradeBackground),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.resolve(context, Colors.white),
         surfaceTintColor: Colors.transparent,
-        title: const Text(
+        title: Text(
           'Live Classes',
           style: TextStyle(
-            color: gradeInk,
+            color: AppColors.resolve(context, gradeInk),
             fontSize: 18,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
           ),
         ),
         actions: [
@@ -200,16 +202,22 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.info_outline,
-                                    color: Color(0xFFC54444),
+                                    color: AppColors.resolve(
+                                      context,
+                                      AppColors.error,
+                                    ),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Text(
                                       _error!,
-                                      style: const TextStyle(
-                                        color: Color(0xFFC54444),
+                                      style: TextStyle(
+                                        color: AppColors.resolve(
+                                          context,
+                                          AppColors.error,
+                                        ),
                                         height: 1.5,
                                       ),
                                     ),
@@ -236,10 +244,13 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                                             instructor
                                                 ? 'Your classroom'
                                                 : 'Join your classroom',
-                                            style: const TextStyle(
-                                              color: gradeInk,
+                                            style: TextStyle(
+                                              color: AppColors.resolve(
+                                                context,
+                                                gradeInk,
+                                              ),
                                               fontSize: 20,
-                                              fontWeight: FontWeight.w800,
+                                              fontWeight: FontWeight.w700,
                                             ),
                                           ),
                                         ),
@@ -272,10 +283,13 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                                       Text(
                                         (session?['title'] ?? 'Live class')
                                             .toString(),
-                                        style: const TextStyle(
-                                          color: gradeInk,
+                                        style: TextStyle(
+                                          color: AppColors.resolve(
+                                            context,
+                                            gradeInk,
+                                          ),
                                           fontSize: 24,
-                                          fontWeight: FontWeight.w800,
+                                          fontWeight: FontWeight.w700,
                                           height: 1.3,
                                         ),
                                       ),
@@ -286,8 +300,11 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                                             : status == 'starting'
                                             ? 'Getting the room ready. This page updates automatically.'
                                             : 'The instructor is closing this classroom.',
-                                        style: const TextStyle(
-                                          color: gradeMuted,
+                                        style: TextStyle(
+                                          color: AppColors.resolve(
+                                            context,
+                                            gradeMuted,
+                                          ),
                                           height: 1.6,
                                           fontSize: 13,
                                         ),
@@ -304,8 +321,11 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                                           Expanded(
                                             child: Text(
                                               '$count of 30 student places reserved',
-                                              style: const TextStyle(
-                                                color: gradeInk,
+                                              style: TextStyle(
+                                                color: AppColors.resolve(
+                                                  context,
+                                                  gradeInk,
+                                                ),
                                                 fontWeight: FontWeight.w700,
                                                 fontSize: 13,
                                               ),
@@ -320,7 +340,10 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                                           value: (count / 30).clamp(0.0, 1.0),
                                           minHeight: 7,
                                           color: accent,
-                                          backgroundColor: gradeBorder,
+                                          backgroundColor: AppColors.resolve(
+                                            context,
+                                            gradeBorder,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 24),
@@ -361,12 +384,15 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                                           ),
                                         ),
                                       if (status == 'starting' && instructor)
-                                        const Padding(
+                                        Padding(
                                           padding: EdgeInsets.only(top: 8),
                                           child: Text(
                                             'Retry only if the room has been starting for over 3 minutes.',
                                             style: TextStyle(
-                                              color: gradeMuted,
+                                              color: AppColors.resolve(
+                                                context,
+                                                gradeMuted,
+                                              ),
                                               fontSize: 12,
                                               height: 1.5,
                                             ),
@@ -398,19 +424,25 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                                           ),
                                         ),
                                     ] else if (instructor) ...[
-                                      const Text(
+                                      Text(
                                         'Bring your class together.',
                                         style: TextStyle(
                                           fontSize: 24,
-                                          color: gradeInk,
-                                          fontWeight: FontWeight.w800,
+                                          color: AppColors.resolve(
+                                            context,
+                                            gradeInk,
+                                          ),
+                                          fontWeight: FontWeight.w700,
                                         ),
                                       ),
                                       const SizedBox(height: 10),
-                                      const Text(
+                                      Text(
                                         'Give this session a title. Once started, enrolled students in this section can join.',
                                         style: TextStyle(
-                                          color: gradeMuted,
+                                          color: AppColors.resolve(
+                                            context,
+                                            gradeMuted,
+                                          ),
                                           fontSize: 13,
                                           height: 1.6,
                                         ),
@@ -470,20 +502,26 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                                                 ),
                                               ),
                                               const SizedBox(height: 20),
-                                              const Text(
+                                              Text(
                                                 'See you in class.',
                                                 style: TextStyle(
-                                                  color: gradeInk,
-                                                  fontWeight: FontWeight.w800,
+                                                  color: AppColors.resolve(
+                                                    context,
+                                                    gradeInk,
+                                                  ),
+                                                  fontWeight: FontWeight.w700,
                                                   fontSize: 24,
                                                 ),
                                               ),
                                               const SizedBox(height: 10),
-                                              const Text(
+                                              Text(
                                                 'No class is live right now. Your classroom will appear here when your instructor starts a session.',
                                                 textAlign: TextAlign.center,
                                                 style: TextStyle(
-                                                  color: gradeMuted,
+                                                  color: AppColors.resolve(
+                                                    context,
+                                                    gradeMuted,
+                                                  ),
                                                   height: 1.6,
                                                   fontSize: 13,
                                                 ),
@@ -499,21 +537,27 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                                         child: LinearProgressIndicator(),
                                       ),
                                     if (configured)
-                                      const Padding(
+                                      Padding(
                                         padding: EdgeInsets.only(top: 20),
                                         child: Row(
                                           children: [
                                             Icon(
                                               Icons.sync_rounded,
                                               size: 16,
-                                              color: gradeMuted,
+                                              color: AppColors.resolve(
+                                                context,
+                                                gradeMuted,
+                                              ),
                                             ),
                                             SizedBox(width: 8),
                                             Expanded(
                                               child: Text(
                                                 'Class status updates automatically every 15 seconds.',
                                                 style: TextStyle(
-                                                  color: gradeMuted,
+                                                  color: AppColors.resolve(
+                                                    context,
+                                                    gradeMuted,
+                                                  ),
                                                   fontSize: 11,
                                                 ),
                                               ),
@@ -528,12 +572,15 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
+                                    Text(
                                       'Before you join',
                                       style: TextStyle(
                                         fontSize: 17,
-                                        fontWeight: FontWeight.w800,
-                                        color: gradeInk,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.resolve(
+                                          context,
+                                          gradeInk,
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(height: 20),
@@ -567,11 +614,19 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                                           : 'Open Participants to see who is in the classroom.',
                                       accent,
                                     ),
-                                    const Divider(color: gradeBorder),
+                                    Divider(
+                                      color: AppColors.resolve(
+                                        context,
+                                        gradeBorder,
+                                      ),
+                                    ),
                                     const SizedBox(height: 8),
-                                    const GradeBadge(
+                                    GradeBadge(
                                       'Recording is off',
-                                      color: gradeMuted,
+                                      color: AppColors.resolve(
+                                        context,
+                                        gradeMuted,
+                                      ),
                                       icon: Icons.shield_outlined,
                                     ),
                                   ],
@@ -624,8 +679,8 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: gradeInk,
+                    style: TextStyle(
+                      color: AppColors.resolve(context, gradeInk),
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
                     ),
@@ -633,8 +688,8 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
                   const SizedBox(height: 5),
                   Text(
                     description,
-                    style: const TextStyle(
-                      color: gradeMuted,
+                    style: TextStyle(
+                      color: AppColors.resolve(context, gradeMuted),
                       fontSize: 12,
                       height: 1.6,
                     ),
@@ -663,7 +718,7 @@ Future<bool> _confirmEndClass(BuildContext context) async =>
           ),
           FilledButton.icon(
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFC54444),
+              backgroundColor: AppColors.resolve(context, AppColors.error),
             ),
             onPressed: () => Navigator.pop(dialog, true),
             icon: const Icon(Icons.call_end_rounded, size: 18),
@@ -692,44 +747,102 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
   final _chatService = MeetingChatService();
   Timer? _poll;
   StreamSubscription<List<MeetingChatMessage>>? _chatSubscription;
+  late final String _sessionId;
+  late final String _liveClassId;
   late final Stream<List<MeetingChatMessage>> _chatMessages;
   bool _ending = false;
   bool _checking = false;
   bool _leaving = false;
-  bool _chatOpen = false;
-  bool _chatInitialized = false;
-  int _messageCount = 0;
+  bool _desktopChatOpen = false;
+  bool _mobileChatVisible = false;
+  bool _chatLayoutInitialized = false;
+  bool _chatBaselineLoaded = false;
+  String? _latestMessageId;
   int _unreadMessages = 0;
 
   @override
   void initState() {
     super.initState();
+    _sessionId = (widget.connection['sessionId'] ?? '').toString();
+    _liveClassId = (widget.connection['liveClassId'] ?? '').toString();
     _chatMessages = _chatService
         .watchMessages(
+          liveClassId: _liveClassId,
           courseId: widget.courseId,
           sectionId: widget.sectionId,
-          sessionId: widget.connection['sessionId'] as String,
+          sessionId: _sessionId,
         )
         .asBroadcastStream();
-    _chatSubscription = _chatMessages.listen((messages) {
-      if (!mounted) return;
-      if (!_chatInitialized) {
-        _chatInitialized = true;
-        _messageCount = messages.length;
-        return;
-      }
-      if (messages.length > _messageCount && !_chatOpen) {
-        final added = messages
-            .skip(_messageCount)
-            .where((message) => !message.isMine(_chatService.currentUserId))
-            .length;
-        if (added > 0) {
-          setState(() => _unreadMessages += added);
-        }
-      }
-      _messageCount = messages.length;
-    });
+    _chatSubscription = _chatMessages.listen(
+      _trackUnreadMessages,
+      onError: (Object _) {},
+    );
     _poll = Timer.periodic(const Duration(seconds: 20), (_) => _check());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_chatLayoutInitialized) {
+      _desktopChatOpen = MediaQuery.sizeOf(context).width >= 900;
+      _chatLayoutInitialized = true;
+    }
+  }
+
+  void _trackUnreadMessages(List<MeetingChatMessage> messages) {
+    if (!_chatBaselineLoaded) {
+      _chatBaselineLoaded = true;
+      _latestMessageId = messages.isEmpty ? null : messages.last.id;
+      return;
+    }
+    if (messages.isEmpty || messages.last.id == _latestMessageId) return;
+
+    final previousIndex = _latestMessageId == null
+        ? -1
+        : messages.indexWhere((message) => message.id == _latestMessageId);
+    final newMessages = messages
+        .skip(previousIndex + 1)
+        .where((message) => !message.isMine(_chatService.currentUserId));
+    _latestMessageId = messages.last.id;
+    if (!mounted || _desktopChatOpen || _mobileChatVisible) return;
+    final count = newMessages.length;
+    if (count > 0) {
+      setState(() => _unreadMessages += count);
+    }
+  }
+
+  void _setDesktopChat(bool open) {
+    setState(() {
+      _desktopChatOpen = open;
+      if (open) _unreadMessages = 0;
+    });
+  }
+
+  Future<void> _showMobileChat() async {
+    if (_mobileChatVisible || !mounted) return;
+    setState(() {
+      _mobileChatVisible = true;
+      _unreadMessages = 0;
+    });
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFF101A2D),
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: .82,
+        child: MeetingChatPanel(
+          service: _chatService,
+          messages: _chatMessages,
+          liveClassId: _liveClassId,
+          courseId: widget.courseId,
+          sectionId: widget.sectionId,
+          sessionId: _sessionId,
+          onClose: () => Navigator.of(sheetContext).pop(),
+        ),
+      ),
+    );
+    if (mounted) setState(() => _mobileChatVisible = false);
   }
 
   Future<void> _check() async {
@@ -763,41 +876,6 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
     super.dispose();
   }
 
-  void _toggleDesktopChat() {
-    setState(() {
-      _chatOpen = !_chatOpen;
-      if (_chatOpen) _unreadMessages = 0;
-    });
-  }
-
-  Future<void> _openMobileChat() async {
-    if (_chatOpen) return;
-    setState(() {
-      _chatOpen = true;
-      _unreadMessages = 0;
-    });
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) => FractionallySizedBox(
-        heightFactor: .78,
-        child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          child: MeetingChatPanel(
-            service: _chatService,
-            messages: _chatMessages,
-            courseId: widget.courseId,
-            sectionId: widget.sectionId,
-            sessionId: widget.connection['sessionId'] as String,
-            onClose: () => Navigator.of(sheetContext).pop(),
-          ),
-        ),
-      ),
-    );
-    if (mounted) setState(() => _chatOpen = false);
-  }
-
   void _leave() {
     if (mounted && !_leaving) {
       _leaving = true;
@@ -818,7 +896,7 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
         action: 'end',
         courseId: widget.courseId,
         sectionId: widget.sectionId,
-        sessionId: widget.connection['sessionId'] as String,
+        sessionId: _sessionId,
       );
       _leave();
     } catch (error) {
@@ -834,8 +912,9 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
   @override
   Widget build(BuildContext context) {
     final desktop = MediaQuery.sizeOf(context).width >= 900;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF0B1120),
+      backgroundColor: AppColors.resolve(context, AppColors.darkText),
       appBar: AppBar(
         backgroundColor: const Color(0xFF101A2D),
         foregroundColor: Colors.white,
@@ -851,17 +930,19 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: desktop
-                ? _chatOpen
-                      ? 'Close meeting chat'
-                      : 'Open meeting chat'
+            tooltip: desktop && _desktopChatOpen
+                ? 'Close meeting chat'
                 : 'Open meeting chat',
-            onPressed: desktop ? _toggleDesktopChat : _openMobileChat,
-            icon: Badge.count(
-              count: _unreadMessages,
-              isLabelVisible: _unreadMessages > 0,
+            onPressed: desktop
+                ? () => _setDesktopChat(!_desktopChatOpen)
+                : _showMobileChat,
+            icon: Badge(
+              isLabelVisible:
+                  _unreadMessages > 0 &&
+                  !(desktop ? _desktopChatOpen : _mobileChatVisible),
+              label: Text(_unreadMessages > 99 ? '99+' : '$_unreadMessages'),
               child: Icon(
-                _chatOpen && desktop
+                desktop && _desktopChatOpen
                     ? Icons.forum_rounded
                     : Icons.forum_outlined,
               ),
@@ -894,27 +975,45 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
         children: [
           if (_ending) const LinearProgressIndicator(minHeight: 2),
           Expanded(
-            child: Row(
-              children: [
-                Expanded(
-                  child: LiveClassroomEmbed(
-                    connection: widget.connection,
-                    onLeave: _leave,
-                  ),
-                ),
-                if (desktop && _chatOpen)
-                  SizedBox(
-                    width: 340,
-                    child: MeetingChatPanel(
-                      service: _chatService,
-                      messages: _chatMessages,
-                      courseId: widget.courseId,
-                      sectionId: widget.sectionId,
-                      sessionId: widget.connection['sessionId'] as String,
-                      onClose: _toggleDesktopChat,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final chatWidth = desktop && _desktopChatOpen
+                    ? (constraints.maxWidth * .32).clamp(320.0, 390.0)
+                    : 0.0;
+                return Row(
+                  children: [
+                    Expanded(
+                      child: LiveClassroomEmbed(
+                        connection: widget.connection,
+                        onLeave: _leave,
+                      ),
                     ),
-                  ),
-              ],
+                    AnimatedContainer(
+                      duration: reduceMotion
+                          ? Duration.zero
+                          : const Duration(milliseconds: 220),
+                      curve: Curves.easeOutCubic,
+                      width: chatWidth,
+                      decoration: const BoxDecoration(
+                        border: Border(
+                          left: BorderSide(color: Color(0xFF26354D)),
+                        ),
+                      ),
+                      child: chatWidth == 0
+                          ? const SizedBox.shrink()
+                          : MeetingChatPanel(
+                              service: _chatService,
+                              messages: _chatMessages,
+                              liveClassId: _liveClassId,
+                              courseId: widget.courseId,
+                              sectionId: widget.sectionId,
+                              sessionId: _sessionId,
+                              onClose: () => _setDesktopChat(false),
+                            ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ],

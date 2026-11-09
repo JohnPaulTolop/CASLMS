@@ -1,19 +1,21 @@
+import '../core/app_colors.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/campus_auth_service.dart';
 import 'student/email_verification_page.dart';
+import 'student/student_main_page.dart';
 
 import 'admin/admin_main_page.dart';
 import 'instructor/instructor_main_page.dart';
 import 'landing_page.dart';
-import 'student/student_main_page.dart';
 
 class SessionGate extends StatefulWidget {
-  const SessionGate({super.key, this.notificationId, this.authService});
-
+  const SessionGate({super.key, this.notificationId, this.authService, this.isUiRedesignMode = false});
   final String? notificationId;
   final CampusAuthService? authService;
+  final bool isUiRedesignMode;
 
   @override
   State<SessionGate> createState() => _SessionGateState();
@@ -26,6 +28,10 @@ class _SessionGateState extends State<SessionGate> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.isUiRedesignMode) {
+      return StudentMainScreen(notificationId: widget.notificationId);
+    }
+
     return StreamBuilder<User?>(
       stream: _session,
       initialData: _authService.currentUser,
@@ -59,7 +65,6 @@ class _AuthenticatedRoleGate extends StatefulWidget {
     this.notificationId,
     required this.authService,
   });
-
   final String? notificationId;
   final String userId;
   final CampusAuthService authService;
@@ -69,6 +74,8 @@ class _AuthenticatedRoleGate extends StatefulWidget {
 }
 
 class _AuthenticatedRoleGateState extends State<_AuthenticatedRoleGate> {
+  // This state is keyed by UID. Token renewal must reuse the same stream and
+  // preserve the mounted dashboard, current tab and unsaved profile form.
   late final Stream<Map<String, dynamic>?> _profile = widget.authService
       .watchProfile(widget.userId);
   CampusAuthService get _authService => widget.authService;
@@ -86,7 +93,7 @@ class _AuthenticatedRoleGateState extends State<_AuthenticatedRoleGate> {
         if (profileSnapshot.hasError) {
           return _AccountStateScreen(
             icon: Icons.error_outline_rounded,
-            iconColor: const Color(0xFFFF4B4B),
+            iconColor: AppColors.error,
             title: 'Unable to load your account',
             message: 'CASLMS could not load your profile. Check your internet connection and try again.',
             buttonText: 'Return to Login',
@@ -99,7 +106,7 @@ class _AuthenticatedRoleGateState extends State<_AuthenticatedRoleGate> {
         if (profile == null) {
           return _AccountStateScreen(
             icon: Icons.person_off_outlined,
-            iconColor: const Color(0xFFFF4B4B),
+            iconColor: AppColors.error,
             title: 'Profile not found',
             message: 'Your authentication account exists, but its CASLMS profile could not be found.',
             buttonText: 'Return to Login',
@@ -112,7 +119,7 @@ class _AuthenticatedRoleGateState extends State<_AuthenticatedRoleGate> {
         if (profileUid.isNotEmpty && profileUid != widget.userId) {
           return _AccountStateScreen(
             icon: Icons.security_rounded,
-            iconColor: const Color(0xFFFF4B4B),
+            iconColor: AppColors.error,
             title: 'Invalid account profile',
             message:
                 'The loaded profile does not match the authenticated account.',
@@ -155,7 +162,7 @@ class _AuthenticatedRoleGateState extends State<_AuthenticatedRoleGate> {
 
           return _AccountStateScreen(
             icon: Icons.cancel_outlined,
-            iconColor: const Color(0xFFE53935),
+            iconColor: AppColors.error,
             title: 'Application denied',
             message: reason.isEmpty
                 ? 'Your instructor application was not approved. Contact the CASLMS administrator for assistance.'
@@ -168,7 +175,7 @@ class _AuthenticatedRoleGateState extends State<_AuthenticatedRoleGate> {
         if (status == 'suspended') {
           return _AccountStateScreen(
             icon: Icons.block_rounded,
-            iconColor: const Color(0xFFE53935),
+            iconColor: AppColors.error,
             title: 'Account suspended',
             message: 'Your CASLMS account is currently suspended. Contact the administrator for assistance.',
             buttonText: 'Return to Login',
@@ -179,7 +186,7 @@ class _AuthenticatedRoleGateState extends State<_AuthenticatedRoleGate> {
         if (status != 'active') {
           return _AccountStateScreen(
             icon: Icons.lock_outline_rounded,
-            iconColor: const Color(0xFFE53935),
+            iconColor: AppColors.error,
             title: 'Account unavailable',
             message: 'This CASLMS account is not currently active.',
             buttonText: 'Return to Login',
@@ -200,7 +207,7 @@ class _AuthenticatedRoleGateState extends State<_AuthenticatedRoleGate> {
           default:
             return _AccountStateScreen(
               icon: Icons.security_rounded,
-              iconColor: const Color(0xFFFF4B4B),
+              iconColor: AppColors.error,
               title: 'Invalid account role',
               message: 'This account does not have a valid CASLMS role.',
               buttonText: 'Return to Login',
@@ -230,16 +237,16 @@ class _InstructorPendingScreen extends StatelessWidget {
     final String email = (profile['email'] ?? '').toString().trim();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFD),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: const Color(0xFFF8FAFD),
+        backgroundColor: AppColors.background,
         elevation: 0,
         title: const Text(
           'CASLMS',
           style: TextStyle(
-            color: Color(0xFF10182F),
-            fontWeight: FontWeight.w800,
+            color: AppColors.darkText,
+            fontWeight: FontWeight.w700,
           ),
         ),
         actions: [
@@ -264,14 +271,7 @@ class _InstructorPendingScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFFE3E7EE)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
+                  border: Border.all(color: AppColors.inputBorder),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -285,7 +285,7 @@ class _InstructorPendingScreen extends StatelessWidget {
                       ),
                       child: const Icon(
                         Icons.hourglass_top_rounded,
-                        color: Color(0xFFF59E0B),
+                        color: AppColors.amber,
                         size: 42,
                       ),
                     ),
@@ -294,9 +294,9 @@ class _InstructorPendingScreen extends StatelessWidget {
                       'Waiting for approval',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Color(0xFF10182F),
+                        color: AppColors.darkText,
                         fontSize: 24,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -306,7 +306,7 @@ class _InstructorPendingScreen extends StatelessWidget {
                           : 'Hello $name, your instructor application is being reviewed.',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Color(0xFF68738A),
+                        color: AppColors.secondaryText,
                         fontSize: 14,
                         height: 1.5,
                       ),
@@ -316,7 +316,7 @@ class _InstructorPendingScreen extends StatelessWidget {
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFD),
+                        color: AppColors.background,
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Column(
@@ -328,7 +328,7 @@ class _InstructorPendingScreen extends StatelessWidget {
                           const _ProfileRow(
                             label: 'Status',
                             value: 'Pending review',
-                            valueColor: Color(0xFFF59E0B),
+                            valueColor: AppColors.amber,
                           ),
                         ],
                       ),
@@ -338,7 +338,7 @@ class _InstructorPendingScreen extends StatelessWidget {
                       'You will automatically receive instructor access after an administrator approves your application. A decision will also be sent to your registered email.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Color(0xFF68738A),
+                        color: AppColors.secondaryText,
                         fontSize: 12.5,
                         height: 1.5,
                       ),
@@ -350,13 +350,13 @@ class _InstructorPendingScreen extends StatelessWidget {
                         Icon(
                           Icons.sync_rounded,
                           size: 16,
-                          color: Color(0xFF1769FF),
+                          color: AppColors.primaryBlue,
                         ),
                         SizedBox(width: 6),
                         Text(
                           'This page updates automatically',
                           style: TextStyle(
-                            color: Color(0xFF1769FF),
+                            color: AppColors.primaryBlue,
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                           ),
@@ -395,7 +395,7 @@ class _ProfileRow extends StatelessWidget {
           child: Text(
             label,
             style: const TextStyle(
-              color: Color(0xFF68738A),
+              color: AppColors.secondaryText,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -406,9 +406,9 @@ class _ProfileRow extends StatelessWidget {
             value.isEmpty ? 'Not provided' : value,
             textAlign: TextAlign.right,
             style: TextStyle(
-              color: valueColor ?? const Color(0xFF10182F),
+              color: valueColor ?? AppColors.darkText,
               fontSize: 12.5,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ),
@@ -437,7 +437,7 @@ class _AccountStateScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFD),
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -449,7 +449,7 @@ class _AccountStateScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: const Color(0xFFE3E7EE)),
+                  border: Border.all(color: AppColors.inputBorder),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -460,9 +460,9 @@ class _AccountStateScreen extends StatelessWidget {
                       title,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Color(0xFF10182F),
+                        color: AppColors.darkText,
                         fontSize: 21,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -470,7 +470,7 @@ class _AccountStateScreen extends StatelessWidget {
                       message,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
-                        color: Color(0xFF68738A),
+                        color: AppColors.secondaryText,
                         fontSize: 13,
                         height: 1.5,
                       ),
@@ -484,7 +484,7 @@ class _AccountStateScreen extends StatelessWidget {
                           await onPressed();
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1769FF),
+                          backgroundColor: AppColors.primaryBlue,
                           foregroundColor: Colors.white,
                         ),
                         child: Text(buttonText),
@@ -507,8 +507,10 @@ class _LoadingScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: Color(0xFFF8FAFD),
-      body: Center(child: CircularProgressIndicator(color: Color(0xFF1769FF))),
+      backgroundColor: AppColors.background,
+      body: Center(
+        child: CircularProgressIndicator(color: AppColors.primaryBlue),
+      ),
     );
   }
 }

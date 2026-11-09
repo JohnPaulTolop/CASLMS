@@ -1,5 +1,10 @@
+import '../shared/page_loading_state.dart';
+import '../../core/app_colors.dart';
+import '../../core/app_theme.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter/material.dart';
 
@@ -20,13 +25,13 @@ class StudentAiQuizScreen extends StatefulWidget {
 }
 
 class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
-  static const primaryBlue = Color(0xFF1769FF);
-  static const background = Color(0xFFF7F9FC);
-  static const textDark = Color(0xFF10182F);
-  static const textGrey = Color(0xFF68738A);
-  static const borderColor = Color(0xFFE6EAF0);
-  static const green = Color(0xFF26A65B);
-  static const red = Color(0xFFFF4B4B);
+  Color get primaryBlue => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
+  Color get green => AppColors.resolve(context, AppColors.green);
+  Color get red => AppColors.resolve(context, AppColors.error);
 
   final _firestore = FirebaseFirestore.instance;
   final _auth = FirebaseAuth.instance;
@@ -130,8 +135,9 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
 
     if (version is! String || version.trim().isEmpty) {
       throw Exception(
-        'This quiz is not yet ready for secure grading. '
-        'Please contact your instructor.',
+        'Your instructor needs to finish setting up this quiz. '
+        'Ask them to select “Validate & Publish AI Quiz” in the module’s '
+        'assessment options, then try again.',
       );
     }
     if (assessment['status'] != 'published') {
@@ -511,7 +517,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
     messenger.showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
           'This quiz attempt is active. Submit the quiz to leave it.',
         ),
@@ -551,7 +557,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
     try {
       confirmed = await _showModal<bool>((dialogContext) {
         return AlertDialog(
-          icon: const Icon(Icons.fact_check, color: primaryBlue),
+          icon: Icon(Icons.fact_check, color: primaryBlue),
           title: const Text('Submit Quiz?'),
           content: Text(
             'You answered all ${_questions.length} questions.\n\n'
@@ -589,8 +595,12 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
       }
 
       final String? token = await user.getIdToken(true);
+      final appCheck = await FirebaseAppCheck.instance.getToken(true);
 
-      if (token == null || token.isEmpty) {
+      if (token == null ||
+          token.isEmpty ||
+          appCheck == null ||
+          appCheck.isEmpty) {
         throw Exception('Unable to verify your student account.');
       }
 
@@ -613,7 +623,10 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
 
       final response = await sb.Supabase.instance.client.functions.invoke(
         'assessment-submission',
-        headers: <String, String>{'Authorization': 'Bearer $token'},
+        headers: <String, String>{
+          'Authorization': 'Bearer $token',
+          'X-Firebase-AppCheck': appCheck,
+        },
         body: <String, dynamic>{
           'action': 'submit_ai_quiz',
           'assessmentId': widget.assessmentId,
@@ -707,7 +720,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
     await _showModal<void>((dialogContext) {
       return AlertDialog(
         title: const Text('Quiz Submitted'),
-        icon: const Icon(Icons.verified_rounded, color: primaryBlue, size: 42),
+        icon: Icon(Icons.verified_rounded, color: primaryBlue, size: 42),
         content: SizedBox(
           width: 560,
           height: 440,
@@ -715,18 +728,18 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
             children: [
               Text(
                 '${result.score} / ${result.totalPoints}',
-                style: const TextStyle(
+                style: TextStyle(
                   color: primaryBlue,
                   fontSize: 30,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               Text(
                 '${result.percentage.toStringAsFixed(1)}%',
-                style: const TextStyle(fontWeight: FontWeight.w800),
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Automatically scored by CASLMS',
                 style: TextStyle(color: textGrey, fontSize: 11),
               ),
@@ -778,16 +791,13 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                           if (!item.correct)
                             Text(
                               'Correct answer: ${item.correctAnswer}',
-                              style: const TextStyle(color: green),
+                              style: TextStyle(color: green),
                             ),
                           if (item.explanation.isNotEmpty) ...[
                             const SizedBox(height: 6),
                             Text(
                               item.explanation,
-                              style: const TextStyle(
-                                color: textGrey,
-                                fontSize: 12,
-                              ),
+                              style: TextStyle(color: textGrey, fontSize: 12),
                             ),
                           ],
                         ],
@@ -836,6 +846,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) return const PageLoadingState();
     return PopScope<Object?>(
       canPop: !_hasStarted || _hasSubmitted,
       onPopInvokedWithResult: (didPop, result) {
@@ -857,11 +868,11 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
           ),
           title: Text(
             _hasStarted ? 'Take Quiz' : 'Quiz Overview',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
           ),
         ),
         body: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: primaryBlue))
+            ? Center(child: CircularProgressIndicator(color: primaryBlue))
             : _errorMessage != null
             ? Center(
                 child: Padding(
@@ -869,7 +880,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.error_outline, color: red, size: 52),
+                      Icon(Icons.error_outline, color: red, size: 52),
                       const SizedBox(height: 14),
                       Text(_errorMessage!, textAlign: TextAlign.center),
                       const SizedBox(height: 14),
@@ -902,7 +913,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColors.resolve(context, Colors.white),
                     borderRadius: BorderRadius.circular(22),
                     border: Border.all(color: borderColor),
                   ),
@@ -915,7 +926,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                           color: primaryBlue.withValues(alpha: 0.10),
                           borderRadius: BorderRadius.circular(18),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.quiz_rounded,
                           color: primaryBlue,
                           size: 32,
@@ -925,10 +936,10 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                       Text(
                         _title,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: textDark,
                           fontSize: 24,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       if (_instructions.isNotEmpty) ...[
@@ -936,7 +947,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                         Text(
                           _instructions,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: textGrey,
                             fontSize: 13,
                             height: 1.5,
@@ -973,11 +984,11 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                 Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF8E8),
+                    color: AppColors.resolve(context, AppColors.amberTint),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(color: const Color(0xFFFFD98A)),
                   ),
-                  child: const Column(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
@@ -991,7 +1002,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                             'Before you begin',
                             style: TextStyle(
                               color: textDark,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],
@@ -1042,7 +1053,9 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                         label: Text(_isStarting ? 'Starting...' : 'Begin Quiz'),
                         style: FilledButton.styleFrom(
                           backgroundColor: primaryBlue,
-                          foregroundColor: Colors.white,
+                          foregroundColor: Theme.of(context)
+                              .colorScheme
+                              .onPrimary,
                           padding: const EdgeInsets.symmetric(vertical: 15),
                         ),
                       ),
@@ -1084,17 +1097,14 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                   value,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: textDark,
                     fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
-              Text(
-                label,
-                style: const TextStyle(color: textGrey, fontSize: 10.5),
-              ),
+              Text(label, style: TextStyle(color: textGrey, fontSize: 10.5)),
             ],
           ),
         ],
@@ -1111,24 +1121,24 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
         children: [
           Container(
             width: double.infinity,
-            color: Colors.white,
+            color: AppColors.resolve(context, Colors.white),
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   _title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: textDark,
                     fontSize: 18,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 if (_instructions.isNotEmpty) ...[
                   const SizedBox(height: 5),
                   Text(
                     _instructions,
-                    style: const TextStyle(color: textGrey, fontSize: 12),
+                    style: TextStyle(color: textGrey, fontSize: 12),
                   ),
                 ],
                 const SizedBox(height: 10),
@@ -1144,14 +1154,15 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                 const SizedBox(height: 12),
                 LinearProgressIndicator(
                   value: _answers.length / _questions.length,
-                  minHeight: 8,
+                  minHeight: AppTheme.progressBarHeight,
+                  borderRadius: BorderRadius.circular(8),
                   color: primaryBlue,
                   backgroundColor: const Color(0xFFEAF0FF),
                 ),
                 const SizedBox(height: 7),
                 Text(
                   '${_answers.length} of ${_questions.length} answered',
-                  style: const TextStyle(color: textGrey, fontSize: 11),
+                  style: TextStyle(color: textGrey, fontSize: 11),
                 ),
               ],
             ),
@@ -1202,7 +1213,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                                     '${index + 1}',
                                     style: TextStyle(
                                       color: current ? Colors.white : textDark,
-                                      fontWeight: FontWeight.w800,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ),
@@ -1216,7 +1227,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                         width: double.infinity,
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: AppColors.resolve(context, Colors.white),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: borderColor),
                         ),
@@ -1227,9 +1238,9 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                               children: [
                                 Text(
                                   'Question ${_currentQuestion + 1}',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: primaryBlue,
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 const Spacer(),
@@ -1239,10 +1250,10 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                             const SizedBox(height: 16),
                             Text(
                               question.question,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: textDark,
                                 fontSize: 16,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 height: 1.45,
                               ),
                             ),
@@ -1278,7 +1289,10 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                                           radius: 14,
                                           backgroundColor: isSelected
                                               ? primaryBlue
-                                              : const Color(0xFFF1F4F8),
+                                              : AppColors.resolve(
+                                                  context,
+                                                  AppColors.background,
+                                                ),
                                           child: Text(
                                             String.fromCharCode(65 + index),
                                             style: TextStyle(
@@ -1320,7 +1334,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
           ),
           Container(
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
-            color: Colors.white,
+            color: AppColors.resolve(context, Colors.white),
             child: Row(
               children: [
                 Expanded(
@@ -1361,7 +1375,7 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
                     ),
                     style: FilledButton.styleFrom(
                       backgroundColor: primaryBlue,
-                      foregroundColor: Colors.white,
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
                     ),
                   ),
                 ),

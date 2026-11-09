@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/assessment_submission_service.dart';
 import '../../services/student_assessment_query_service.dart';
+import '../../services/learning_material_service.dart';
+import '../../services/section_audience_service.dart';
 
 import 'student_ai_quiz_page.dart';
 import 'student_assessment_submission_page.dart';
@@ -194,6 +196,9 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
       if (enrollmentStatus != 'active') {
         throw Exception('Your enrollment in this course is not active.');
       }
+      final sectionId = (enrollmentDocument.data()!['sectionId'] ?? '')
+          .toString()
+          .trim();
 
       // ----------------------------------------------------------
       // COURSE
@@ -321,6 +326,14 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
           await _firestore
               .collection('moduleResources')
               .where('moduleId', isEqualTo: widget.moduleId)
+              .where('status', isEqualTo: 'published')
+              .where(
+                'sectionIds',
+                arrayContainsAny: <String>[
+                  SectionAudienceService.allSections,
+                  sectionId,
+                ],
+              )
               .get();
 
       final List<Map<String, dynamic>> resources = resourceSnapshot.docs
@@ -610,36 +623,22 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
         .trim()
         .toLowerCase();
 
-    final String uploadedUrl = (resource['fileUrl'] ?? '').toString().trim();
-
     final String externalUrl = (resource['externalUrl'] ?? '')
         .toString()
         .trim();
 
-    final String url = deliveryType == 'uploaded_file'
-        ? uploadedUrl
-        : externalUrl.isNotEmpty
-        ? externalUrl
-        : uploadedUrl;
-
-    if (url.isEmpty) {
-      _showError('This resource does not have a valid file or link.');
-
-      return;
-    }
-
-    final Uri? uri = Uri.tryParse(url);
-
-    if (uri == null ||
-        !uri.hasScheme ||
-        !uri.hasAuthority ||
-        (uri.scheme != 'http' && uri.scheme != 'https')) {
-      _showError('This resource link is invalid.');
-
-      return;
-    }
-
     try {
+      final Uri? uri = deliveryType == 'uploaded_file'
+          ? await LearningMaterialService().createAuthorizedDownloadUri(
+              (resource['id'] ?? resource['resourceId'] ?? '').toString(),
+            )
+          : Uri.tryParse(externalUrl);
+      if (uri == null ||
+          !uri.hasScheme ||
+          !uri.hasAuthority ||
+          (uri.scheme != 'http' && uri.scheme != 'https')) {
+        throw const FormatException('This resource link is invalid.');
+      }
       bool opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
 
       if (!opened) {

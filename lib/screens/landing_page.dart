@@ -1,270 +1,401 @@
 import 'package:flutter/material.dart';
 
-class LandingScreen extends StatelessWidget {
-  const LandingScreen({super.key});
+import '../core/theme_notifier.dart';
+import 'shared/landing_experience.dart';
 
-  static const Color primaryBlue = Color(0xFF1769FF);
-  static const Color lightText = Colors.white;
-  static const Color greyText = Color(0xFFA0ABBF);
-  static const Color background = Color(0xFF0B1120);
+class LandingScreen extends StatefulWidget {
+  const LandingScreen({super.key});
+  @override
+  State<LandingScreen> createState() => _LandingScreenState();
+}
+
+class _LandingScreenState extends State<LandingScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ambient = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 20),
+  );
+  bool _paused = false;
+  bool get _motionEnabled =>
+      !_paused &&
+      !MediaQuery.disableAnimationsOf(context) &&
+      TickerMode.valuesOf(context).enabled;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updateMotion();
+  }
+
+  void _updateMotion() {
+    if (_motionEnabled) {
+      if (!_ambient.isAnimating) _ambient.repeat();
+    } else {
+      _ambient.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ambient.dispose();
+    super.dispose();
+  }
+
+  void _enter(BuildContext context) => Navigator.pushNamed(context, '/auth');
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final background = theme.scaffoldBackgroundColor;
     return Scaffold(
       backgroundColor: background,
-      body: Stack(
-        children: [
-          // 1. Background Image
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.12,
-              child: Image.asset(
-                'assets/images/ssu.jpg',
-                fit: BoxFit.cover,
-                alignment: Alignment.centerRight,
-              ),
-            ),
-          ),
-
-          // 2. Gradient fade overlay to transition the image into a solid dark background
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.transparent, background],
-                  stops: [0.0, 0.55, 0.85],
+      body: RepaintBoundary(
+        key: const ValueKey('landing-page'),
+        child: Stack(
+          children: [
+            Positioned.fill(child: ColoredBox(color: background)),
+            Positioned.fill(
+              child: ExcludeSemantics(
+                child: IgnorePointer(
+                  child: Opacity(
+                    opacity: dark ? .18 : .16,
+                    child: Image.asset(
+                      'assets/images/landing/ssu-campus.jpg',
+                      fit: BoxFit.cover,
+                      alignment: const Alignment(.45, 0),
+                      filterQuality: FilterQuality.medium,
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-
-          // 3. Foreground Content
-          SafeArea(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 500),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 18,
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        background.withValues(alpha: .35),
+                        background.withValues(alpha: .05),
+                      ],
+                    ),
                   ),
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: Center(
-                          child: SingleChildScrollView(
-                            physics: const BouncingScrollPhysics(),
-                            child: Column(
-                              children: [
-                                const SizedBox(height: 20),
-
-                                // CAS Logo Centerpiece (Background design removed)
-                                Container(
-                                  width: 130, // Slightly increased to compensate for removed outer circle
-                                  height: 130,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: primaryBlue.withValues(
-                                          alpha: 0.2,
-                                        ), // Adjusted for dark mode compatibility
-                                        blurRadius: 25,
-                                        offset: const Offset(0, 8),
-                                      ),
-                                    ],
-                                    image: const DecorationImage(
-                                      image: AssetImage(
-                                        'assets/images/CASlogo.jpg',
-                                      ),
-                                      fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: ExcludeSemantics(
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: LandingConnections(
+                        animation: _ambient,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SafeArea(
+              child: LayoutBuilder(
+                builder: (context, viewport) {
+                  final wide =
+                      viewport.maxWidth >= 1000 &&
+                      MediaQuery.textScalerOf(context).scale(14) <= 21;
+                  final inset = viewport.maxWidth < 600 ? 24.0 : 48.0;
+                  return SingleChildScrollView(
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: 1320,
+                          minHeight: viewport.maxHeight,
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: inset,
+                            vertical: 24,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _header(context, wide),
+                              Padding(
+                                padding: EdgeInsets.symmetric(
+                                  vertical: wide ? 72 : 48,
+                                ),
+                                child: TweenAnimationBuilder<double>(
+                                  tween: Tween(begin: 0, end: 1),
+                                  duration:
+                                      MediaQuery.disableAnimationsOf(context)
+                                      ? Duration.zero
+                                      : const Duration(milliseconds: 550),
+                                  curve: Curves.easeOutCubic,
+                                  builder: (context, value, child) => Opacity(
+                                    opacity: value,
+                                    child: Transform.translate(
+                                      offset: Offset(0, 12 * (1 - value)),
+                                      child: child,
                                     ),
                                   ),
+                                  child: wide
+                                      ? Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
+                                          children: [
+                                            Expanded(
+                                              flex: 7,
+                                              child: _hero(context, true),
+                                            ),
+                                            const SizedBox(width: 72),
+                                            Expanded(
+                                              flex: 4,
+                                              child: _community(context, true),
+                                            ),
+                                          ],
+                                        )
+                                      : Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            _hero(context, false),
+                                            const SizedBox(height: 48),
+                                            _community(context, false),
+                                          ],
+                                        ),
                                 ),
-
-                                const SizedBox(height: 40),
-
-                                const Text(
-                                  'COLLEGE OF ARTS AND SCIENCES',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    color: primaryBlue,
-                                    letterSpacing: 1.5,
-                                  ),
-                                ),
-
-                                const SizedBox(height: 12),
-
-                                const Text(
-                                  'SSU Enhanced\nE-Learning',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 34,
-                                    height: 1.15,
-                                    fontWeight: FontWeight.w800,
-                                    color: lightText,
-                                    letterSpacing: -0.8,
-                                  ),
-                                ),
-
-                                const SizedBox(height: 16),
-
-                                const Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 15),
-                                  child: Text(
-                                    'Your integrated digital learning platform for modules, interactive videos, and academic submissions.',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      color: greyText,
-                                      height: 1.55,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-
-                                const SizedBox(height: 30),
-
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    _buildFeature(
-                                      Icons.menu_book_rounded,
-                                      'Learn',
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _buildFeature(
-                                      Icons.assignment_rounded,
-                                      'Submit',
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _buildFeature(
-                                      Icons.video_library_rounded,
-                                      'Watch',
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
+                              ),
+                              _footer(context),
+                            ],
                           ),
                         ),
                       ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-                      // BOTTOM ACTIONS
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SizedBox(
-                            height: 56,
-                            child: ElevatedButton(
-                              onPressed: () {
-                                Navigator.pushNamed(context, '/auth');
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: primaryBlue,
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              child: const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    'Get Started',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  SizedBox(width: 8),
-                                  Icon(Icons.arrow_forward_rounded, size: 19),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 10),
-
-                          SizedBox(
-                            height: 52,
-                            child: OutlinedButton(
-                              onPressed: () {
-                                Navigator.pushNamed(context, '/auth');
-                              },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: lightText,
-                                side: BorderSide(
-                                  color: Colors.white.withValues(alpha: 0.2),
-                                  width: 1.2,
-                                ),
-                                backgroundColor: Colors.transparent,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              child: const Text(
-                                'I already have an account',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          const Text(
-                            'Communicate. Assess. Organize. Succeed.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: greyText,
-                              fontWeight: FontWeight.w500,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+  Widget _header(BuildContext context, bool wide) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    return Row(
+      children: [
+        Semantics(
+          image: true,
+          label: 'College of Arts and Sciences, Samar State University seal',
+          child: Container(
+            width: wide ? 54 : 44,
+            height: wide ? 54 : 44,
+            padding: const EdgeInsets.all(2),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            child: ClipOval(
+              child: Image.asset(
+                'assets/images/CASlogo.jpg',
+                excludeFromSemantics: true,
+                fit: BoxFit.contain,
               ),
             ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'caslms',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: wide ? 24 : 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -1,
+                ),
+              ),
+              if (wide)
+                Text(
+                  'College of Arts and Sciences',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (wide)
+          TextButton(
+            onPressed: () => _enter(context),
+            style: TextButton.styleFrom(
+              foregroundColor: theme.colorScheme.primary,
+            ),
+            child: const Text(
+              'Sign in',
+              style: TextStyle(fontFamily: 'Roboto'),
+            ),
+          ),
+        if (!MediaQuery.disableAnimationsOf(context))
+          IconButton(
+            key: const ValueKey('landing-motion'),
+            tooltip: _paused ? 'Resume animation' : 'Pause animation',
+            onPressed: () {
+              setState(() => _paused = !_paused);
+              _updateMotion();
+            },
+            icon: Icon(
+              _paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+              size: 21,
+            ),
+          ),
+        const SizedBox(width: 8),
+        IconButton(
+          tooltip: dark ? 'Switch to light mode' : 'Switch to dark mode',
+          onPressed: () => ThemeNotifier.instance.setThemeMode(
+            dark ? ThemeMode.light : ThemeMode.dark,
+          ),
+          icon: Icon(
+            dark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+            size: 21,
+          ),
+        ),
+      ],
     );
   }
 
-  static Widget _buildFeature(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 15, color: primaryBlue),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
+  Widget _hero(BuildContext context, bool wide) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'SAMAR STATE UNIVERSITY',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 22),
+        Semantics(
+          header: true,
+          child: Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(text: 'Learn together.\n'),
+                TextSpan(
+                  text: 'Go further.',
+                  style: TextStyle(color: theme.colorScheme.primary),
+                ),
+              ],
+            ),
+            style: TextStyle(
+              fontSize: wide ? 66 : 42,
+              height: 1.08,
               fontWeight: FontWeight.w700,
-              color: greyText,
+              letterSpacing: wide ? -2.6 : -1.6,
             ),
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 24),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 540),
+          child: Text(
+            'Your college community, closer together. Find your lessons, connect with classmates and instructors, and get the support you need to learn with confidence.',
+            style: TextStyle(
+              fontSize: 16,
+              height: 1.65,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        const SizedBox(height: 30),
+        FilledButton.icon(
+          key: const ValueKey('landing-start'),
+          onPressed: () => _enter(context),
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          label: const Text(
+            'Get started',
+            style: TextStyle(
+              fontFamily: 'Roboto',
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+          iconAlignment: IconAlignment.end,
+        ),
+        const SizedBox(height: 12),
+        TextButton(
+          key: const ValueKey('landing-sign-in'),
+          onPressed: () => _enter(context),
+          style: TextButton.styleFrom(
+            padding: EdgeInsets.zero,
+            alignment: Alignment.centerLeft,
+            foregroundColor: theme.colorScheme.primary,
+          ),
+          child: const Text(
+            'Already part of CAS? Sign in',
+            style: TextStyle(fontFamily: 'Roboto', fontSize: 12),
+          ),
+        ),
+      ],
     );
   }
+
+  Widget _community(BuildContext context, bool wide) => LandingCommunityPreview(
+    animation: _ambient,
+    motionEnabled: _motionEnabled,
+  );
+
+  Widget _footer(BuildContext context) => Container(
+    padding: const EdgeInsets.only(top: 18),
+    decoration: BoxDecoration(
+      border: Border(
+        top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+      ),
+    ),
+    child: Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      spacing: 24,
+      runSpacing: 8,
+      children: [
+        Text(
+          'College of Arts and Sciences · Samar State University',
+          style: TextStyle(
+            fontSize: 11,
+            height: 1.5,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(
+          'Made for our CAS community.',
+          style: TextStyle(
+            fontSize: 11,
+            height: 1.5,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    ),
+  );
 }

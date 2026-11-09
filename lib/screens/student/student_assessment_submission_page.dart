@@ -1,72 +1,54 @@
+import '../../core/app_colors.dart';
+import '../../core/app_theme.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../services/assessment_artifact_submission_service.dart';
 
-class StudentAssessmentSubmissionScreen
-    extends StatefulWidget {
+class StudentAssessmentSubmissionScreen extends StatefulWidget {
   const StudentAssessmentSubmissionScreen({
     super.key,
     required this.assessment,
   });
 
-  final Map<String, dynamic>
-      assessment;
+  final Map<String, dynamic> assessment;
 
   @override
-  State<StudentAssessmentSubmissionScreen>
-      createState() =>
-          _StudentAssessmentSubmissionScreenState();
+  State<StudentAssessmentSubmissionScreen> createState() =>
+      _StudentAssessmentSubmissionScreenState();
 }
 
 class _StudentAssessmentSubmissionScreenState
-    extends State<
-        StudentAssessmentSubmissionScreen> {
-  static const Color primaryBlue =
-      Color(0xFF1769FF);
+    extends State<StudentAssessmentSubmissionScreen> {
+  Color get primaryBlue => AppColors.resolve(context, AppColors.primaryBlue);
 
-  static const Color background =
-      Color(0xFFF7F9FC);
+  Color get background => AppColors.resolve(context, AppColors.background);
 
-  static const Color textDark =
-      Color(0xFF10182F);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
 
-  static const Color textGrey =
-      Color(0xFF68738A);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
 
-  static const Color borderColor =
-      Color(0xFFE6EAF0);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
 
-  static const Color red =
-      Color(0xFFFF4B4B);
+  Color get red => AppColors.resolve(context, AppColors.error);
 
-  final AssessmentArtifactSubmissionService
-      _submissionService =
+  final AssessmentArtifactSubmissionService _submissionService =
       AssessmentArtifactSubmissionService();
 
   bool _isSubmitting = false;
 
   String get _assessmentId {
-    return (
-      widget.assessment[
-              'assessmentId'] ??
-          widget.assessment['id'] ??
-          ''
-    ).toString().trim();
+    return (widget.assessment['assessmentId'] ?? widget.assessment['id'] ?? '')
+        .toString()
+        .trim();
   }
 
   String get _title {
-    return (
-      widget.assessment['title'] ??
-          'Assessment'
-    ).toString();
+    return (widget.assessment['title'] ?? 'Assessment').toString();
   }
 
   String get _instructions {
-    return (
-      widget.assessment[
-              'instructions'] ??
-          ''
-    ).toString().trim();
+    return (widget.assessment['instructions'] ?? '').toString().trim();
   }
 
   Set<String> get _allowedSubmissionTypes {
@@ -74,11 +56,7 @@ class _StudentAssessmentSubmissionScreenState
 
     // Existing assessments created before Phase 7F keep all three options.
     if (value is! Iterable) {
-      return const {
-        'github_repository',
-        'zip_file',
-        'technical_document',
-      };
+      return const {'github_repository', 'zip_file', 'technical_document'};
     }
 
     return value
@@ -87,80 +65,51 @@ class _StudentAssessmentSubmissionScreenState
         .toSet();
   }
 
-  Future<void>
-      _submitGitHubRepository() async {
+  Future<void> _submitGitHubRepository() async {
     if (_isSubmitting) {
       return;
     }
 
-    final TextEditingController
-        controller =
-        TextEditingController();
+    final TextEditingController controller = TextEditingController();
 
-    final String? repositoryUrl =
-        await showDialog<String>(
+    final String? repositoryUrl = await showDialog<String>(
       context: context,
-      builder: (
-        BuildContext dialogContext,
-      ) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text(
-            'GitHub Repository',
-          ),
+          title: const Text('GitHub Repository'),
           content: TextField(
             controller: controller,
-            keyboardType:
-                TextInputType.url,
+            keyboardType: TextInputType.url,
             autocorrect: false,
             enableSuggestions: false,
-            decoration:
-                const InputDecoration(
-              labelText:
-                  'Repository link',
-              hintText:
-                  'https://github.com/owner/repository',
-              prefixIcon:
-                  Icon(
-                Icons.link_rounded,
-              ),
+            decoration: const InputDecoration(
+              labelText: 'Repository link',
+              hintText: 'https://github.com/owner/repository',
+              prefixIcon: Icon(Icons.link_rounded),
             ),
           ),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                );
+                Navigator.pop(dialogContext);
               },
-              child: const Text(
-                'Cancel',
-              ),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
-                final String value =
-                    controller.text
-                        .trim();
+                final String value = controller.text.trim();
 
                 if (value.isEmpty) {
                   return;
                 }
 
-                Navigator.pop(
-                  dialogContext,
-                  value,
-                );
+                Navigator.pop(dialogContext, value);
               },
-              style:
-                  ElevatedButton.styleFrom(
-                backgroundColor:
-                    primaryBlue,
-                foregroundColor:
-                    Colors.white,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
-              child: const Text(
-                'Continue',
-              ),
+              child: const Text('Continue'),
             ),
           ],
         );
@@ -169,15 +118,12 @@ class _StudentAssessmentSubmissionScreenState
 
     controller.dispose();
 
-    if (repositoryUrl == null ||
-        repositoryUrl.isEmpty) {
+    if (repositoryUrl == null || repositoryUrl.isEmpty) {
       return;
     }
 
-    final bool confirmed =
-        await _confirmSubmission(
-      title:
-          'Submit GitHub Repository?',
+    final bool confirmed = await _confirmSubmission(
+      title: 'Submit GitHub Repository?',
       message:
           'Make sure the repository is accessible to your instructor.\n\n$repositoryUrl',
     );
@@ -186,38 +132,28 @@ class _StudentAssessmentSubmissionScreenState
       return;
     }
 
-    await _performSubmission(
-      () {
-        return _submissionService
-            .submitGitHubRepository(
-          assessmentId:
-              _assessmentId,
-          repositoryUrl:
-              repositoryUrl,
-        );
-      },
-    );
+    await _performSubmission(() {
+      return _submissionService.submitGitHubRepository(
+        assessmentId: _assessmentId,
+        repositoryUrl: repositoryUrl,
+      );
+    });
   }
 
-  Future<void>
-      _selectZipFile() async {
+  Future<void> _selectZipFile() async {
     if (_isSubmitting) {
       return;
     }
 
     try {
-      final AssessmentSubmissionFile?
-          file =
-          await _submissionService
-              .pickZipFile();
+      final AssessmentSubmissionFile? file = await _submissionService
+          .pickZipFile();
 
-      if (file == null ||
-          !mounted) {
+      if (file == null || !mounted) {
         return;
       }
 
-      final bool confirmed =
-          await _confirmFile(
+      final bool confirmed = await _confirmFile(
         file: file,
         typeLabel: 'ZIP file',
       );
@@ -226,82 +162,60 @@ class _StudentAssessmentSubmissionScreenState
         return;
       }
 
-      await _performSubmission(
-        () {
-          return _submissionService
-              .submitZipFile(
-            assessmentId:
-                _assessmentId,
-            file: file,
-          );
-        },
-      );
-    } on AssessmentArtifactSubmissionException
-        catch (error) {
+      await _performSubmission(() {
+        return _submissionService.submitZipFile(
+          assessmentId: _assessmentId,
+          file: file,
+        );
+      });
+    } on AssessmentArtifactSubmissionException catch (error) {
       _showError(error.message);
     } catch (error) {
-      _showError(
-        'Unable to select ZIP file: $error',
-      );
+      _showError('Unable to select ZIP file: $error');
     }
   }
 
-  Future<void>
-      _selectTechnicalDocument() async {
+  Future<void> _selectTechnicalDocument() async {
     if (_isSubmitting) {
       return;
     }
 
     try {
-      final AssessmentSubmissionFile?
-          file =
-          await _submissionService
-              .pickTechnicalDocument();
+      final AssessmentSubmissionFile? file = await _submissionService
+          .pickTechnicalDocument();
 
-      if (file == null ||
-          !mounted) {
+      if (file == null || !mounted) {
         return;
       }
 
-      final bool confirmed =
-          await _confirmFile(
+      final bool confirmed = await _confirmFile(
         file: file,
-        typeLabel:
-            'technical document',
+        typeLabel: 'technical document',
       );
 
       if (!confirmed) {
         return;
       }
 
-      await _performSubmission(
-        () {
-          return _submissionService
-              .submitTechnicalDocument(
-            assessmentId:
-                _assessmentId,
-            file: file,
-          );
-        },
-      );
-    } on AssessmentArtifactSubmissionException
-        catch (error) {
+      await _performSubmission(() {
+        return _submissionService.submitTechnicalDocument(
+          assessmentId: _assessmentId,
+          file: file,
+        );
+      });
+    } on AssessmentArtifactSubmissionException catch (error) {
       _showError(error.message);
     } catch (error) {
-      _showError(
-        'Unable to select document: $error',
-      );
+      _showError('Unable to select document: $error');
     }
   }
 
   Future<bool> _confirmFile({
-    required AssessmentSubmissionFile
-        file,
+    required AssessmentSubmissionFile file,
     required String typeLabel,
   }) {
     return _confirmSubmission(
-      title:
-          'Submit $typeLabel?',
+      title: 'Submit $typeLabel?',
       message:
           '${file.name}\n'
           '${file.sizeInMegabytes.toStringAsFixed(2)} MB\n\n'
@@ -309,54 +223,32 @@ class _StudentAssessmentSubmissionScreenState
     );
   }
 
-  Future<bool>
-      _confirmSubmission({
+  Future<bool> _confirmSubmission({
     required String title,
     required String message,
   }) async {
-    final bool? confirmed =
-        await showDialog<bool>(
+    final bool? confirmed = await showDialog<bool>(
       context: context,
-      builder: (
-        BuildContext dialogContext,
-      ) {
+      builder: (BuildContext dialogContext) {
         return AlertDialog(
           title: Text(title),
-          content: Text(
-            message,
-            style: const TextStyle(
-              height: 1.45,
-            ),
-          ),
+          content: Text(message, style: const TextStyle(height: 1.45)),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  false,
-                );
+                Navigator.pop(dialogContext, false);
               },
-              child: const Text(
-                'Cancel',
-              ),
+              child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
-                Navigator.pop(
-                  dialogContext,
-                  true,
-                );
+                Navigator.pop(dialogContext, true);
               },
-              style:
-                  ElevatedButton.styleFrom(
-                backgroundColor:
-                    primaryBlue,
-                foregroundColor:
-                    Colors.white,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryBlue,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
-              child: const Text(
-                'Submit',
-              ),
+              child: const Text('Submit'),
             ),
           ],
         );
@@ -366,18 +258,13 @@ class _StudentAssessmentSubmissionScreenState
     return confirmed == true;
   }
 
-  Future<void>
-      _performSubmission(
-    Future<void> Function() action,
-  ) async {
+  Future<void> _performSubmission(Future<void> Function() action) async {
     if (_isSubmitting) {
       return;
     }
 
     if (_assessmentId.isEmpty) {
-      _showError(
-        'Assessment ID is missing.',
-      );
+      _showError('Assessment ID is missing.');
 
       return;
     }
@@ -393,27 +280,19 @@ class _StudentAssessmentSubmissionScreenState
         return;
       }
 
-      Navigator.pop(
-        context,
-        true,
-      );
-    } on AssessmentArtifactSubmissionException
-        catch (error) {
+      Navigator.pop(context, true);
+    } on AssessmentArtifactSubmissionException catch (error) {
       if (!mounted) {
         return;
       }
 
-      _showError(
-        error.message,
-      );
+      _showError(error.message);
     } catch (error) {
       if (!mounted) {
         return;
       }
 
-      _showError(
-        'Unable to submit assessment: $error',
-      );
+      _showError('Unable to submit assessment: $error');
     } finally {
       if (mounted) {
         setState(() {
@@ -423,23 +302,18 @@ class _StudentAssessmentSubmissionScreenState
     }
   }
 
-  void _showError(
-    String message,
-  ) {
+  void _showError(String message) {
     if (!mounted) {
       return;
     }
 
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: red,
-        behavior:
-            SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -451,108 +325,57 @@ class _StudentAssessmentSubmissionScreenState
     required VoidCallback onPressed,
   }) {
     return Container(
-      margin:
-          const EdgeInsets.only(
-        bottom: 12,
-      ),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(14),
-        border: Border.all(
-          color: borderColor,
-        ),
+        color: AppColors.resolve(context, Colors.white),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap:
-              _isSubmitting
-                  ? null
-                  : onPressed,
-          borderRadius:
-              BorderRadius.circular(
-            14,
-          ),
+          onTap: _isSubmitting ? null : onPressed,
+          borderRadius: BorderRadius.circular(14),
           child: Padding(
-            padding:
-                const EdgeInsets.all(
-              16,
-            ),
+            padding: const EdgeInsets.all(16),
             child: Row(
               children: [
                 Container(
                   width: 42,
                   height: 42,
-                  decoration:
-                      BoxDecoration(
-                    color:
-                        primaryBlue
-                            .withValues(
-                      alpha: 0.08,
-                    ),
-                    borderRadius:
-                        BorderRadius
-                            .circular(
-                      12,
-                    ),
+                  decoration: BoxDecoration(
+                    color: primaryBlue.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(
-                    icon,
-                    color:
-                        primaryBlue,
-                    size: 22,
-                  ),
+                  child: Icon(icon, color: primaryBlue, size: 22),
                 ),
-                const SizedBox(
-                  width: 14,
-                ),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment
-                            .start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         title,
-                        style:
-                            const TextStyle(
-                          color:
-                              textDark,
-                          fontSize:
-                              14,
-                          fontWeight:
-                              FontWeight
-                                  .w800,
+                        style: TextStyle(
+                          color: textDark,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(
-                        height: 4,
-                      ),
+                      const SizedBox(height: 4),
                       Text(
                         description,
-                        style:
-                            const TextStyle(
-                          color:
-                              textGrey,
-                          fontSize:
-                              11,
-                          height:
-                              1.35,
+                        style: TextStyle(
+                          color: textGrey,
+                          fontSize: 11,
+                          height: 1.35,
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(
-                  width: 8,
-                ),
-                const Icon(
-                  Icons
-                      .chevron_right_rounded,
-                  color:
-                      textGrey,
-                ),
+                const SizedBox(width: 8),
+                Icon(Icons.chevron_right_rounded, color: textGrey),
               ],
             ),
           ),
@@ -562,147 +385,89 @@ class _StudentAssessmentSubmissionScreenState
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return PopScope(
-      canPop:
-          !_isSubmitting,
+      canPop: !_isSubmitting,
       child: Scaffold(
-        backgroundColor:
-            background,
+        backgroundColor: background,
         appBar: AppBar(
-          backgroundColor:
-              Colors.white,
-          foregroundColor:
-              textDark,
+          backgroundColor: AppColors.resolve(context, Colors.white),
+          foregroundColor: textDark,
           elevation: 0,
           title: const Text(
             'Submit Assessment',
-            style: TextStyle(
-              fontWeight:
-                  FontWeight.w800,
-            ),
+            style: TextStyle(fontWeight: FontWeight.w700),
           ),
         ),
         body: SafeArea(
           child: Column(
             children: [
               if (_isSubmitting)
-                const LinearProgressIndicator(
-                  color:
-                      primaryBlue,
+                LinearProgressIndicator(
+                  color: primaryBlue,
+                  minHeight: AppTheme.progressBarHeight,
+                  borderRadius: BorderRadius.circular(8),
                 ),
               Expanded(
-                child:
-                    SingleChildScrollView(
-                  padding:
-                      const EdgeInsets
-                          .all(20),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment
-                            .start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        width:
-                            double.infinity,
-                        padding:
-                            const EdgeInsets
-                                .all(18),
-                        decoration:
-                            BoxDecoration(
-                          color:
-                              primaryBlue,
-                          borderRadius:
-                              BorderRadius
-                                  .circular(
-                            18,
-                          ),
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: primaryBlue,
+                          borderRadius: BorderRadius.circular(18),
                         ),
                         child: Column(
-                          crossAxisAlignment:
-                              CrossAxisAlignment
-                                  .start,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               _title,
-                              style:
-                                  const TextStyle(
-                                color:
-                                    Colors.white,
-                                fontSize:
-                                    18,
-                                fontWeight:
-                                    FontWeight
-                                        .w900,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
                               ),
                             ),
-                            if (_instructions
-                                .isNotEmpty) ...[
-                              const SizedBox(
-                                height: 8,
-                              ),
+                            if (_instructions.isNotEmpty) ...[
+                              const SizedBox(height: 8),
                               Text(
                                 _instructions,
-                                style:
-                                    TextStyle(
-                                  color:
-                                      Colors.white
-                                          .withValues(
-                                    alpha:
-                                        0.86,
-                                  ),
-                                  fontSize:
-                                      12,
-                                  height:
-                                      1.45,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.86),
+                                  fontSize: 12,
+                                  height: 1.45,
                                 ),
                               ),
                             ],
                           ],
                         ),
                       ),
-                      const SizedBox(
-                        height: 25,
-                      ),
-                      const Text(
+                      const SizedBox(height: 25),
+                      Text(
                         'Submission',
                         style: TextStyle(
-                          color:
-                              textDark,
-                          fontSize:
-                              18,
-                          fontWeight:
-                              FontWeight
-                                  .w900,
+                          color: textDark,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
                         ),
                       ),
-                      const SizedBox(
-                        height: 5,
-                      ),
+                      const SizedBox(height: 5),
                       Text(
                         _allowedSubmissionTypes.length == 1
                             ? 'Use the submission option selected by your instructor.'
                             : 'Choose one of the submission options allowed by your instructor.',
-                        style: const TextStyle(
-                          color:
-                              textGrey,
-                          fontSize:
-                              12,
-                        ),
+                        style: TextStyle(color: textGrey, fontSize: 12),
                       ),
-                      const SizedBox(
-                        height: 17,
-                      ),
-                      if (_allowedSubmissionTypes.contains(
-                        'github_repository',
-                      ))
+                      const SizedBox(height: 17),
+                      if (_allowedSubmissionTypes.contains('github_repository'))
                         _submissionOption(
                           icon: Icons.link_rounded,
                           title: 'GitHub Repository Link',
-                          description:
-                              'Submit a public or instructor-accessible GitHub repository.',
+                          description: 'Submit a public or instructor-accessible GitHub repository.',
                           onPressed: _submitGitHubRepository,
                         ),
                       if (_allowedSubmissionTypes.contains('zip_file'))
@@ -719,33 +484,21 @@ class _StudentAssessmentSubmissionScreenState
                         _submissionOption(
                           icon: Icons.description_outlined,
                           title: 'Upload Technical Docs',
-                          description:
-                              'Accepted: PDF, DOC, DOCX, or TXT — maximum 20 MB.',
+                          description: 'Accepted: PDF, DOC, DOCX, or TXT — maximum 20 MB.',
                           onPressed: _selectTechnicalDocument,
                         ),
                       if (_isSubmitting) ...[
-                        const SizedBox(
-                          height: 12,
-                        ),
-                        const Center(
+                        const SizedBox(height: 12),
+                        Center(
                           child: Column(
                             children: [
-                              CircularProgressIndicator(
-                                color:
-                                    primaryBlue,
-                              ),
-                              SizedBox(
-                                height: 12,
-                              ),
+                              CircularProgressIndicator(color: primaryBlue),
+                              SizedBox(height: 12),
                               Text(
                                 'Uploading and submitting…',
-                                style:
-                                    TextStyle(
-                                  color:
-                                      textGrey,
-                                  fontWeight:
-                                      FontWeight
-                                          .w700,
+                                style: TextStyle(
+                                  color: textGrey,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ],

@@ -1,3 +1,7 @@
+import 'shared/campus_access_layout.dart';
+import 'shared/password_recovery_dialog.dart';
+import '../core/app_colors.dart';
+
 import 'package:flutter/material.dart';
 
 import '../config/academic_catalog.dart';
@@ -9,35 +13,35 @@ import '../services/password_reset_service.dart';
 enum RegistrationAccountType { student, instructor }
 
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key});
+  const AuthScreen({
+    super.key,
+    this.authService,
+    this.instructorRegistrationService,
+    this.passwordResetService,
+    this.initialSignUp = false,
+  });
+  final CampusAuthService? authService;
+  final InstructorRegistrationService? instructorRegistrationService;
+  final PasswordResetService? passwordResetService;
+  final bool initialSignUp;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  static const Color primaryBlue = Color(0xFF1769FF);
+  static const Color red = AppColors.error;
 
-  static const Color darkText = Color(0xFF10182F);
+  static const Color green = AppColors.green;
 
-  static const Color greyText = Color(0xFF68738A);
+  late final CampusAuthService _authService =
+      widget.authService ?? CampusAuthService();
 
-  static const Color background = Color(0xFFF8FAFD);
+  late final InstructorRegistrationService _instructorRegistrationService =
+      widget.instructorRegistrationService ?? InstructorRegistrationService();
 
-  static const Color borderColor = Color(0xFFE3E7EE);
-
-  static const Color red = Color(0xFFFF4B4B);
-
-  static const Color green = Color(0xFF26A65B);
-
-  static const Color lightBlue = Color(0xFFEAF3FF);
-
-  final CampusAuthService _authService = CampusAuthService();
-
-  final InstructorRegistrationService _instructorRegistrationService =
-      InstructorRegistrationService();
-
-  final PasswordResetService _passwordResetService = PasswordResetService();
+  late final PasswordResetService _passwordResetService =
+      widget.passwordResetService ?? PasswordResetService();
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
 
@@ -47,7 +51,9 @@ class _AuthScreenState extends State<AuthScreen> {
 
   final TextEditingController _campusIdController = TextEditingController();
 
-  final TextEditingController _departmentController = TextEditingController();
+  final TextEditingController _departmentController = TextEditingController(
+    text: AcademicCatalog.department,
+  );
 
   final TextEditingController _courseController = TextEditingController();
 
@@ -56,7 +62,7 @@ class _AuthScreenState extends State<AuthScreen> {
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
-  bool _isSignUpMode = false;
+  late bool _isSignUpMode = widget.initialSignUp;
   bool _isLoading = false;
   bool _isPickingFile = false;
   bool _showPassword = false;
@@ -66,6 +72,7 @@ class _AuthScreenState extends State<AuthScreen> {
       RegistrationAccountType.student;
 
   FacultyIdDocument? _facultyIdDocument;
+  bool get _busy => _isLoading || _isPickingFile;
 
   bool get _isInstructorRegistration =>
       _isSignUpMode &&
@@ -85,7 +92,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _switchMode(bool signUp) {
-    if (_isLoading || signUp == _isSignUpMode) {
+    if (_busy || signUp == _isSignUpMode) {
       return;
     }
 
@@ -102,7 +109,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _selectAccountType(RegistrationAccountType type) {
-    if (_isLoading || type == _registrationAccountType) {
+    if (_busy || type == _registrationAccountType) {
       return;
     }
 
@@ -112,8 +119,12 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() {
       _registrationAccountType = type;
       _facultyIdDocument = null;
-      _departmentController.clear();
+      _departmentController.text = AcademicCatalog.department;
       _courseController.clear();
+      _passwordController.clear();
+      _confirmPasswordController.clear();
+      _showPassword = false;
+      _showConfirmPassword = false;
     });
   }
 
@@ -155,7 +166,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _handleLogin() async {
-    if (_isLoading) {
+    if (_busy) {
       return;
     }
 
@@ -198,7 +209,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _handleSignUp() async {
-    if (_isLoading) {
+    if (_busy) {
       return;
     }
 
@@ -281,237 +292,18 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _showForgotPasswordDialog() async {
-    if (_isLoading) {
-      return;
-    }
-
+    if (_busy) return;
     FocusScope.of(context).unfocus();
-
-    final GlobalKey<FormState> resetFormKey = GlobalKey<FormState>();
-    final TextEditingController campusIdController = TextEditingController(
-      text: _campusIdController.text.trim(),
-    );
-    final TextEditingController emailController = TextEditingController();
-
-    final bool? requestSent = await showDialog<bool>(
+    final sent = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) {
-        bool isSubmitting = false;
-        String? dialogError;
-
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            Future<void> submitRequest() async {
-              if (isSubmitting ||
-                  !(resetFormKey.currentState?.validate() ?? false)) {
-                return;
-              }
-
-              FocusScope.of(dialogContext).unfocus();
-              setDialogState(() {
-                isSubmitting = true;
-                dialogError = null;
-              });
-
-              try {
-                await _passwordResetService.requestPasswordReset(
-                  campusId: campusIdController.text,
-                  email: emailController.text,
-                );
-
-                if (dialogContext.mounted) {
-                  Navigator.of(dialogContext).pop(true);
-                }
-              } on PasswordResetException catch (error) {
-                if (dialogContext.mounted) {
-                  setDialogState(() {
-                    dialogError = error.message;
-                    isSubmitting = false;
-                  });
-                }
-              } catch (_) {
-                if (dialogContext.mounted) {
-                  setDialogState(() {
-                    dialogError =
-                        'Unable to request a password reset. Please try again.';
-                    isSubmitting = false;
-                  });
-                }
-              }
-            }
-
-            return PopScope(
-              canPop: !isSubmitting,
-              child: AlertDialog(
-                backgroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                contentPadding: const EdgeInsets.fromLTRB(24, 18, 24, 8),
-                actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                title: const Row(
-                  children: [
-                    Icon(Icons.lock_reset_rounded, color: primaryBlue),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Reset password',
-                        style: TextStyle(
-                          color: darkText,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                content: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: SingleChildScrollView(
-                    child: Form(
-                      key: resetFormKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text(
-                            'Enter your ID number and the Gmail address registered with your CASLMS account.',
-                            style: TextStyle(
-                              color: greyText,
-                              fontSize: 12.5,
-                              height: 1.45,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          _label('ID Number'),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: campusIdController,
-                            enabled: !isSubmitting,
-                            keyboardType: TextInputType.number,
-                            autocorrect: false,
-                            textInputAction: TextInputAction.next,
-                            decoration: _inputDecoration(
-                              hintText: 'Student or faculty ID',
-                              icon: Icons.badge_outlined,
-                            ),
-                            validator: (value) {
-                              final String text = value?.trim() ?? '';
-
-                              if (text.isEmpty) {
-                                return 'Please enter your ID number';
-                              }
-
-                              if (!_authService.isValidCampusId(text)) {
-                                return 'Enter a valid ID number';
-                              }
-
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          _label('Registered Gmail'),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: emailController,
-                            enabled: !isSubmitting,
-                            keyboardType: TextInputType.emailAddress,
-                            autocorrect: false,
-                            textInputAction: TextInputAction.done,
-                            onFieldSubmitted: (_) {
-                              submitRequest();
-                            },
-                            decoration: _inputDecoration(
-                              hintText: 'Enter your registered Gmail',
-                              icon: Icons.email_outlined,
-                            ),
-                            validator: (value) {
-                              final String text = value?.trim() ?? '';
-
-                              if (text.isEmpty) {
-                                return 'Please enter your registered Gmail';
-                              }
-
-                              if (!_authService.isValidEmail(text)) {
-                                return 'Enter a valid email address';
-                              }
-
-                              return null;
-                            },
-                          ),
-                          if (dialogError != null) ...[
-                            const SizedBox(height: 14),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: red.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                dialogError!,
-                                style: const TextStyle(
-                                  color: red,
-                                  fontSize: 12,
-                                  height: 1.35,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: isSubmitting
-                        ? null
-                        : () {
-                            Navigator.of(dialogContext).pop(false);
-                          },
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton(
-                    onPressed: isSubmitting ? null : submitRequest,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryBlue,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 13,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: isSubmitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.2,
-                            ),
-                          )
-                        : const Text(
-                            'Send Reset Link',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+      barrierDismissible: false,
+      builder: (_) => PasswordRecoveryDialog(
+        authService: _authService,
+        resetService: _passwordResetService,
+        initialCampusId: _campusIdController.text.trim(),
+      ),
     );
-
-    campusIdController.dispose();
-    emailController.dispose();
-
-    if (requestSent == true && mounted) {
+    if (mounted && sent == true) {
       _showSuccess(
         'If the information matches an account, a password reset link has been sent to the registered Gmail address.',
       );
@@ -544,823 +336,480 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: background,
-      appBar: AppBar(
-        backgroundColor: background,
-        elevation: 0,
-        foregroundColor: darkText,
-      ),
-      body: SafeArea(
-        top: false,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(24, 10, 24, 40),
-              child: Form(
-                key: _formKey,
+    final colors = Theme.of(context).colorScheme;
+    final mobile = MediaQuery.sizeOf(context).width < 600;
+    return CampusAccessLayout(
+      signUp: _isSignUpMode,
+      busy: _busy,
+      child: AutofillGroup(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                _isSignUpMode ? 'Join your CAS community' : 'Welcome back',
+                style: const TextStyle(
+                  fontSize: 28,
+                  height: 1.2,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _isSignUpMode
+                    ? 'Create an account to start learning together.'
+                    : 'Sign in with your student or faculty ID.',
+                style: TextStyle(color: colors.onSurfaceVariant, height: 1.5),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                key: const ValueKey('auth-controls-card'),
+                padding: mobile ? const EdgeInsets.all(18) : EdgeInsets.zero,
+                decoration: mobile
+                    ? BoxDecoration(
+                        color: colors.surface,
+                        border: Border.all(color: colors.outlineVariant),
+                        borderRadius: BorderRadius.circular(22),
+                      )
+                    : null,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Center(
-                      child: Container(
-                        width: 78,
-                        height: 78,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(22),
-                          border: Border.all(color: borderColor),
-                          image: const DecorationImage(
-                            image: AssetImage('assets/images/CASlogo.jpg'),
-                            fit: BoxFit.cover,
-                          ),
+                    _choices([
+                      _choice(
+                        'Sign in',
+                        !_isSignUpMode,
+                        () => _switchMode(false),
+                      ),
+                      _choice(
+                        'Create account',
+                        _isSignUpMode,
+                        () => _switchMode(true),
+                      ),
+                    ]),
+                    const SizedBox(height: 24),
+                    if (_isSignUpMode) ...[
+                      Text(
+                        'I am a',
+                        style: TextStyle(
+                          color: colors.onSurfaceVariant,
+                          fontSize: 12,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      _isSignUpMode ? 'Create your account' : 'Welcome back',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: darkText,
-                        fontSize: 27,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.7,
-                      ),
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      _isSignUpMode
-                          ? _isInstructorRegistration
-                                ? 'Submit your instructor information for administrator verification.'
-                                : 'Register your student information to access CASLMS.'
-                          : 'Log in using your ID number and password.',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: greyText,
-                        fontSize: 13,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 26),
-                    _buildModeSelector(),
-                    const SizedBox(height: 22),
-
-                    if (_isSignUpMode) ...[
-                      _label('Register as'),
                       const SizedBox(height: 8),
-                      _buildAccountTypeSelector(),
-                      const SizedBox(height: 20),
-                      _label('Full Name'),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _fullNameController,
-                        enabled: !_isLoading,
-                        textCapitalization: TextCapitalization.words,
-                        textInputAction: TextInputAction.next,
-                        decoration: _inputDecoration(
-                          hintText: 'Enter your full name',
+                      _choices([
+                        _choice(
+                          'Student',
+                          !_isInstructorRegistration,
+                          () => _selectAccountType(
+                            RegistrationAccountType.student,
+                          ),
+                          icon: Icons.school_outlined,
+                        ),
+                        _choice(
+                          'Instructor',
+                          _isInstructorRegistration,
+                          () => _selectAccountType(
+                            RegistrationAccountType.instructor,
+                          ),
                           icon: Icons.person_outline_rounded,
                         ),
-                        validator: (value) {
-                          if (!_isSignUpMode) {
-                            return null;
-                          }
-
-                          final String text = value?.trim() ?? '';
-
-                          if (text.isEmpty) {
-                            return 'Please enter your full name';
-                          }
-
-                          if (text.length < 2) {
-                            return 'Enter your complete name';
-                          }
-
-                          return null;
-                        },
+                      ]),
+                      const SizedBox(height: 20),
+                      _field(
+                        'auth-full-name',
+                        _fullNameController,
+                        'Full name',
+                        Icons.person_outline_rounded,
+                        hints: const [AutofillHints.name],
+                        validator: (v) => (v ?? '').trim().length < 2
+                            ? 'Enter your full name.'
+                            : null,
                       ),
-                      const SizedBox(height: 18),
-                      _label('Email Address'),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _emailController,
-                        enabled: !_isLoading,
-                        keyboardType: TextInputType.emailAddress,
-                        autocorrect: false,
-                        textInputAction: TextInputAction.next,
-                        decoration: _inputDecoration(
-                          hintText: 'Enter your Gmail address',
-                          icon: Icons.email_outlined,
-                        ),
-                        validator: (value) {
-                          if (!_isSignUpMode) {
-                            return null;
-                          }
-
-                          final String text = value?.trim() ?? '';
-
-                          if (text.isEmpty) {
-                            return 'Please enter your email';
-                          }
-
-                          if (!_authService.isValidEmail(text)) {
-                            return 'Enter a valid email address';
-                          }
-
-                          return null;
-                        },
+                      const SizedBox(height: 16),
+                      _field(
+                        'auth-email',
+                        _emailController,
+                        'Gmail address',
+                        Icons.mail_outline_rounded,
+                        hints: const [AutofillHints.email],
+                        keyboard: TextInputType.emailAddress,
+                        validator: (v) =>
+                            !_authService.isValidEmail((v ?? '').trim())
+                            ? 'Enter a valid Gmail address.'
+                            : null,
                       ),
-                      const SizedBox(height: 18),
+                      const SizedBox(height: 16),
                     ],
-
-                    _label(
-                      _isInstructorRegistration
-                          ? 'Faculty ID Number'
-                          : 'ID Number',
+                    _field(
+                      'auth-id',
+                      _campusIdController,
+                      _isSignUpMode
+                          ? (_isInstructorRegistration
+                                ? 'Faculty ID number'
+                                : 'Student ID number')
+                          : 'Student or faculty ID',
+                      Icons.badge_outlined,
+                      hints: const [AutofillHints.username],
+                      keyboard: TextInputType.number,
+                      validator: (v) =>
+                          !_authService.isValidCampusId((v ?? '').trim())
+                          ? 'Enter a valid ID number.'
+                          : null,
                     ),
-                    const SizedBox(height: 8),
-                    TextFormField(
-                      controller: _campusIdController,
-                      enabled: !_isLoading,
-                      keyboardType: TextInputType.number,
-                      autocorrect: false,
-                      textInputAction: TextInputAction.next,
-                      decoration: _inputDecoration(
-                        hintText: _isInstructorRegistration
-                            ? 'Enter your faculty ID'
-                            : 'e.g. 231577',
-                        icon: Icons.badge_outlined,
-                      ),
-                      validator: (value) {
-                        final String text = value?.trim() ?? '';
-
-                        if (text.isEmpty) {
-                          return _isInstructorRegistration
-                              ? 'Please enter your faculty ID'
-                              : 'Please enter your ID number';
-                        }
-
-                        if (!_authService.isValidCampusId(text)) {
-                          return _isInstructorRegistration
-                              ? 'Enter a valid faculty ID'
-                              : 'Enter a valid ID number';
-                        }
-
-                        return null;
-                      },
-                    ),
-
+                    const SizedBox(height: 16),
                     if (_isSignUpMode) ...[
-                      const SizedBox(height: 18),
-                      _label('Department / College'),
-                      const SizedBox(height: 8),
-                      if (!_isInstructorRegistration)
+                      Text(
+                        AcademicCatalog.department,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      if (_isInstructorRegistration)
+                        _field(
+                          'auth-position',
+                          _courseController,
+                          'Position / designation',
+                          Icons.work_outline_rounded,
+                          validator: (v) => (v ?? '').trim().length < 2
+                              ? 'Enter your position.'
+                              : null,
+                        )
+                      else
                         DropdownButtonFormField<String>(
                           key: ValueKey(
-                            'department-${_departmentController.text}',
+                            'auth-program-$_registrationAccountType',
                           ),
-                          initialValue:
-                              AcademicCatalog.programs.containsKey(
-                                _departmentController.text,
-                              )
-                              ? _departmentController.text
-                              : null,
+                          initialValue: _courseController.text.isEmpty
+                              ? null
+                              : _courseController.text,
                           isExpanded: true,
-                          menuMaxHeight: 350,
-                          decoration: _inputDecoration(
-                            hintText: 'Select department / college',
-                            icon: Icons.account_balance_outlined,
+                          decoration: _decoration(
+                            'Degree program',
+                            Icons.school_outlined,
                           ),
-                          items: AcademicCatalog.programs.keys
+                          items: AcademicCatalog
+                              .programs[AcademicCatalog.department]!
                               .map(
-                                (department) => DropdownMenuItem(
-                                  value: department,
+                                (code) => DropdownMenuItem(
+                                  value: code,
                                   child: Text(
-                                    department,
+                                    AcademicCatalog.programLabel(code),
+                                    maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 13),
                                   ),
                                 ),
                               )
                               .toList(),
-                          onChanged: _isLoading
+                          onChanged: _busy
                               ? null
-                              : (department) => setState(() {
-                                  _departmentController.text = department ?? '';
-                                  _courseController.clear();
-                                }),
+                              : (value) => _courseController.text = value ?? '',
                           validator: (value) => value == null
-                              ? 'Select your department / college.'
+                              ? 'Select your degree program.'
                               : null,
-                        )
-                      else
-                        TextFormField(
-                          controller: _departmentController,
-                          enabled: !_isLoading,
-                          textCapitalization: TextCapitalization.words,
-                          textInputAction: TextInputAction.next,
-                          decoration: _inputDecoration(
-                            hintText: 'Enter your department',
-                            icon: Icons.account_balance_outlined,
-                          ),
-                          validator: (value) {
-                            if (!_isSignUpMode) {
-                              return null;
-                            }
-
-                            if ((value?.trim() ?? '').isEmpty) {
-                              return 'Please enter your department';
-                            }
-
-                            return null;
-                          },
                         ),
-                      const SizedBox(height: 18),
-                      _label(
-                        _isInstructorRegistration
-                            ? 'Position / Program'
-                            : 'Course / Program',
-                      ),
-                      const SizedBox(height: 8),
-                      if (!_isInstructorRegistration)
-                        DropdownButtonFormField<String>(
-                          key: ValueKey(
-                            'program-${_departmentController.text}-${_courseController.text}',
-                          ),
-                          initialValue:
-                              AcademicCatalog.contains(
-                                _departmentController.text,
-                                _courseController.text,
-                              )
-                              ? _courseController.text
-                              : null,
-                          isExpanded: true,
-                          menuMaxHeight: 350,
-                          decoration: _inputDecoration(
-                            hintText: _departmentController.text.isEmpty
-                                ? 'Select a department first'
-                                : 'Select course / program',
-                            icon: Icons.school_outlined,
-                          ),
-                          items:
-                              (AcademicCatalog.programs[_departmentController
-                                          .text] ??
-                                      <String>[])
-                                  .map(
-                                    (program) => DropdownMenuItem(
-                                      value: program,
-                                      child: Text(
-                                        program,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                          onChanged:
-                              _isLoading ||
-                                  !AcademicCatalog.programs.containsKey(
-                                    _departmentController.text,
-                                  )
-                              ? null
-                              : (program) => setState(
-                                  () => _courseController.text = program ?? '',
-                                ),
-                          validator: (value) =>
-                              !AcademicCatalog.contains(
-                                _departmentController.text,
-                                value ?? '',
-                              )
-                              ? 'Select a program from your department.'
-                              : null,
-                        )
-                      else
-                        TextFormField(
-                          controller: _courseController,
-                          enabled: !_isLoading,
-                          textCapitalization: TextCapitalization.words,
-                          textInputAction: TextInputAction.next,
-                          decoration: _inputDecoration(
-                            hintText: _isInstructorRegistration
-                                ? 'e.g. Faculty, BSIT'
-                                : 'e.g. BSIT',
-                            icon: _isInstructorRegistration
-                                ? Icons.work_outline_rounded
-                                : Icons.school_outlined,
-                          ),
-                          validator: (value) {
-                            if (!_isSignUpMode) {
-                              return null;
-                            }
-
-                            if ((value?.trim() ?? '').isEmpty) {
-                              return _isInstructorRegistration
-                                  ? 'Please enter your position or program'
-                                  : 'Please enter your course or program';
-                            }
-
-                            return null;
-                          },
-                        ),
-
+                      const SizedBox(height: 16),
                       if (_isInstructorRegistration) ...[
-                        const SizedBox(height: 18),
-                        _label('Faculty ID Document'),
-                        const SizedBox(height: 8),
-                        _buildFacultyIdPicker(),
+                        OutlinedButton.icon(
+                          key: const ValueKey('auth-faculty-id'),
+                          style: OutlinedButton.styleFrom(
+                            textStyle: const TextStyle(
+                              fontFamily: 'Roboto',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onPressed: _busy ? null : _pickFacultyId,
+                          icon: Icon(
+                            _facultyIdDocument == null
+                                ? Icons.upload_file_rounded
+                                : Icons.check_circle_outline_rounded,
+                          ),
+                          label: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            child: Text(
+                              _isPickingFile
+                                  ? 'Selecting file…'
+                                  : _facultyIdDocument?.name ??
+                                        'Attach faculty ID',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Required for approval · JPG, PNG, WebP or PDF · up to 5 MB',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                       ],
                     ],
-
-                    const SizedBox(height: 18),
-                    _label('Password'),
-                    const SizedBox(height: 8),
                     TextFormField(
+                      key: const ValueKey('auth-password'),
                       controller: _passwordController,
-                      enabled: !_isLoading,
+                      enabled: !_busy,
                       obscureText: !_showPassword,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      autofillHints: [
+                        _isSignUpMode
+                            ? AutofillHints.newPassword
+                            : AutofillHints.password,
+                      ],
                       textInputAction: _isSignUpMode
                           ? TextInputAction.next
                           : TextInputAction.done,
-                      onFieldSubmitted: (_) {
-                        if (!_isSignUpMode && !_isLoading) {
-                          _submit();
-                        }
-                      },
-                      decoration: _inputDecoration(
-                        hintText: _isSignUpMode
-                            ? 'Create your password'
-                            : 'Enter your password',
-                        icon: Icons.lock_outline_rounded,
-                        suffixIcon: IconButton(
-                          onPressed: _isLoading
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _showPassword = !_showPassword;
-                                  });
-                                },
-                          icon: Icon(
-                            _showPassword
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                            color: greyText,
+                      onFieldSubmitted: _isSignUpMode ? null : (_) => _submit(),
+                      decoration:
+                          _decoration(
+                            'Password',
+                            Icons.lock_outline_rounded,
+                          ).copyWith(
+                            helperText: _isSignUpMode
+                                ? 'At least 6 characters'
+                                : null,
+                            suffixIcon: IconButton(
+                              tooltip: _showPassword
+                                  ? 'Hide password'
+                                  : 'Show password',
+                              onPressed: _busy
+                                  ? null
+                                  : () => setState(
+                                      () => _showPassword = !_showPassword,
+                                    ),
+                              icon: Icon(
+                                _showPassword
+                                    ? Icons.visibility_off_outlined
+                                    : Icons.visibility_outlined,
+                                size: 20,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter your password';
-                        }
-
-                        if (_isSignUpMode && value.length < 6) {
-                          return 'Password must contain at least 6 characters';
-                        }
-
-                        return null;
-                      },
+                      validator: (v) => (v ?? '').isEmpty
+                          ? 'Enter your password.'
+                          : _isSignUpMode && v!.length < 6
+                          ? 'Use at least 6 characters.'
+                          : null,
                     ),
-
-                    if (!_isSignUpMode)
+                    if (_isSignUpMode) ...[
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        key: const ValueKey('auth-confirm-password'),
+                        controller: _confirmPasswordController,
+                        enabled: !_busy,
+                        obscureText: !_showConfirmPassword,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        autofillHints: const [AutofillHints.newPassword],
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _submit(),
+                        decoration:
+                            _decoration(
+                              'Confirm password',
+                              Icons.lock_outline_rounded,
+                            ).copyWith(
+                              suffixIcon: IconButton(
+                                tooltip: _showConfirmPassword
+                                    ? 'Hide confirmation'
+                                    : 'Show confirmation',
+                                onPressed: _busy
+                                    ? null
+                                    : () => setState(
+                                        () => _showConfirmPassword =
+                                            !_showConfirmPassword,
+                                      ),
+                                icon: Icon(
+                                  _showConfirmPassword
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                        validator: (v) => (v ?? '').isEmpty
+                            ? 'Confirm your password.'
+                            : v != _passwordController.text
+                            ? 'Passwords do not match.'
+                            : null,
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            _isInstructorRegistration
+                                ? Icons.verified_user_outlined
+                                : Icons.mark_email_read_outlined,
+                            size: 18,
+                            color: colors.primary,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _isInstructorRegistration
+                                  ? 'Your faculty ID will be reviewed by an administrator before you can access instructor features.'
+                                  : 'Verify your Gmail address after registration to access your account.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.5,
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ] else
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: _isLoading
-                              ? null
-                              : _showForgotPasswordDialog,
-                          style: TextButton.styleFrom(
-                            foregroundColor: primaryBlue,
-                            padding: const EdgeInsets.only(
-                              top: 10,
-                              bottom: 2,
-                              left: 8,
-                            ),
-                          ),
+                          onPressed: _busy ? null : _showForgotPasswordDialog,
                           child: const Text(
                             'Forgot password?',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12.5,
-                            ),
+                            style: TextStyle(fontFamily: 'Roboto'),
                           ),
                         ),
                       ),
-
-                    if (_isSignUpMode) ...[
-                      const SizedBox(height: 18),
-                      _label('Confirm Password'),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _confirmPasswordController,
-                        enabled: !_isLoading,
-                        obscureText: !_showConfirmPassword,
-                        textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) {
-                          if (!_isLoading) {
-                            _submit();
-                          }
-                        },
-                        decoration: _inputDecoration(
-                          hintText: 'Enter your password again',
-                          icon: Icons.lock_reset_rounded,
-                          suffixIcon: IconButton(
-                            onPressed: _isLoading
-                                ? null
-                                : () {
-                                    setState(() {
-                                      _showConfirmPassword =
-                                          !_showConfirmPassword;
-                                    });
-                                  },
-                            icon: Icon(
-                              _showConfirmPassword
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                              color: greyText,
-                            ),
-                          ),
-                        ),
-                        validator: (value) {
-                          if (!_isSignUpMode) {
-                            return null;
-                          }
-
-                          if (value == null || value.isEmpty) {
-                            return 'Please confirm your password';
-                          }
-
-                          if (value != _passwordController.text) {
-                            return 'Passwords do not match';
-                          }
-
-                          return null;
-                        },
-                      ),
-                    ],
-
-                    const SizedBox(height: 28),
-                    SizedBox(
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: _isLoading || _isPickingFile
-                            ? null
-                            : _submit,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryBlue,
-                          disabledBackgroundColor: primaryBlue.withValues(
-                            alpha: 0.55,
-                          ),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2.5,
-                                ),
-                              )
-                            : Text(
-                                _isSignUpMode
-                                    ? _isInstructorRegistration
-                                          ? 'Submit for Approval'
-                                          : 'Create Account'
-                                    : 'Log In',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 15,
-                                ),
-                              ),
-                      ),
-                    ),
                     const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          _isSignUpMode
-                              ? 'Already registered?'
-                              : 'New to CASLMS?',
-                          style: const TextStyle(color: greyText),
+                    FilledButton(
+                      key: const ValueKey('auth-submit'),
+                      onPressed: _busy ? null : _submit,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(50),
+                        textStyle: const TextStyle(
+                          fontFamily: 'Roboto',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
                         ),
-                        TextButton(
-                          onPressed: _isLoading
-                              ? null
-                              : () {
-                                  _switchMode(!_isSignUpMode);
-                                },
-                          child: Text(
-                            _isSignUpMode ? 'Log In' : 'Create Account',
-                            style: const TextStyle(
-                              color: primaryBlue,
-                              fontWeight: FontWeight.w800,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(
+                              _isSignUpMode
+                                  ? (_isInstructorRegistration
+                                        ? 'Submit for approval'
+                                        : 'Create account')
+                                  : 'Sign in',
                             ),
-                          ),
-                        ),
-                      ],
                     ),
-
-                    if (_isSignUpMode) _buildInformationBox(),
                   ],
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildModeSelector() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEEF1F6),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _selectionButton(
-              title: 'Log In',
-              selected: !_isSignUpMode,
-              onTap: () {
-                _switchMode(false);
-              },
-            ),
-          ),
-          Expanded(
-            child: _selectionButton(
-              title: 'Sign Up',
-              selected: _isSignUpMode,
-              onTap: () {
-                _switchMode(true);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _field(
+    String key,
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    required FormFieldValidator<String> validator,
+    List<String>? hints,
+    TextInputType? keyboard,
+  }) => TextFormField(
+    key: ValueKey(key),
+    controller: controller,
+    enabled: !_busy,
+    validator: validator,
+    autofillHints: hints,
+    keyboardType: keyboard,
+    autocorrect: false,
+    textInputAction: TextInputAction.next,
+    decoration: _decoration(label, icon),
+  );
 
-  Widget _buildAccountTypeSelector() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEEF1F6),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _selectionButton(
-              title: 'Student',
-              icon: Icons.school_outlined,
-              selected:
-                  _registrationAccountType == RegistrationAccountType.student,
-              onTap: () {
-                _selectAccountType(RegistrationAccountType.student);
-              },
-            ),
-          ),
-          Expanded(
-            child: _selectionButton(
-              title: 'Instructor',
-              icon: Icons.co_present_outlined,
-              selected:
-                  _registrationAccountType ==
-                  RegistrationAccountType.instructor,
-              onTap: () {
-                _selectAccountType(RegistrationAccountType.instructor);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _choices(List<Widget> children) => Container(
+    padding: const EdgeInsets.all(4),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest
+          .withValues(alpha: .5),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Row(children: children),
+  );
 
-  Widget _selectionButton({
-    required String title,
-    required bool selected,
-    required VoidCallback onTap,
+  Widget _choice(
+    String label,
+    bool selected,
+    VoidCallback onPressed, {
     IconData? icon,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(11),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : const [],
+    final colors = Theme.of(context).colorScheme;
+    return Expanded(
+      child: TextButton(
+        onPressed: _busy ? null : onPressed,
+        style: TextButton.styleFrom(
+          textStyle: const TextStyle(
+            fontFamily: 'Roboto',
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+          backgroundColor: selected
+              ? colors.primaryContainer
+              : Colors.transparent,
+          foregroundColor: selected
+              ? colors.onPrimaryContainer
+              : colors.onSurfaceVariant,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 13),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, color: selected ? primaryBlue : greyText, size: 18),
-              const SizedBox(width: 7),
+        child: Semantics(
+          selected: selected,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 18),
+                const SizedBox(width: 7),
+              ],
+              Flexible(child: Text(label, textAlign: TextAlign.center)),
             ],
-            Text(
-              title,
-              style: TextStyle(
-                color: selected ? primaryBlue : greyText,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildFacultyIdPicker() {
-    final FacultyIdDocument? document = _facultyIdDocument;
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: document == null ? Colors.white : const Color(0xFFF2FBF5),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: document == null ? borderColor : green.withValues(alpha: 0.45),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (document == null)
-            const Row(
-              children: [
-                Icon(Icons.badge_outlined, color: greyText),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Upload a clear photo or PDF of your faculty ID.',
-                    style: TextStyle(
-                      color: greyText,
-                      fontSize: 12.5,
-                      height: 1.4,
-                    ),
-                  ),
-                ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                const Icon(Icons.check_circle_rounded, color: green),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        document.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: darkText,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12.5,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${document.sizeInMegabytes.toStringAsFixed(2)} MB',
-                        style: const TextStyle(color: greyText, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Remove file',
-                  onPressed: _isLoading
-                      ? null
-                      : () {
-                          setState(() {
-                            _facultyIdDocument = null;
-                          });
-                        },
-                  icon: const Icon(Icons.close_rounded, color: greyText),
-                ),
-              ],
-            ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _isLoading || _isPickingFile ? null : _pickFacultyId,
-            icon: _isPickingFile
-                ? const SizedBox(
-                    width: 17,
-                    height: 17,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.upload_file_rounded),
-            label: Text(
-              document == null ? 'Choose Faculty ID' : 'Choose Another File',
-            ),
-          ),
-          const SizedBox(height: 7),
-          const Text(
-            'Accepted: JPG, PNG, WEBP, or PDF — maximum 5 MB',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: greyText, fontSize: 10.5),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInformationBox() {
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: lightBlue,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.info_outline_rounded, color: primaryBlue, size: 18),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              _isInstructorRegistration
-                  ? 'Instructor accounts require a valid faculty ID and administrator approval. You cannot access instructor features while the application is pending.'
-                  : 'Student accounts become active immediately after successful registration.',
-              style: const TextStyle(
-                color: greyText,
-                fontSize: 10.5,
-                height: 1.45,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _label(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-        color: darkText,
-        fontSize: 12.5,
-        fontWeight: FontWeight.w700,
-      ),
-    );
-  }
-
-  InputDecoration _inputDecoration({
-    required String hintText,
-    required IconData icon,
-    Widget? suffixIcon,
-  }) {
+  InputDecoration _decoration(String label, IconData icon) {
+    final colors = Theme.of(context).colorScheme;
     return InputDecoration(
-      hintText: hintText,
-      hintStyle: const TextStyle(color: Color(0xFF98A1B2), fontSize: 13),
-      prefixIcon: Icon(icon, color: greyText, size: 21),
-      suffixIcon: suffixIcon,
+      labelText: label,
+      prefixIcon: Icon(icon, size: 20),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: colors.surface,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: borderColor),
+        borderSide: BorderSide(color: colors.outlineVariant),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: borderColor),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: primaryBlue, width: 1.6),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: red),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: red, width: 1.6),
+        borderSide: BorderSide(color: colors.outlineVariant),
       ),
     );
   }

@@ -1,3 +1,8 @@
+import '../../core/app_colors.dart';
+import '../shared/workspace_widgets.dart';
+
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../services/course_invitation_service.dart';
@@ -12,17 +17,18 @@ class StudentCourseInvitationsScreen extends StatefulWidget {
 
 class _StudentCourseInvitationsScreenState
     extends State<StudentCourseInvitationsScreen> {
-  static const Color primaryBlue = Color(0xFF1769FF);
-  static const Color background = Color(0xFFF8FAFD);
-  static const Color textDark = Color(0xFF111827);
-  static const Color textGrey = Color(0xFF6B7280);
-  static const Color borderColor = Color(0xFFE5EAF0);
-  static const Color green = Color(0xFF25A55F);
-  static const Color red = Color(0xFFFF4B4B);
+  static const Color primaryBlue = AppColors.primaryBlue;
+  static const Color background = AppColors.background;
+  static const Color textDark = AppColors.darkText;
+  static const Color textGrey = AppColors.secondaryText;
+  static const Color borderColor = AppColors.inputBorder;
+  static const Color green = AppColors.green;
+  static const Color red = AppColors.error;
 
   final CourseInvitationService _service = CourseInvitationService();
   final Set<String> _busyInvitationIds = {};
 
+  StreamSubscription<List<Map<String, dynamic>>>? _subscription;
   bool _isLoading = true;
   bool _changed = false;
   String? _errorMessage;
@@ -31,7 +37,31 @@ class _StudentCourseInvitationsScreenState
   @override
   void initState() {
     super.initState();
-    _loadInvitations();
+    _subscription = _service.watchMyPendingInvitations().listen(
+      (items) {
+        if (mounted) {
+          setState(() {
+            _invitations = items;
+            _isLoading = false;
+            _errorMessage = null;
+          });
+        }
+      },
+      onError: (Object error) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = 'Unable to sync invitations. Please retry.';
+          });
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadInvitations() async {
@@ -159,27 +189,6 @@ class _StudentCourseInvitationsScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: background,
-      appBar: AppBar(
-        backgroundColor: background,
-        foregroundColor: textDark,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          onPressed: () => Navigator.of(context).pop(_changed),
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-        ),
-        title: const Text(
-          'Course Invitations',
-          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            onPressed: _isLoading ? null : _loadInvitations,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-        ],
-      ),
       body: RefreshIndicator(
         color: primaryBlue,
         onRefresh: _loadInvitations,
@@ -187,11 +196,42 @@ class _StudentCourseInvitationsScreenState
           builder: (context, constraints) {
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.symmetric(
-                horizontal: constraints.maxWidth >= 800 ? 48 : 20,
-                vertical: 20,
+              padding: EdgeInsets.fromLTRB(
+                constraints.maxWidth < 600
+                    ? 16
+                    : constraints.maxWidth < 1200
+                    ? 24
+                    : 32,
+                20,
+                constraints.maxWidth < 600
+                    ? 16
+                    : constraints.maxWidth < 1200
+                    ? 24
+                    : 32,
+                32,
               ),
               children: [
+                WorkspaceHeading(
+                  title: 'Course invitations',
+                  subtitle: 'Review verified invitations and choose where you want to learn next.',
+                  eyebrow: 'YOUR COURSES',
+                  actions: [
+                    IconButton(
+                      tooltip: 'Back',
+                      onPressed: () => Navigator.of(context).pop(_changed),
+                      icon: const Icon(
+                        Icons.arrow_back_rounded,
+                        color: textDark,
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Refresh',
+                      onPressed: _isLoading ? null : _loadInvitations,
+                      icon: const Icon(Icons.refresh_rounded, color: textDark),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
                 Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 850),
@@ -259,7 +299,7 @@ class _StudentCourseInvitationsScreenState
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     SizedBox(height: 4),
@@ -280,7 +320,7 @@ class _StudentCourseInvitationsScreenState
           style: const TextStyle(
             color: textDark,
             fontSize: 18,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
           ),
         ),
         const SizedBox(height: 12),
@@ -310,7 +350,7 @@ class _StudentCourseInvitationsScreenState
             style: TextStyle(
               color: textDark,
               fontSize: 16,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
           SizedBox(height: 6),
@@ -369,7 +409,7 @@ class _StudentCourseInvitationsScreenState
                         style: const TextStyle(
                           color: primaryBlue,
                           fontSize: 11,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     Text(
@@ -377,12 +417,12 @@ class _StudentCourseInvitationsScreenState
                       style: const TextStyle(
                         color: textDark,
                         fontSize: 15,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      'Invited by $instructorName',
+                      'Invited by $instructorName\nSection: ${invitation['sectionName'] ?? 'Original Section'}',
                       style: const TextStyle(color: textGrey, fontSize: 12),
                     ),
                   ],

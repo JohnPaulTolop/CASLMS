@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'
     hide User;
 
@@ -274,9 +275,12 @@ class AssessmentArtifactSubmissionService {
 
     final String? token =
         await user.getIdToken(true);
+    final appCheck = await FirebaseAppCheck.instance.getToken(true);
 
     if (token == null ||
-        token.isEmpty) {
+        token.isEmpty ||
+        appCheck == null ||
+        appCheck.isEmpty) {
       throw AssessmentArtifactSubmissionException(
         'Unable to verify your account.',
       );
@@ -290,6 +294,7 @@ class AssessmentArtifactSubmissionService {
         headers: {
           'Authorization':
               'Bearer $token',
+          'X-Firebase-AppCheck': appCheck,
         },
         body: body,
       );

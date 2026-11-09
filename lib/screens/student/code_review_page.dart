@@ -1,3 +1,6 @@
+import '../shared/page_loading_state.dart';
+import '../../core/app_colors.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../services/assignment_service.dart';
@@ -15,35 +18,31 @@ class CodeReviewScreen extends StatefulWidget {
   });
 
   @override
-  State<CodeReviewScreen> createState() =>
-      _CodeReviewScreenState();
+  State<CodeReviewScreen> createState() => _CodeReviewScreenState();
 }
 
-class _CodeReviewScreenState
-    extends State<CodeReviewScreen> {
+class _CodeReviewScreenState extends State<CodeReviewScreen> {
   // ============================================================
   // DESIGN SYSTEM
   // ============================================================
 
-  static const Color primaryTeal = Color(0xFF00897B);
-  static const Color background = Color(0xFFF7F9FC);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
-  static const Color green = Color(0xFF26A65B);
+  static const Color primaryTeal = AppColors.primaryBlue;
+  static const Color background = AppColors.background;
+  static const Color textDark = AppColors.darkText;
+  static const Color textGrey = AppColors.secondaryText;
+  static const Color green = AppColors.green;
 
   // ============================================================
   // SERVICE
   // ============================================================
 
-  final AssignmentService _assignmentService =
-      AssignmentService();
+  final AssignmentService _assignmentService = AssignmentService();
 
   // ============================================================
   // CONTROLLER
   // ============================================================
 
-  final TextEditingController _feedbackController =
-      TextEditingController();
+  final TextEditingController _feedbackController = TextEditingController();
 
   // ============================================================
   // STATE
@@ -89,8 +88,7 @@ class _CodeReviewScreenState
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            'Submission information is missing.';
+        _errorMessage = 'Submission information is missing.';
       });
 
       return;
@@ -104,60 +102,40 @@ class _CodeReviewScreenState
     }
 
     try {
-      final Map<String, dynamic>? submission =
-          await _assignmentService
-              .getSubmissionById(
-        widget.submissionId,
-      );
+      final Map<String, dynamic>? submission = await _assignmentService
+          .getSubmissionById(widget.submissionId);
 
       if (submission == null) {
         if (!mounted) return;
 
         setState(() {
           _isLoading = false;
-          _errorMessage =
-              'Submission could not be found.';
+          _errorMessage = 'Submission could not be found.';
         });
 
         return;
       }
 
-      final int maximumPoints =
-          submission['assignmentPoints'] is num
-              ? (submission['assignmentPoints'] as num)
-                  .toInt()
-              : 100;
+      final int maximumPoints = submission['assignmentPoints'] is num
+          ? (submission['assignmentPoints'] as num).toInt()
+          : 100;
 
-      final int existingScore =
-          submission['score'] is num
-              ? (submission['score'] as num)
-                  .toInt()
-              : 0;
+      final int existingScore = submission['score'] is num
+          ? (submission['score'] as num).toInt()
+          : 0;
 
-      final String existingFeedback =
-          (submission['feedback'] ?? '')
-              .toString();
+      final String existingFeedback = (submission['feedback'] ?? '').toString();
 
       if (!mounted) return;
 
-      _feedbackController.text =
-          existingFeedback;
+      _feedbackController.text = existingFeedback;
 
       setState(() {
         _submission = submission;
 
-        _maximumPoints =
-            maximumPoints > 0
-                ? maximumPoints
-                : 100;
+        _maximumPoints = maximumPoints > 0 ? maximumPoints : 100;
 
-        _currentGrade =
-            existingScore
-                .clamp(
-                  0,
-                  _maximumPoints,
-                )
-                .toDouble();
+        _currentGrade = existingScore.clamp(0, _maximumPoints).toDouble();
 
         _isLoading = false;
 
@@ -175,8 +153,7 @@ class _CodeReviewScreenState
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            'Unable to load submission.';
+        _errorMessage = 'Unable to load submission.';
       });
     }
   }
@@ -190,71 +167,50 @@ class _CodeReviewScreenState
       return;
     }
 
-    final int score =
-        _currentGrade.round();
+    final int score = _currentGrade.round();
 
     setState(() {
       _isSaving = true;
     });
 
     try {
-      await _assignmentService
-          .gradeSubmission(
-        submissionId:
-            widget.submissionId,
+      await _assignmentService.gradeSubmission(
+        submissionId: widget.submissionId,
         score: score,
-        feedback:
-            _feedbackController.text,
+        feedback: _feedbackController.text,
       );
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Grade and feedback saved successfully.',
-          ),
+          content: Text('Grade and feedback saved successfully.'),
           backgroundColor: green,
-          behavior:
-              SnackBarBehavior.floating,
+          behavior: SnackBarBehavior.floating,
         ),
       );
 
       // Return to Pending Grading.
       // That screen reloads and removes this graded submission.
-      Navigator.pop(
-        context,
-        true,
-      );
+      Navigator.pop(context, true);
     } on AssignmentServiceException catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            e.message,
-          ),
-          backgroundColor:
-              Colors.redAccent,
-          behavior:
-              SnackBarBehavior.floating,
+          content: Text(e.message),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } catch (_) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Unable to save grade.',
-          ),
-          backgroundColor:
-              Colors.redAccent,
-          behavior:
-              SnackBarBehavior.floating,
+          content: Text('Unable to save grade.'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } finally {
@@ -272,6 +228,7 @@ class _CodeReviewScreenState
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) return const PageLoadingState();
     return Scaffold(
       backgroundColor: background,
 
@@ -281,48 +238,33 @@ class _CodeReviewScreenState
         foregroundColor: Colors.white,
 
         leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            size: 20,
-          ),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () {
             Navigator.pop(context);
           },
         ),
 
         title: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Reviewing: ${widget.studentName}',
               maxLines: 1,
-              overflow:
-                  TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight:
-                    FontWeight.w800,
-              ),
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
 
             Text(
               widget.assignmentTitle,
               maxLines: 1,
-              overflow:
-                  TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 11.5,
-                color: Colors.white70,
-              ),
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11.5, color: Colors.white70),
             ),
           ],
         ),
       ),
 
-      body: SafeArea(
-        child: _buildContent(),
-      ),
+      body: SafeArea(child: _buildContent()),
     );
   }
 
@@ -332,71 +274,47 @@ class _CodeReviewScreenState
 
   Widget _buildContent() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: primaryTeal,
-        ),
-      );
+      return const Center(child: CircularProgressIndicator(color: primaryTeal));
     }
 
     if (_errorMessage != null) {
       return Center(
         child: Container(
-          margin:
-              const EdgeInsets.all(24),
-          constraints:
-              const BoxConstraints(
-            maxWidth: 500,
-          ),
-          padding:
-              const EdgeInsets.all(30),
+          margin: const EdgeInsets.all(24),
+          constraints: const BoxConstraints(maxWidth: 500),
+          padding: const EdgeInsets.all(30),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius:
-                BorderRadius.circular(20),
-            border: Border.all(
-              color:
-                  const Color(0xFFE6EAF0),
-            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.inputBorder),
           ),
           child: Column(
-            mainAxisSize:
-                MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
                 Icons.error_outline_rounded,
                 size: 46,
-                color:
-                    Colors.redAccent,
+                color: Colors.redAccent,
               ),
 
               const SizedBox(height: 12),
 
               Text(
                 _errorMessage!,
-                textAlign:
-                    TextAlign.center,
+                textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: textGrey,
-                  fontWeight:
-                      FontWeight.w600,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
 
               const SizedBox(height: 14),
 
-              if (widget.submissionId
-                  .trim()
-                  .isNotEmpty)
+              if (widget.submissionId.trim().isNotEmpty)
                 TextButton.icon(
-                  onPressed:
-                      _loadSubmission,
-                  icon: const Icon(
-                    Icons.refresh_rounded,
-                  ),
-                  label: const Text(
-                    'Try Again',
-                  ),
+                  onPressed: _loadSubmission,
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Try Again'),
                 ),
             ],
           ),
@@ -404,34 +322,21 @@ class _CodeReviewScreenState
       );
     }
 
-    final Map<String, dynamic>? submission =
-        _submission;
+    final Map<String, dynamic>? submission = _submission;
 
     if (submission == null) {
-      return const Center(
-        child: Text(
-          'Submission unavailable.',
-        ),
-      );
+      return const Center(child: Text('Submission unavailable.'));
     }
 
     return LayoutBuilder(
-      builder: (
-        context,
-        constraints,
-      ) {
-        final bool desktop =
-            constraints.maxWidth >= 850;
+      builder: (context, constraints) {
+        final bool desktop = constraints.maxWidth >= 850;
 
         if (desktop) {
-          return _buildDesktopLayout(
-            submission,
-          );
+          return _buildDesktopLayout(submission);
         }
 
-        return _buildMobileLayout(
-          submission,
-        );
+        return _buildMobileLayout(submission);
       },
     );
   }
@@ -440,40 +345,21 @@ class _CodeReviewScreenState
   // DESKTOP
   // ============================================================
 
-  Widget _buildDesktopLayout(
-    Map<String, dynamic> submission,
-  ) {
+  Widget _buildDesktopLayout(Map<String, dynamic> submission) {
     return Align(
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints:
-            const BoxConstraints(
-          maxWidth: 1300,
-        ),
+        constraints: const BoxConstraints(maxWidth: 1300),
         child: Padding(
-          padding:
-              const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24),
           child: Row(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                flex: 6,
-                child:
-                    _buildSubmissionPanel(
-                  submission,
-                ),
-              ),
+              Expanded(flex: 6, child: _buildSubmissionPanel(submission)),
 
               const SizedBox(width: 24),
 
-              Expanded(
-                flex: 5,
-                child:
-                    _buildGradingPanel(
-                  submission,
-                ),
-              ),
+              Expanded(flex: 5, child: _buildGradingPanel(submission)),
             ],
           ),
         ),
@@ -485,25 +371,17 @@ class _CodeReviewScreenState
   // MOBILE
   // ============================================================
 
-  Widget _buildMobileLayout(
-    Map<String, dynamic> submission,
-  ) {
+  Widget _buildMobileLayout(Map<String, dynamic> submission) {
     return SingleChildScrollView(
-      physics:
-          const BouncingScrollPhysics(),
-      padding:
-          const EdgeInsets.all(18),
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(18),
       child: Column(
         children: [
-          _buildSubmissionPanel(
-            submission,
-          ),
+          _buildSubmissionPanel(submission),
 
           const SizedBox(height: 18),
 
-          _buildGradingPanel(
-            submission,
-          ),
+          _buildGradingPanel(submission),
 
           const SizedBox(height: 30),
         ],
@@ -515,79 +393,40 @@ class _CodeReviewScreenState
   // STUDENT SUBMISSION PANEL
   // ============================================================
 
-  Widget _buildSubmissionPanel(
-    Map<String, dynamic> submission,
-  ) {
-    final String answerText =
-        (submission['answerText'] ?? '')
-            .toString();
+  Widget _buildSubmissionPanel(Map<String, dynamic> submission) {
+    final String answerText = (submission['answerText'] ?? '').toString();
 
-    final String fileUrl =
-        (submission['fileUrl'] ?? '')
-            .toString();
+    final String fileUrl = (submission['fileUrl'] ?? '').toString();
 
-    final String studentName =
-        (submission['studentName'] ??
-                widget.studentName)
-            .toString();
+    final String studentName = (submission['studentName'] ?? widget.studentName)
+        .toString();
 
-    final String studentEmail =
-        (submission['studentEmail'] ?? '')
-            .toString();
+    final String studentEmail = (submission['studentEmail'] ?? '').toString();
 
     final String assignmentTitle =
-        (submission['assignmentTitle'] ??
-                widget.assignmentTitle)
-            .toString();
+        (submission['assignmentTitle'] ?? widget.assignmentTitle).toString();
 
     final String assignmentDescription =
-        (submission[
-                    'assignmentDescription'] ??
-                '')
-            .toString();
+        (submission['assignmentDescription'] ?? '').toString();
 
     final String assignmentInstructions =
-        (submission[
-                    'assignmentInstructions'] ??
-                '')
-            .toString();
+        (submission['assignmentInstructions'] ?? '').toString();
 
-    final String courseCode =
-        (submission['courseCode'] ?? '')
-            .toString();
+    final String courseCode = (submission['courseCode'] ?? '').toString();
 
-    final String courseTitle =
-        (submission['courseTitle'] ??
-                'Course')
-            .toString();
+    final String courseTitle = (submission['courseTitle'] ?? 'Course')
+        .toString();
 
     return Container(
       width: double.infinity,
-      padding:
-          const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(20),
-        border: Border.all(
-          color:
-              const Color(0xFFE3E7EE),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color:
-                Colors.black.withValues(
-              alpha: 0.025,
-            ),
-            blurRadius: 15,
-            offset:
-                const Offset(0, 5),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.inputBorder),
       ),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ======================================================
           // STUDENT
@@ -597,23 +436,15 @@ class _CodeReviewScreenState
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor:
-                    primaryTeal.withValues(
-                  alpha: 0.12,
-                ),
+                backgroundColor: primaryTeal.withValues(alpha: 0.12),
                 child: Text(
-                  studentName
-                          .trim()
-                          .isEmpty
+                  studentName.trim().isEmpty
                       ? '?'
-                      : studentName
-                          .trim()[0]
-                          .toUpperCase(),
+                      : studentName.trim()[0].toUpperCase(),
                   style: const TextStyle(
                     color: primaryTeal,
                     fontSize: 18,
-                    fontWeight:
-                        FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -622,28 +453,21 @@ class _CodeReviewScreenState
 
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       studentName,
                       style: const TextStyle(
                         color: textDark,
                         fontSize: 17,
-                        fontWeight:
-                            FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
 
-                    if (studentEmail
-                        .trim()
-                        .isNotEmpty)
+                    if (studentEmail.trim().isNotEmpty)
                       Text(
                         studentEmail,
-                        style: const TextStyle(
-                          color: textGrey,
-                          fontSize: 12,
-                        ),
+                        style: const TextStyle(color: textGrey, fontSize: 12),
                       ),
                   ],
                 ),
@@ -658,14 +482,11 @@ class _CodeReviewScreenState
           const SizedBox(height: 18),
 
           Text(
-            courseCode.isEmpty
-                ? courseTitle
-                : '$courseCode • $courseTitle',
+            courseCode.isEmpty ? courseTitle : '$courseCode • $courseTitle',
             style: const TextStyle(
               color: primaryTeal,
               fontSize: 12,
-              fontWeight:
-                  FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
 
@@ -676,14 +497,11 @@ class _CodeReviewScreenState
             style: const TextStyle(
               color: textDark,
               fontSize: 22,
-              fontWeight:
-                  FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
 
-          if (assignmentDescription
-              .trim()
-              .isNotEmpty) ...[
+          if (assignmentDescription.trim().isNotEmpty) ...[
             const SizedBox(height: 8),
 
             Text(
@@ -696,9 +514,7 @@ class _CodeReviewScreenState
             ),
           ],
 
-          if (assignmentInstructions
-              .trim()
-              .isNotEmpty) ...[
+          if (assignmentInstructions.trim().isNotEmpty) ...[
             const SizedBox(height: 20),
 
             const Text(
@@ -706,8 +522,7 @@ class _CodeReviewScreenState
               style: TextStyle(
                 color: textDark,
                 fontSize: 14,
-                fontWeight:
-                    FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
 
@@ -728,14 +543,12 @@ class _CodeReviewScreenState
           // ======================================================
           // ANSWER
           // ======================================================
-
           const Text(
             'Student Submission',
             style: TextStyle(
               color: textDark,
               fontSize: 16,
-              fontWeight:
-                  FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
 
@@ -743,31 +556,19 @@ class _CodeReviewScreenState
 
           Container(
             width: double.infinity,
-            constraints:
-                const BoxConstraints(
-              minHeight: 160,
-            ),
-            padding:
-                const EdgeInsets.all(18),
+            constraints: const BoxConstraints(minHeight: 160),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color:
-                  const Color(0xFFF7F9FC),
-              borderRadius:
-                  BorderRadius.circular(14),
-              border: Border.all(
-                color:
-                    const Color(0xFFE3E7EE),
-              ),
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.inputBorder),
             ),
             child: SelectableText(
               answerText.trim().isEmpty
                   ? 'The student did not provide a written answer.'
                   : answerText,
               style: TextStyle(
-                color:
-                    answerText.trim().isEmpty
-                        ? textGrey
-                        : textDark,
+                color: answerText.trim().isEmpty ? textGrey : textDark,
                 fontSize: 14,
                 height: 1.6,
               ),
@@ -778,22 +579,14 @@ class _CodeReviewScreenState
             const SizedBox(height: 16),
 
             Container(
-              padding:
-                  const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color:
-                    primaryTeal.withValues(
-                  alpha: 0.06,
-                ),
-                borderRadius:
-                    BorderRadius.circular(12),
+                color: primaryTeal.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.attach_file_rounded,
-                    color: primaryTeal,
-                  ),
+                  const Icon(Icons.attach_file_rounded, color: primaryTeal),
 
                   const SizedBox(width: 8),
 
@@ -803,8 +596,7 @@ class _CodeReviewScreenState
                       style: const TextStyle(
                         color: primaryTeal,
                         fontSize: 12,
-                        fontWeight:
-                            FontWeight.w600,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -821,49 +613,27 @@ class _CodeReviewScreenState
   // GRADING PANEL
   // ============================================================
 
-  Widget _buildGradingPanel(
-    Map<String, dynamic> submission,
-  ) {
-    final String currentStatus =
-        (submission['status'] ??
-                'submitted')
-            .toString();
+  Widget _buildGradingPanel(Map<String, dynamic> submission) {
+    final String currentStatus = (submission['status'] ?? 'submitted')
+        .toString();
 
     return Container(
       width: double.infinity,
-      padding:
-          const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(20),
-        border: Border.all(
-          color:
-              const Color(0xFFE3E7EE),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color:
-                Colors.black.withValues(
-              alpha: 0.025,
-            ),
-            blurRadius: 15,
-            offset:
-                const Offset(0, 5),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.inputBorder),
       ),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'Grade Submission',
             style: TextStyle(
               color: textDark,
               fontSize: 19,
-              fontWeight:
-                  FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
 
@@ -871,10 +641,7 @@ class _CodeReviewScreenState
 
           Text(
             'Current status: $currentStatus',
-            style: const TextStyle(
-              color: textGrey,
-              fontSize: 12,
-            ),
+            style: const TextStyle(color: textGrey, fontSize: 12),
           ),
 
           const SizedBox(height: 28),
@@ -882,7 +649,6 @@ class _CodeReviewScreenState
           // ======================================================
           // SCORE
           // ======================================================
-
           Row(
             children: [
               const Expanded(
@@ -891,8 +657,7 @@ class _CodeReviewScreenState
                   style: TextStyle(
                     color: textDark,
                     fontSize: 15,
-                    fontWeight:
-                        FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -902,8 +667,7 @@ class _CodeReviewScreenState
                 style: const TextStyle(
                   color: primaryTeal,
                   fontSize: 20,
-                  fontWeight:
-                      FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -914,29 +678,18 @@ class _CodeReviewScreenState
           Slider(
             value: _currentGrade,
             min: 0,
-            max:
-                _maximumPoints.toDouble(),
-            divisions:
-                _maximumPoints > 0
-                    ? _maximumPoints
-                    : null,
-            activeColor:
-                primaryTeal,
-            inactiveColor:
-                primaryTeal.withValues(
-              alpha: 0.15,
-            ),
-            label:
-                _currentGrade.round().toString(),
-            onChanged:
-                _isSaving
-                    ? null
-                    : (value) {
-                        setState(() {
-                          _currentGrade =
-                              value;
-                        });
-                      },
+            max: _maximumPoints.toDouble(),
+            divisions: _maximumPoints > 0 ? _maximumPoints : null,
+            activeColor: primaryTeal,
+            inactiveColor: primaryTeal.withValues(alpha: 0.15),
+            label: _currentGrade.round().toString(),
+            onChanged: _isSaving
+                ? null
+                : (value) {
+                    setState(() {
+                      _currentGrade = value;
+                    });
+                  },
           ),
 
           const SizedBox(height: 24),
@@ -944,80 +697,41 @@ class _CodeReviewScreenState
           // ======================================================
           // FEEDBACK
           // ======================================================
-
           const Text(
             'Instructor Feedback',
             style: TextStyle(
               color: textDark,
               fontSize: 15,
-              fontWeight:
-                  FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
 
           const SizedBox(height: 8),
 
           TextField(
-            controller:
-                _feedbackController,
+            controller: _feedbackController,
             enabled: !_isSaving,
             maxLines: 6,
             minLines: 4,
-            decoration:
-                InputDecoration(
-              hintText:
-                  'Add feedback for the student...',
-              hintStyle:
-                  const TextStyle(
-                color:
-                    Color(0xFFA0A8B7),
+            decoration: InputDecoration(
+              hintText: 'Add feedback for the student...',
+              hintStyle: const TextStyle(
+                color: Color(0xFFA0A8B7),
                 fontSize: 13,
               ),
               filled: true,
-              fillColor:
-                  const Color(
-                0xFFF8FAFD,
+              fillColor: const Color(0xFFF8FAFD),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: Color(0xFFE1E5EC)),
               ),
-              border:
-                  OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(
-                  14,
-                ),
-                borderSide:
-                    const BorderSide(
-                  color:
-                      Color(
-                    0xFFE1E5EC,
-                  ),
-                ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: Color(0xFFE1E5EC)),
               ),
-              enabledBorder:
-                  OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(
-                  14,
-                ),
-                borderSide:
-                    const BorderSide(
-                  color:
-                      Color(
-                    0xFFE1E5EC,
-                  ),
-                ),
-              ),
-              focusedBorder:
-                  OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(
-                  14,
-                ),
-                borderSide:
-                    const BorderSide(
-                  color:
-                      primaryTeal,
-                  width: 1.5,
-                ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: primaryTeal, width: 1.5),
               ),
             ),
           ),
@@ -1027,64 +741,41 @@ class _CodeReviewScreenState
           // ======================================================
           // SAVE
           // ======================================================
-
           SizedBox(
             width: double.infinity,
             height: 52,
-            child:
-                ElevatedButton.icon(
-              onPressed:
-                  _isSaving
-                      ? null
-                      : _saveGrade,
+            child: ElevatedButton.icon(
+              onPressed: _isSaving ? null : _saveGrade,
 
               icon: _isSaving
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child:
-                          CircularProgressIndicator(
+                      child: CircularProgressIndicator(
                         strokeWidth: 2.2,
                         color: Colors.white,
                       ),
                     )
                   : const Icon(
-                      Icons
-                          .check_circle_rounded,
-                      color:
-                          Colors.white,
+                      Icons.check_circle_rounded,
+                      color: Colors.white,
                       size: 19,
                     ),
 
               label: Text(
-                _isSaving
-                    ? 'Saving...'
-                    : 'Submit Grade & Feedback',
-                style:
-                    const TextStyle(
-                  color:
-                      Colors.white,
-                  fontWeight:
-                      FontWeight.w800,
+                _isSaving ? 'Saving...' : 'Submit Grade & Feedback',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
 
-              style:
-                  ElevatedButton.styleFrom(
-                backgroundColor:
-                    primaryTeal,
-                disabledBackgroundColor:
-                    primaryTeal
-                        .withValues(
-                  alpha: 0.55,
-                ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryTeal,
+                disabledBackgroundColor: primaryTeal.withValues(alpha: 0.55),
                 elevation: 0,
-                shape:
-                    RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(
-                    14,
-                  ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
                 ),
               ),
             ),
@@ -1094,13 +785,8 @@ class _CodeReviewScreenState
 
           const Text(
             'Submitting the grade will mark this submission as graded.',
-            textAlign:
-                TextAlign.center,
-            style: TextStyle(
-              color: textGrey,
-              fontSize: 11,
-              height: 1.4,
-            ),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: textGrey, fontSize: 11, height: 1.4),
           ),
         ],
       ),

@@ -1,3 +1,5 @@
+import '../../core/app_colors.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,8 +39,8 @@ class CaslmsGuides {
         CaslmsGuide('Enroll students', [
           'Open the course and identify the correct section.',
           'Open the section and select Invite student.',
-          'Enter the student Campus ID and send the invitation.',
-          'The student accepts it from Course invitations on the dashboard.',
+          'Students accept the invitation from Course invitations on their dashboard.',
+          'For original classes, use the instructor invitation workflow.',
           'Check the student roster before assigning activities.',
         ], imageAsset: 'assets/images/instructor_enroll_students.png'),
         CaslmsGuide('Upload learning materials', [
@@ -102,9 +104,9 @@ class CaslmsGuides {
       return const [
         CaslmsGuide('Join a section', [
           'Open the Student Dashboard.',
-          'Open Course invitations on the Student Dashboard.',
-          'Review the course and section sent by your instructor.',
-          'Accept the invitation. The class appears in My Classes automatically.',
+          'Open Course invitations on your dashboard.',
+          'Review the course and section, then accept your instructor’s invitation.',
+          'The class appears in My Classes automatically.',
         ], imageAsset: 'assets/images/student_join_section.png'),
         CaslmsGuide('Find learning materials', [
           'Open your enrolled classes.',
@@ -206,7 +208,7 @@ class _CaslmsTourDialog extends StatefulWidget {
 
 class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
   int index = 0;
-  static const Color primaryTeal = Color(0xFF00897B);
+  static const Color primaryTeal = AppColors.primaryBlue;
 
   @override
   Widget build(BuildContext context) {
@@ -236,8 +238,8 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
               Text(
                 'Welcome to CASLMS',
                 style: TextStyle(
-                  color: Color(0xFF10182F),
-                  fontWeight: FontWeight.w800,
+                  color: AppColors.darkText,
+                  fontWeight: FontWeight.w700,
                   fontSize: 18,
                 ),
               ),
@@ -249,7 +251,7 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
               child: const Text(
                 'Skip Tour',
                 style: TextStyle(
-                  color: Color(0xFF68738A),
+                  color: AppColors.secondaryText,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -285,10 +287,10 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                     width: double.infinity,
                     clipBehavior: Clip.antiAlias,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF7F9FC),
+                      color: AppColors.background,
                       borderRadius: BorderRadius.circular(24),
                       border: Border.all(
-                        color: const Color(0xFFE6EAF0),
+                        color: AppColors.inputBorder,
                         width: 1.5,
                       ),
                     ),
@@ -316,7 +318,7 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                       'STEP ${index + 1} OF ${entries.length}',
                       style: const TextStyle(
                         color: primaryTeal,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         fontSize: 11,
                         letterSpacing: 1.2,
                       ),
@@ -326,8 +328,8 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                       entry.title,
                       style: const TextStyle(
                         fontSize: 28,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF10182F),
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.darkText,
                         letterSpacing: -0.5,
                       ),
                     ),
@@ -352,7 +354,7 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                                 style: const TextStyle(
                                   color: primaryTeal,
                                   fontSize: 12,
-                                  fontWeight: FontWeight.w900,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
@@ -363,7 +365,7 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                                 child: Text(
                                   step,
                                   style: const TextStyle(
-                                    color: Color(0xFF263149),
+                                    color: AppColors.darkText,
                                     fontSize: 15,
                                     height: 1.5,
                                     fontWeight: FontWeight.w500,
@@ -415,13 +417,13 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                           OutlinedButton(
                             onPressed: () => setState(() => index--),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF10182F),
+                              foregroundColor: AppColors.darkText,
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 24,
                                 vertical: 18,
                               ),
                               side: const BorderSide(
-                                color: Color(0xFFE6EAF0),
+                                color: AppColors.inputBorder,
                                 width: 1.5,
                               ),
                               shape: RoundedRectangleBorder(
@@ -462,7 +464,7 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
                           label: Text(
                             last ? 'Finish Tour' : 'Next Step',
                             style: const TextStyle(
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               fontSize: 14,
                             ),
                           ),
@@ -531,7 +533,7 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
         Text(
           'Screenshot space for:',
           style: TextStyle(
-            color: const Color(0xFF68738A).withValues(alpha: 0.7),
+            color: AppColors.secondaryText.withValues(alpha: 0.7),
             fontSize: 12,
             fontWeight: FontWeight.w600,
             letterSpacing: 1.2,
@@ -544,7 +546,7 @@ class _CaslmsTourDialogState extends State<_CaslmsTourDialog> {
             '"${entry.title}"',
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: Color(0xFF68738A),
+              color: AppColors.secondaryText,
               fontSize: 16,
               fontWeight: FontWeight.w700,
             ),
@@ -585,15 +587,15 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
         .toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
-        foregroundColor: const Color(0xFF10182F),
+        foregroundColor: AppColors.darkText,
         title: const Text(
           'Help & User Guide',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         actions: [
           IconButton(
@@ -606,7 +608,7 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
         ],
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: Color(0xFFE6EAF0)),
+          child: Divider(height: 1, color: AppColors.inputBorder),
         ),
       ),
       body: Center(
@@ -620,8 +622,8 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                 'CASLMS Beginner Guide',
                 style: TextStyle(
                   fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF10182F),
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.darkText,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -629,7 +631,7 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
               const Text(
                 'Choose a task to see simple step-by-step instructions. '
                 'Topics marked "In development" describe planned workflows.',
-                style: TextStyle(color: Color(0xFF68738A), height: 1.5),
+                style: TextStyle(color: AppColors.secondaryText, height: 1.5),
               ),
               const SizedBox(height: 24),
               TextField(
@@ -641,22 +643,22 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                   hintStyle: const TextStyle(color: Color(0xFFA0A8B7)),
                   prefixIcon: const Icon(
                     Icons.search_rounded,
-                    color: Color(0xFF00897B),
+                    color: AppColors.primaryBlue,
                   ),
                   filled: true,
                   fillColor: Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Color(0xFFE6EAF0)),
+                    borderSide: const BorderSide(color: AppColors.inputBorder),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: Color(0xFFE6EAF0)),
+                    borderSide: const BorderSide(color: AppColors.inputBorder),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: const BorderSide(
-                      color: Color(0xFF00897B),
+                      color: AppColors.primaryBlue,
                       width: 1.5,
                     ),
                   ),
@@ -669,21 +671,21 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE6EAF0)),
+                    border: Border.all(color: AppColors.inputBorder),
                   ),
                   child: const Column(
                     children: [
                       Icon(
                         Icons.search_off_rounded,
                         size: 48,
-                        color: Color(0xFF00897B),
+                        color: AppColors.primaryBlue,
                       ),
                       SizedBox(height: 16),
                       Text(
                         'No matching guide topics.',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          color: Color(0xFF68738A),
+                          color: AppColors.secondaryText,
                         ),
                       ),
                     ],
@@ -696,7 +698,7 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                   color: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
-                    side: const BorderSide(color: Color(0xFFE6EAF0)),
+                    side: const BorderSide(color: AppColors.inputBorder),
                   ),
                   child: ExpansionTile(
                     shape: RoundedRectangleBorder(
@@ -708,12 +710,12 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00897B).withValues(alpha: 0.1),
+                        color: AppColors.primaryBlue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(
                         Icons.lightbulb_outline_rounded,
-                        color: Color(0xFF00897B),
+                        color: AppColors.primaryBlue,
                         size: 20,
                       ),
                     ),
@@ -721,7 +723,7 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                       entry.title,
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
-                        color: Color(0xFF10182F),
+                        color: AppColors.darkText,
                       ),
                     ),
                     subtitle: entry.planned
@@ -743,14 +745,14 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                               ListTile(
                                 leading: CircleAvatar(
                                   radius: 12,
-                                  backgroundColor: const Color(0xFF00897B)
+                                  backgroundColor: AppColors.primaryBlue
                                       .withValues(alpha: 0.1),
                                   child: Text(
                                     '${i + 1}',
                                     style: const TextStyle(
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      color: Color(0xFF00897B),
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primaryBlue,
                                     ),
                                   ),
                                 ),
@@ -758,7 +760,7 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                                   entry.steps[i],
                                   style: const TextStyle(
                                     fontSize: 13.5,
-                                    color: Color(0xFF263149),
+                                    color: AppColors.darkText,
                                   ),
                                 ),
                               ),
@@ -776,10 +778,10 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                   onPressed: () =>
                       CaslmsOnboarding.replay(context, role: widget.role),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF00897B),
+                    foregroundColor: AppColors.resolve(context, AppColors.link),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     side: const BorderSide(
-                      color: Color(0xFF00897B),
+                      color: AppColors.primaryBlue,
                       width: 1.5,
                     ),
                     shape: RoundedRectangleBorder(
@@ -789,7 +791,7 @@ class _CaslmsHelpPageState extends State<CaslmsHelpPage> {
                   icon: const Icon(Icons.replay_rounded),
                   label: const Text(
                     'Replay Guided Tour',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                    style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
               ),

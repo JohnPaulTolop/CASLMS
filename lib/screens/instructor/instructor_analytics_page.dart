@@ -1,13 +1,18 @@
+import '../../core/app_colors.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'instructor_ui.dart';
+import 'instructor_workspace_widgets.dart';
 
 import 'package:flutter/services.dart';
 
 class InstructorAnalyticsScreen extends StatefulWidget {
-  const InstructorAnalyticsScreen({super.key});
+  const InstructorAnalyticsScreen({super.key, this.firestore, this.auth});
+  final FirebaseFirestore? firestore;
+  final FirebaseAuth? auth;
 
   @override
   State<InstructorAnalyticsScreen> createState() =>
@@ -19,24 +24,25 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
   // CASLMS DESIGN SYSTEM
   // ============================================================
 
-  static const Color primaryTeal = Color(0xFF00897B);
-  static const Color background = Color(0xFFF7F9FC);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
-  static const Color borderColor = Color(0xFFE6EAF0);
+  Color get primaryTeal => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
 
-  static const Color blue = Color(0xFF1769FF);
-  static const Color orange = Color(0xFFFF9418);
-  static const Color red = Color(0xFFFF4B4B);
-  static const Color green = Color(0xFF26A65B);
+  Color get blue => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get orange => AppColors.resolve(context, AppColors.amber);
+  Color get red => AppColors.resolve(context, AppColors.error);
+  Color get green => AppColors.resolve(context, AppColors.green);
 
   // ============================================================
   // FIREBASE
   // ============================================================
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late final FirebaseFirestore _firestore =
+      widget.firestore ?? FirebaseFirestore.instance;
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  late final FirebaseAuth _auth = widget.auth ?? FirebaseAuth.instance;
 
   // ============================================================
   // STATE
@@ -1053,71 +1059,25 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
-    return instructorScaffold(
-      context: context,
-      backgroundColor: background,
-
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-
-        backgroundColor: background,
-
-        elevation: 0,
-
-        centerTitle: true,
-
-        title: const Text(
-          'Cohort Analytics',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: textDark,
-          ),
-        ),
-
-        actions: [
-          IconButton(
-            onPressed: _isLoadingCourses || _isLoadingAnalytics
-                ? null
-                : _refresh,
-
-            tooltip: 'Refresh Analytics',
-
-            icon: const Icon(Icons.refresh_rounded),
-
-            color: textDark,
-          ),
-
-          IconButton(
-            onPressed: _analytics == null ? null : _exportReport,
-
-            tooltip: 'Export CSV Report',
-
-            icon: const Icon(Icons.file_download_outlined),
-
-            color: textDark,
-          ),
-
-          const SizedBox(width: 5),
-        ],
+  Widget build(BuildContext context) => instructorScaffold(
+    loading: _isLoadingCourses,
+    context: context,
+    title: 'Class insights',
+    subtitle: 'Understand engagement and where students need support.',
+    actions: [
+      IconButton(
+        tooltip: 'Export CSV report',
+        onPressed: _analytics == null ? null : _exportReport,
+        icon: Icon(Icons.file_download_outlined),
       ),
-
-      body: SafeArea(
-        top: false,
-
-        child: Align(
-          alignment: Alignment.topCenter,
-
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
-
-            child: _buildBody(),
-          ),
-        ),
+      IconButton(
+        tooltip: 'Refresh insights',
+        onPressed: _isLoadingCourses || _isLoadingAnalytics ? null : _refresh,
+        icon: Icon(Icons.refresh_rounded),
       ),
-    );
-  }
+    ],
+    body: _buildBody(),
+  );
 
   // ============================================================
   // BODY
@@ -1125,7 +1085,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
 
   Widget _buildBody() {
     if (_isLoadingCourses) {
-      return const Center(child: CircularProgressIndicator(color: primaryTeal));
+      return Center(child: CircularProgressIndicator(color: primaryTeal));
     }
 
     if (_errorMessage != null && _courses.isEmpty) {
@@ -1142,11 +1102,9 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
       color: primaryTeal,
 
       child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(
-          parent: BouncingScrollPhysics(),
-        ),
+        physics: AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
 
-        padding: const EdgeInsets.fromLTRB(22, 16, 22, 40),
+        padding: EdgeInsets.fromLTRB(22, 16, 22, 40),
 
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1154,11 +1112,11 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
           children: [
             _buildCourseSelector(),
 
-            const SizedBox(height: 18),
+            SizedBox(height: 18),
 
             if (_errorMessage != null) _buildInlineError(_errorMessage!),
 
-            if (_errorMessage != null) const SizedBox(height: 16),
+            if (_errorMessage != null) SizedBox(height: 16),
 
             if (_isLoadingAnalytics)
               _buildLoadingCard()
@@ -1180,24 +1138,14 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
     return Container(
       width: double.infinity,
 
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
 
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
 
         borderRadius: BorderRadius.circular(16),
 
         border: Border.all(color: borderColor, width: 1.5),
-
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.025),
-
-            blurRadius: 12,
-
-            offset: const Offset(0, 5),
-          ),
-        ],
       ),
 
       child: DropdownButtonHideUnderline(
@@ -1206,18 +1154,15 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
 
           isExpanded: true,
 
-          icon: const Icon(
-            Icons.keyboard_arrow_down_rounded,
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: primaryTeal),
 
-            color: primaryTeal,
-          ),
-
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w700,
 
             color: textDark,
 
             fontSize: 13.5,
+            fontFamily: 'Roboto',
           ),
 
           items: _courses.map((Map<String, dynamic> course) {
@@ -1274,7 +1219,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
                     color: blue,
                   ),
 
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
 
                   _buildStatCard(
                     title: 'Active Today',
@@ -1306,7 +1251,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
                   ),
                 ),
 
-                const SizedBox(width: 14),
+                SizedBox(width: 14),
 
                 Expanded(
                   child: _buildStatCard(
@@ -1325,36 +1270,39 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
           },
         ),
 
-        const SizedBox(height: 28),
+        SizedBox(height: 28),
 
         // --------------------------------------------------------
         // REQUIRES ATTENTION
         // --------------------------------------------------------
-        _buildSectionTitle('Requires Attention'),
-
-        const SizedBox(height: 13),
-
-        _buildAtRiskCard(analytics),
-
-        const SizedBox(height: 28),
-
-        // --------------------------------------------------------
-        // MODULE ENGAGEMENT
-        // --------------------------------------------------------
-        _buildSectionTitle('Module Engagement'),
-
-        const SizedBox(height: 13),
-
-        _buildEngagementCard(analytics),
-
-        const SizedBox(height: 28),
-
+        InstructorTiles(
+          minWidth: 400,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildSectionTitle('Needs attention'),
+                SizedBox(height: 13),
+                _buildAtRiskCard(analytics),
+              ],
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildSectionTitle('Module engagement'),
+                SizedBox(height: 13),
+                _buildEngagementCard(analytics),
+              ],
+            ),
+          ],
+        ),
+        SizedBox(height: 28),
         // --------------------------------------------------------
         // WEAKEST TOPICS
         // --------------------------------------------------------
         _buildSectionTitle('Weakest Topics (Based on Quizzes)'),
 
-        const SizedBox(height: 13),
+        SizedBox(height: 13),
 
         if (analytics.weakTopics.isEmpty)
           _buildSmallEmptyCard(
@@ -1386,7 +1334,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
     return Container(
       width: double.infinity,
 
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(18),
 
       decoration: _cardDecoration(),
 
@@ -1395,7 +1343,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
 
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: EdgeInsets.all(10),
 
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.10),
@@ -1406,7 +1354,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
             child: Icon(icon, color: color, size: 22),
           ),
 
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
 
           Text(
             value,
@@ -1414,18 +1362,18 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
             style: TextStyle(
               fontSize: 24,
 
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
 
               color: color,
             ),
           ),
 
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
 
           Text(
             title,
 
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
 
               fontWeight: FontWeight.w700,
@@ -1434,7 +1382,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
             ),
           ),
 
-          const SizedBox(height: 3),
+          SizedBox(height: 3),
 
           Text(
             subtitle,
@@ -1443,13 +1391,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
 
             overflow: TextOverflow.ellipsis,
 
-            style: const TextStyle(
-              fontSize: 10.5,
-
-              height: 1.35,
-
-              color: textGrey,
-            ),
+            style: TextStyle(fontSize: 10.5, height: 1.35, color: textGrey),
           ),
         ],
       ),
@@ -1475,19 +1417,17 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
       return Container(
         width: double.infinity,
 
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.all(18),
 
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.surface,
 
           borderRadius: BorderRadius.circular(18),
 
           border: Border.all(color: green.withValues(alpha: 0.30), width: 1.5),
-
-          boxShadow: _cardShadow(),
         ),
 
-        child: const Row(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
 
           children: [
@@ -1518,16 +1458,14 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
     return Container(
       width: double.infinity,
 
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(18),
 
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
 
         borderRadius: BorderRadius.circular(18),
 
         border: Border.all(color: red.withValues(alpha: 0.30), width: 1.5),
-
-        boxShadow: _cardShadow(),
       ),
 
       child: Column(
@@ -1537,7 +1475,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
 
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(8),
 
                 decoration: BoxDecoration(
                   color: red.withValues(alpha: 0.10),
@@ -1545,16 +1483,16 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
 
-                child: const Icon(Icons.warning_rounded, color: red, size: 20),
+                child: Icon(Icons.warning_rounded, color: red, size: 20),
               ),
 
-              const SizedBox(width: 11),
+              SizedBox(width: 11),
 
               Expanded(
                 child: Text(
                   'CASLMS identified ${students.length} student${students.length == 1 ? '' : 's'} who may need attention.',
 
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
 
                     height: 1.4,
@@ -1568,10 +1506,10 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
             ],
           ),
 
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 14),
 
-            child: Divider(height: 1, thickness: 1, color: Color(0xFFF0F2F5)),
+            child: Divider(height: 1, thickness: 1, color: borderColor),
           ),
 
           ...students.asMap().entries.map((
@@ -1582,10 +1520,10 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
                 _buildAtRiskStudent(entry.value),
 
                 if (entry.key != students.length - 1)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(vertical: 11),
 
-                    child: Divider(height: 1, color: Color(0xFFF1F3F6)),
+                    child: Divider(height: 1, color: borderColor),
                   ),
               ],
             );
@@ -1603,22 +1541,24 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
         CircleAvatar(
           radius: 16,
 
-          backgroundColor: const Color(0xFFE9EDF3),
+          backgroundColor: Theme.of(context)
+              .colorScheme
+              .surfaceContainerHighest,
 
           child: Text(
             _initial(student.name),
 
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.5,
 
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
 
               color: textDark,
             ),
           ),
         ),
 
-        const SizedBox(width: 11),
+        SizedBox(width: 11),
 
         Expanded(
           child: Column(
@@ -1628,8 +1568,8 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
               Text(
                 student.name,
 
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
 
                   fontSize: 13,
 
@@ -1637,12 +1577,12 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
                 ),
               ),
 
-              const SizedBox(height: 3),
+              SizedBox(height: 3),
 
               Text(
                 student.reasons.join(' '),
 
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10.8,
 
                   height: 1.4,
@@ -1656,7 +1596,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
           ),
         ),
 
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
 
         TextButton(
           onPressed: () {
@@ -1664,22 +1604,22 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
           },
 
           style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 2),
 
-            minimumSize: const Size(0, 32),
+            minimumSize: Size(0, 32),
 
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
 
             backgroundColor: blue.withValues(alpha: 0.09),
 
-            foregroundColor: blue,
+            foregroundColor: AppColors.resolve(context, AppColors.link),
 
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
           ),
 
-          child: const Text(
+          child: Text(
             'View',
 
             style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
@@ -1705,7 +1645,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
     return Container(
       width: double.infinity,
 
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(18),
 
       decoration: _cardDecoration(),
 
@@ -1714,7 +1654,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
           MapEntry<int, _ModuleEngagement> entry,
         ) sync* {
           if (entry.key > 0) {
-            yield const SizedBox(height: 16);
+            yield SizedBox(height: 16);
           }
 
           yield _buildEngagementBar(entry.value);
@@ -1734,7 +1674,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
           child: Text(
             _moduleDisplayLabel(module),
 
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11.3,
 
               fontWeight: FontWeight.w700,
@@ -1748,7 +1688,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
           ),
         ),
 
-        const SizedBox(width: 10),
+        SizedBox(width: 10),
 
         Expanded(
           child: ClipRRect(
@@ -1757,16 +1697,16 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
             child: LinearProgressIndicator(
               value: (module.percentage / 100).clamp(0, 1).toDouble(),
 
-              backgroundColor: const Color(0xFFECEFF4),
+              backgroundColor: borderColor,
 
               valueColor: AlwaysStoppedAnimation<Color>(color),
 
-              minHeight: 9,
+              minHeight: 14,
             ),
           ),
         ),
 
-        const SizedBox(width: 10),
+        SizedBox(width: 10),
 
         SizedBox(
           width: 42,
@@ -1777,7 +1717,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
             style: TextStyle(
               fontSize: 11.5,
 
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
 
               color: color,
             ),
@@ -1798,30 +1738,28 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
         ? red
         : index == 1
         ? orange
-        : const Color(0xFFD6A000);
+        : Color(0xFFD6A000);
 
     return Container(
       width: double.infinity,
 
-      margin: const EdgeInsets.only(bottom: 11),
+      margin: EdgeInsets.only(bottom: 11),
 
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+      padding: EdgeInsets.symmetric(horizontal: 15, vertical: 14),
 
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
 
         borderRadius: BorderRadius.circular(16),
 
         border: Border.all(color: color.withValues(alpha: 0.30), width: 1.5),
-
-        boxShadow: _cardShadow(),
       ),
 
       child: Row(
         children: [
           Icon(Icons.insights_rounded, color: color, size: 18),
 
-          const SizedBox(width: 11),
+          SizedBox(width: 11),
 
           Expanded(
             child: Text(
@@ -1831,7 +1769,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
 
               overflow: TextOverflow.ellipsis,
 
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w700,
 
                 fontSize: 12.5,
@@ -1841,10 +1779,10 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
             ),
           ),
 
-          const SizedBox(width: 10),
+          SizedBox(width: 10),
 
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            padding: EdgeInsets.symmetric(horizontal: 9, vertical: 5),
 
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.10),
@@ -1858,7 +1796,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
               style: TextStyle(
                 color: color,
 
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
 
                 fontSize: 10.5,
               ),
@@ -1887,29 +1825,29 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
 
             children: [
-              const Text(
+              Text(
                 'Reasons this student may need attention:',
 
                 style: TextStyle(fontWeight: FontWeight.w700),
               ),
 
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
 
               ...student.reasons.map(
                 (String reason) => Padding(
-                  padding: const EdgeInsets.only(bottom: 7),
+                  padding: EdgeInsets.only(bottom: 7),
 
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
 
                     children: [
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.only(top: 5),
 
                         child: Icon(Icons.circle, size: 6, color: red),
                       ),
 
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
 
                       Expanded(child: Text(reason)),
                     ],
@@ -1925,7 +1863,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
                 Navigator.of(dialogContext).pop();
               },
 
-              child: const Text('Close'),
+              child: Text('Close'),
             ),
           ],
         );
@@ -1940,31 +1878,25 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
   Widget _buildFullPageError(String message) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(24),
 
         child: Column(
           mainAxisSize: MainAxisSize.min,
 
           children: [
-            const Icon(Icons.error_outline_rounded, color: red, size: 52),
+            Icon(Icons.error_outline_rounded, color: red, size: 52),
 
-            const SizedBox(height: 14),
+            SizedBox(height: 14),
 
             Text(
               message,
 
               textAlign: TextAlign.center,
 
-              style: const TextStyle(
-                color: textGrey,
-
-                fontSize: 13,
-
-                height: 1.45,
-              ),
+              style: TextStyle(color: textGrey, fontSize: 13, height: 1.45),
             ),
 
-            const SizedBox(height: 18),
+            SizedBox(height: 18),
 
             ElevatedButton.icon(
               onPressed: () {
@@ -1977,9 +1909,9 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
                 foregroundColor: Colors.white,
               ),
 
-              icon: const Icon(Icons.refresh_rounded),
+              icon: Icon(Icons.refresh_rounded),
 
-              label: const Text('Try Again'),
+              label: Text('Try Again'),
             ),
           ],
         ),
@@ -1991,7 +1923,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
     return Container(
       width: double.infinity,
 
-      padding: const EdgeInsets.all(13),
+      padding: EdgeInsets.all(13),
 
       decoration: BoxDecoration(
         color: red.withValues(alpha: 0.07),
@@ -2005,21 +1937,15 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
 
         children: [
-          const Icon(Icons.error_outline_rounded, color: red, size: 19),
+          Icon(Icons.error_outline_rounded, color: red, size: 19),
 
-          const SizedBox(width: 9),
+          SizedBox(width: 9),
 
           Expanded(
             child: Text(
               message,
 
-              style: const TextStyle(
-                color: textDark,
-
-                fontSize: 11.5,
-
-                height: 1.4,
-              ),
+              style: TextStyle(color: textDark, fontSize: 11.5, height: 1.4),
             ),
           ),
 
@@ -2028,7 +1954,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
 
             visualDensity: VisualDensity.compact,
 
-            icon: const Icon(Icons.refresh_rounded, size: 18),
+            icon: Icon(Icons.refresh_rounded, size: 18),
           ),
         ],
       ),
@@ -2038,7 +1964,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
   Widget _buildNoCourses() {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(28),
+        padding: EdgeInsets.all(28),
 
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2055,7 +1981,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
                 borderRadius: BorderRadius.circular(20),
               ),
 
-              child: const Icon(
+              child: Icon(
                 Icons.analytics_outlined,
 
                 color: primaryTeal,
@@ -2064,9 +1990,9 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
               ),
             ),
 
-            const SizedBox(height: 15),
+            SizedBox(height: 15),
 
-            const Text(
+            Text(
               'No active classes',
 
               style: TextStyle(
@@ -2074,13 +2000,13 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
 
                 fontSize: 16,
 
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
 
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
 
-            const Text(
+            Text(
               'Create or activate a class before viewing cohort analytics.',
 
               textAlign: TextAlign.center,
@@ -2097,11 +2023,11 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
     return Container(
       width: double.infinity,
 
-      padding: const EdgeInsets.symmetric(vertical: 55),
+      padding: EdgeInsets.symmetric(vertical: 55),
 
       decoration: _cardDecoration(),
 
-      child: const Column(
+      child: Column(
         mainAxisSize: MainAxisSize.min,
 
         children: [
@@ -2135,7 +2061,7 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
     return Container(
       width: double.infinity,
 
-      padding: const EdgeInsets.all(22),
+      padding: EdgeInsets.all(22),
 
       decoration: _cardDecoration(),
 
@@ -2143,30 +2069,30 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
         children: [
           Icon(icon, color: textGrey, size: 28),
 
-          const SizedBox(height: 9),
+          SizedBox(height: 9),
 
           Text(
             title,
 
             textAlign: TextAlign.center,
 
-            style: const TextStyle(
+            style: TextStyle(
               color: textDark,
 
               fontSize: 13,
 
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
 
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
 
           Text(
             message,
 
             textAlign: TextAlign.center,
 
-            style: const TextStyle(color: textGrey, fontSize: 11, height: 1.4),
+            style: TextStyle(color: textGrey, fontSize: 11, height: 1.4),
           ),
         ],
       ),
@@ -2177,10 +2103,10 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
     return Text(
       title,
 
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 17,
 
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w700,
 
         color: textDark,
 
@@ -2195,26 +2121,12 @@ class _InstructorAnalyticsScreenState extends State<InstructorAnalyticsScreen> {
 
   BoxDecoration _cardDecoration() {
     return BoxDecoration(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
 
       borderRadius: BorderRadius.circular(18),
 
       border: Border.all(color: borderColor, width: 1.5),
-
-      boxShadow: _cardShadow(),
     );
-  }
-
-  List<BoxShadow> _cardShadow() {
-    return [
-      BoxShadow(
-        color: Colors.black.withValues(alpha: 0.025),
-
-        blurRadius: 12,
-
-        offset: const Offset(0, 5),
-      ),
-    ];
   }
 
   void _showMessage(String message) {

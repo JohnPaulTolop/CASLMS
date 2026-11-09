@@ -373,6 +373,8 @@ Deno.serve(async (request) => {
               text(snapshot.course.code) || text(snapshot.course.title)
             } is available in Posted Grades.`,
             courseId,
+            sectionId,
+            termId: snapshot.semester.termId,
             sourceType: "semesterGrade",
             sourceId: item.ref.id,
             isRead: false,

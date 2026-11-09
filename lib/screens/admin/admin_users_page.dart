@@ -1,3 +1,7 @@
+import '../shared/page_loading_state.dart';
+import '../../core/app_colors.dart';
+import '../../services/admin_catalog.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -14,14 +18,14 @@ class AdminUsersScreen extends StatefulWidget {
 }
 
 class _AdminUsersScreenState extends State<AdminUsersScreen> {
-  static const Color adminTheme = Color(0xFF4F46E5);
-  static const Color background = Color(0xFFF8F9FA);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
-  static const Color borderColor = Color(0xFFE6EAF0);
-  static const Color green = Color(0xFF26A65B);
-  static const Color red = Color(0xFFFF4B4B);
-  static const Color orange = Color(0xFFFF9418);
+  static const Color adminTheme = AppColors.primaryBlue;
+  static const Color background = AppColors.background;
+  static const Color textDark = AppColors.darkText;
+  static const Color textGrey = AppColors.secondaryText;
+  static const Color borderColor = AppColors.inputBorder;
+  static const Color green = AppColors.green;
+  static const Color red = AppColors.error;
+  static const Color orange = AppColors.amber;
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -42,10 +46,36 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   List<Map<String, dynamic>> _users = [];
 
+  AdminCatalog? _catalog;
+  bool _started = false;
   @override
-  void initState() {
-    super.initState();
-    _loadUsers();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _catalog = context
+        .dependOnInheritedWidgetOfExactType<AdminScope>()
+        ?.notifier;
+    if (_catalog != null) {
+      _syncDirectory();
+    } else if (!_started) {
+      _started = true;
+      _loadUsers();
+    }
+  }
+
+  void _syncDirectory() {
+    final catalog = _catalog!;
+    _users =
+        catalog.users.values
+            .map((row) => Map<String, dynamic>.from(row))
+            .toList()
+          ..sort(
+            (a, b) =>
+                _displayName(a)
+                    .toLowerCase()
+                    .compareTo(_displayName(b).toLowerCase()),
+          );
+    _isLoading = catalog.loading;
+    _errorMessage = catalog.error;
   }
 
   Future<void> _requireAdmin() async {
@@ -71,6 +101,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   Future<void> _loadUsers() async {
+    if (_catalog != null) {
+      if (_catalog!.error != null) await _catalog!.start();
+      if (mounted) setState(_syncDirectory);
+      return;
+    }
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -214,7 +249,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         return AlertDialog(
           title: const Text(
             'Edit User',
-            style: TextStyle(fontWeight: FontWeight.w800),
+            style: TextStyle(fontWeight: FontWeight.w700),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -431,7 +466,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                       style: TextStyle(
                         color: textDark,
                         fontSize: 19,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -752,6 +787,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) return const PageLoadingState();
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
@@ -765,7 +801,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             Text(
               'User Management',
               style: TextStyle(
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
                 fontSize: 18,
                 color: textDark,
               ),
@@ -943,7 +979,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             style: const TextStyle(
               color: textDark,
               fontSize: 17,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
           Text(
@@ -1037,7 +1073,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
             _initials(_displayName(user)),
             style: TextStyle(
               color: roleColor,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
           ),
@@ -1051,7 +1087,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: textDark,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   fontSize: 14,
                 ),
               ),
@@ -1067,7 +1103,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 style: TextStyle(
                   color: active ? green : orange,
                   fontSize: 9.5,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),

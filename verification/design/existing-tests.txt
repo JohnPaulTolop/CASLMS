@@ -1,0 +1,5 @@
+00:00 +0: loading C:/Users/Rolando/VSCodeProjects/CASLMS-fix-password-reset-appcheck/test/posted_grades_privacy_test.dart
+00:00 +0: C:/Users/Rolando/VSCodeProjects/CASLMS-fix-password-reset-appcheck/test/posted_grades_privacy_test.dart: a posted subject contains no grade on initial load; credentials are required and cleared
+00:01 +1: C:/Users/Rolando/VSCodeProjects/CASLMS-fix-password-reset-appcheck/test/posted_grades_privacy_test.dart: a posted subject contains no grade on initial load; credentials are required and cleared
+00:02 +2: C:/Users/Rolando/VSCodeProjects/CASLMS-fix-password-reset-appcheck/test/posted_grades_privacy_test.dart: mobile More navigation exposes both grade destinations without overflow
+00:02 +3: All tests passed!

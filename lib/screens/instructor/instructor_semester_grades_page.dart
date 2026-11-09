@@ -1,3 +1,6 @@
+import '../../services/instructor_workspace_context.dart';
+import '../../core/app_colors.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -5,14 +8,23 @@ import 'package:flutter/material.dart';
 import '../../services/course_section_service.dart';
 import '../../services/semester_grades_service.dart';
 import '../shared/grading_ui.dart';
+import 'instructor_task_widgets.dart';
 
 class InstructorSemesterGradesScreen extends StatefulWidget {
   const InstructorSemesterGradesScreen({
     super.key,
     this.courseId,
     this.sectionId,
+    this.api,
+    this.firestore,
+    this.auth,
+    this.sectionService,
   });
   final String? courseId, sectionId;
+  final GradebookApi? api;
+  final FirebaseFirestore? firestore;
+  final FirebaseAuth? auth;
+  final CourseSectionService? sectionService;
   @override
   State<InstructorSemesterGradesScreen> createState() =>
       _InstructorSemesterGradesScreenState();
@@ -20,7 +32,14 @@ class InstructorSemesterGradesScreen extends StatefulWidget {
 
 class _InstructorSemesterGradesScreenState
     extends State<InstructorSemesterGradesScreen> {
-  final GradebookApi _api = SemesterGradesService();
+  late final GradebookApi _api = widget.api ?? SemesterGradesService();
+  late final FirebaseFirestore _firestore =
+      widget.firestore ?? FirebaseFirestore.instance;
+  late final FirebaseAuth _auth = widget.auth ?? FirebaseAuth.instance;
+  late final CourseSectionService _sectionService =
+      widget.sectionService ?? CourseSectionService();
+  final _context = InstructorWorkspaceContext.instance;
+  int _selectionGeneration = 0;
   final _weights = {
     for (final key in ['activity', 'quiz', 'unit_test', 'assignment', 'exam'])
       key: TextEditingController(text: '0'),
@@ -47,22 +66,39 @@ class _InstructorSemesterGradesScreenState
 
   Future<void> _load() async {
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final uid = _auth.currentUser?.uid;
       if (uid == null) throw const GradebookException('Please sign in again.');
-      final courses = await FirebaseFirestore.instance
+      _context.bindUser(uid);
+      final desiredCourse = widget.courseId ?? _context.courseId;
+      final desiredSection =
+          widget.sectionId ??
+          (desiredCourse == _context.courseId ? _context.sectionId : null);
+      final courses = await _firestore
           .collection('courses')
           .where('instructorId', isEqualTo: uid)
           .get();
+      if (!mounted || _auth.currentUser?.uid != uid) return;
       _courses = courses.docs
           .map((doc) => <String, dynamic>{...doc.data(), 'id': doc.id})
           .toList();
-      if (widget.courseId != null &&
-          _courses.any((row) => row['id'] == widget.courseId)) {
-        _course = widget.courseId;
-        _sections = await CourseSectionService().getSections(_course!);
-        _section = _sections.any((row) => row['id'] == widget.sectionId)
-            ? widget.sectionId
-            : null;
+      if (desiredCourse != null &&
+          _courses.any((row) => row['id'] == desiredCourse)) {
+        _course = desiredCourse;
+        final revision = _context.beginCourse(uid, _course!);
+        _sections = (await _sectionService.getSections(_course!))
+            .where((row) => row['status'] == 'active')
+            .toList();
+        if (!mounted || _auth.currentUser?.uid != uid) return;
+        if (!_context.commitSections(
+          revision,
+          uid,
+          _course!,
+          _sections,
+          requested: desiredSection,
+        )) {
+          return;
+        }
+        _section = _context.sectionId;
       }
       if (mounted) setState(() => _loading = false);
     } catch (error) {
@@ -76,6 +112,10 @@ class _InstructorSemesterGradesScreenState
   }
 
   Future<void> _chooseCourse(String? value) async {
+    final generation = ++_selectionGeneration;
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return;
+    final revision = value == null ? null : _context.beginCourse(uid, value);
     setState(() {
       _course = value;
       _section = null;
@@ -88,8 +128,20 @@ class _InstructorSemesterGradesScreenState
     try {
       final sections = value == null
           ? <Map<String, dynamic>>[]
-          : await CourseSectionService().getSections(value);
-      if (mounted) {
+          : await _sectionService.getSections(value);
+      if (mounted &&
+          generation == _selectionGeneration &&
+          _auth.currentUser?.uid == uid) {
+        if (value != null &&
+            !_context.commitSections(
+              revision!,
+              uid,
+              value,
+              sections,
+              requested: '',
+            )) {
+          return;
+        }
         setState(() {
           _sections = sections
               .where((row) => row['status'] == 'active')
@@ -98,7 +150,10 @@ class _InstructorSemesterGradesScreenState
         });
       }
     } catch (error) {
-      if (mounted) {
+      if (mounted &&
+          generation == _selectionGeneration &&
+          _auth.currentUser?.uid == uid) {
+        if (value != null) _context.clearCourse(value, revision: revision);
         setState(() {
           _error = error.toString();
           _loading = false;
@@ -155,18 +210,18 @@ class _InstructorSemesterGradesScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: const Text('Post semester grades?'),
-        content: const Text(
+        title: Text('Post semester grades?'),
+        content: Text(
           'This posts the previewed grades for this section. Students must verify their credentials to reveal them. Later corrections require a new preview and posting revision.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialog, false),
-            child: const Text('Cancel'),
+            child: Text('Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialog, true),
-            child: const Text('Post grades'),
+            child: Text('Post grades'),
           ),
         ],
       ),
@@ -249,7 +304,7 @@ class _InstructorSemesterGradesScreenState
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialog, false),
-              child: const Text('Cancel'),
+              child: Text('Cancel'),
             ),
             FilledButton(
               onPressed: () {
@@ -259,7 +314,7 @@ class _InstructorSemesterGradesScreenState
                 }
                 Navigator.pop(dialog, true);
               },
-              child: const Text('Apply'),
+              child: Text('Apply'),
             ),
           ],
         ),
@@ -290,9 +345,9 @@ class _InstructorSemesterGradesScreenState
                   backgroundColor: gradeTeal.withValues(alpha: .1),
                   child: Text(
                     '$number',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: gradeTeal,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
@@ -303,17 +358,17 @@ class _InstructorSemesterGradesScreenState
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
-                          color: gradeInk,
+                        style: TextStyle(
+                          color: AppColors.resolve(context, gradeInk),
                           fontSize: 18,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         subtitle,
-                        style: const TextStyle(
-                          color: gradeMuted,
+                        style: TextStyle(
+                          color: AppColors.resolve(context, gradeMuted),
                           fontSize: 12,
                           height: 1.5,
                         ),
@@ -346,32 +401,17 @@ class _InstructorSemesterGradesScreenState
       (total, value) => total + (value != null && value.isFinite ? value : 0),
     );
     final validWeights = validValues && (total - 100).abs() < .000001;
-    return Scaffold(
-      backgroundColor: gradeBackground,
-      appBar: AppBar(
-        title: const Text(
-          'Semester Grades',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-      ),
+    return InstructorTaskScaffold(
+      loading: _loading,
+      title: 'Semester grades',
+      subtitle: 'Choose a class, set the weights, then preview before posting.',
+      busy: _busy,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : LayoutBuilder(
               builder: (context, size) => ListView(
-                padding: EdgeInsets.all(size.maxWidth < 600 ? 16 : 24),
+                padding: InstructorTaskScaffold.paddingOf(context),
                 children: [
-                  const GradeEntrance(
-                    child: GradeHero(
-                      title: 'From scores to semester grades.',
-                      subtitle: 'Follow the three steps below. Preview grades before posting them to your students.',
-                      icon: Icons.calculate_outlined,
-                      accent: gradeTeal,
-                      eyebrow: 'SEMESTER GRADING',
-                    ),
-                  ),
-                  const SizedBox(height: 20),
                   _step(
                     1,
                     'Choose your class',
@@ -435,7 +475,22 @@ class _InstructorSemesterGradesScreenState
                               onChanged: _busy || _course == null
                                   ? null
                                   : (value) => setState(() {
-                                      _section = value;
+                                      final uid = _auth.currentUser?.uid;
+                                      if (uid == null || _course == null) {
+                                        return;
+                                      }
+                                      final revision = _context.beginCourse(
+                                        uid,
+                                        _course!,
+                                      );
+                                      _context.commitSections(
+                                        revision,
+                                        uid,
+                                        _course!,
+                                        _sections,
+                                        requested: value ?? '',
+                                      );
+                                      _section = _context.sectionId;
                                       _preview = null;
                                       _dispositions.clear();
                                     }),
@@ -493,9 +548,7 @@ class _InstructorSemesterGradesScreenState
                           children: [
                             GradeBadge(
                               '${gradeNumber(total)} / 100%',
-                              color: validWeights
-                                  ? gradeTeal
-                                  : const Color(0xFFB76A00),
+                              color: validWeights ? gradeTeal : AppColors.amber,
                               icon: validWeights
                                   ? Icons.check_circle_outline
                                   : Icons.info_outline,
@@ -508,8 +561,8 @@ class _InstructorSemesterGradesScreenState
                                   : total < 100
                                   ? '${gradeNumber(100 - total)}% left to allocate'
                                   : 'Reduce the total by ${gradeNumber(total - 100)}%',
-                              style: const TextStyle(
-                                color: gradeMuted,
+                              style: TextStyle(
+                                color: AppColors.resolve(context, gradeMuted),
                                 fontSize: 12,
                               ),
                             ),
@@ -520,33 +573,34 @@ class _InstructorSemesterGradesScreenState
                           borderRadius: BorderRadius.circular(8),
                           child: LinearProgressIndicator(
                             value: (total / 100).clamp(0.0, 1.0),
-                            minHeight: 7,
-                            backgroundColor: gradeBorder,
-                            color: validWeights
-                                ? gradeTeal
-                                : const Color(0xFFB76A00),
+                            minHeight: 14,
+                            backgroundColor: AppColors.resolve(
+                              context,
+                              gradeBorder,
+                            ),
+                            color: validWeights ? gradeTeal : AppColors.amber,
                           ),
                         ),
                         const SizedBox(height: 14),
                         ExpansionTile(
                           tilePadding: EdgeInsets.zero,
                           childrenPadding: const EdgeInsets.only(bottom: 12),
-                          title: const Text(
+                          title: Text(
                             'Grading rules & missing work',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          subtitle: const Text(
+                          subtitle: Text(
                             'Review these settings before computing.',
                             style: TextStyle(fontSize: 12),
                           ),
                           children: [
-                            const Text(
+                            Text(
                               'Category points are pooled and weighted. Transmuted percentage = (raw percentage × 0.5) + 50. The configured numerical scale is applied without rounding up.',
                               style: TextStyle(
-                                color: gradeMuted,
+                                color: AppColors.resolve(context, gradeMuted),
                                 height: 1.6,
                                 fontSize: 12,
                               ),
@@ -582,11 +636,11 @@ class _InstructorSemesterGradesScreenState
                             CheckboxListTile(
                               contentPadding: EdgeInsets.zero,
                               value: _legacyReviewed,
-                              title: const Text(
+                              title: Text(
                                 'I reviewed legacy quiz scores against my records',
                                 style: TextStyle(fontSize: 13),
                               ),
-                              subtitle: const Text(
+                              subtitle: Text(
                                 'Unreviewed legacy scores and submitted work awaiting grading produce INC.',
                                 style: TextStyle(fontSize: 12),
                               ),
@@ -615,17 +669,20 @@ class _InstructorSemesterGradesScreenState
                             padding: const EdgeInsets.only(bottom: 16),
                             child: Text(
                               _error!,
-                              style: const TextStyle(color: Colors.red),
+                              style: TextStyle(color: Colors.red),
                             ),
                           ),
                         if (_course == null ||
                             _section == null ||
                             !validWeights)
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.only(bottom: 14),
                             child: Text(
                               'Choose a class and complete the 100% weight allocation to continue.',
-                              style: TextStyle(color: gradeMuted, fontSize: 12),
+                              style: TextStyle(
+                                color: AppColors.resolve(context, gradeMuted),
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         Wrap(
@@ -653,21 +710,24 @@ class _InstructorSemesterGradesScreenState
                                   ? null
                                   : _finalize,
                               icon: const Icon(Icons.publish_outlined),
-                              label: const Text('Post Semester Grades'),
+                              label: Text('Post Semester Grades'),
                             ),
                           ],
                         ),
                         if (_busy)
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.only(top: 18),
                             child: LinearProgressIndicator(),
                           ),
                         if (_preview == null && !_busy)
-                          const Padding(
+                          Padding(
                             padding: EdgeInsets.only(top: 14),
                             child: Text(
                               'Posting becomes available after you compute a preview.',
-                              style: TextStyle(color: gradeMuted, fontSize: 12),
+                              style: TextStyle(
+                                color: AppColors.resolve(context, gradeMuted),
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                       ],
@@ -698,16 +758,16 @@ class _InstructorSemesterGradesScreenState
                             const SizedBox(height: 16),
                             Text(
                               '${_preview!['courseTitle']} · ${_preview!['sectionName']} · ${_preview!['termLabel']}',
-                              style: const TextStyle(
-                                color: gradeInk,
-                                fontWeight: FontWeight.w800,
+                              style: TextStyle(
+                                color: AppColors.resolve(context, gradeInk),
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                             const SizedBox(height: 8),
-                            const Text(
+                            Text(
                               'Review each row. Changing a grade status clears this preview; compute again before posting. Scroll the table sideways to see all columns.',
                               style: TextStyle(
-                                color: gradeMuted,
+                                color: AppColors.resolve(context, gradeMuted),
                                 fontSize: 12,
                                 height: 1.6,
                               ),
@@ -772,7 +832,7 @@ class _InstructorSemesterGradesScreenState
                                               onPressed: _busy
                                                   ? null
                                                   : () => _disposition(row),
-                                              child: const Text('Grade status'),
+                                              child: Text('Grade status'),
                                             ),
                                           ),
                                         ],

@@ -1,3 +1,5 @@
+import '../../core/app_colors.dart';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -80,11 +82,11 @@ class _AdminProfileAccessState extends State<_AdminProfileAccess> {
 }
 
 abstract final class AdminUi {
-  static const accent = Color(0xFF4F46E5);
-  static const background = Color(0xFFF5F7FC);
-  static const ink = Color(0xFF17233D);
-  static const muted = Color(0xFF69778F);
-  static const border = Color(0xFFE4E9F3);
+  static const accent = AppColors.primaryBlue;
+  static const background = AppColors.background;
+  static const ink = AppColors.darkText;
+  static const muted = AppColors.secondaryText;
+  static const border = AppColors.inputBorder;
 }
 
 class AdminPanel extends StatelessWidget {
@@ -145,7 +147,7 @@ class AdminPageHeading extends StatelessWidget {
             title,
             style: const TextStyle(
               fontSize: 27,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               color: AdminUi.ink,
               letterSpacing: -.7,
             ),

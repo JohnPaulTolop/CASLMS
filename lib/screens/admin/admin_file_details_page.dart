@@ -128,7 +128,7 @@ class _AdminFileDetailsScreenState extends State<AdminFileDetailsScreen> {
                     adminText(file['title']),
                     style: const TextStyle(
                       fontSize: 22,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                       color: AdminUi.ink,
                     ),
                   ),

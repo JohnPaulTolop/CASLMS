@@ -1,10 +1,12 @@
+import '../../core/app_colors.dart';
+
 import 'package:flutter/material.dart';
 
 import 'instructor_ui.dart';
 
 import '../../services/instructor_course_service.dart';
 
-import 'instructor_course_sections_page.dart';
+import 'instructor_class_details_page.dart';
 
 class InstructorCreateCourseScreen extends StatefulWidget {
   const InstructorCreateCourseScreen({super.key});
@@ -16,13 +18,15 @@ class InstructorCreateCourseScreen extends StatefulWidget {
 
 class _InstructorCreateCourseScreenState
     extends State<InstructorCreateCourseScreen> {
-  static const Color primaryTeal = Color(0xFF00897B);
+  Color get primaryTeal => AppColors.resolve(context, AppColors.primaryBlue);
 
-  static const Color background = Color(0xFFF7F9FC);
+  Color get background => AppColors.resolve(context, AppColors.background);
 
-  static const Color textDark = Color(0xFF10182F);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
 
-  static const Color borderColor = Color(0xFFE6EAF0);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
 
   final InstructorCourseService _courseService = InstructorCourseService();
 
@@ -111,7 +115,7 @@ class _InstructorCreateCourseScreenState
 
         MaterialPageRoute(
           builder: (context) =>
-              InstructorCourseSectionsScreen(courseId: courseId),
+              InstructorClassDetailsScreen(courseId: courseId),
         ),
       );
     } on InstructorCourseServiceException catch (e) {
@@ -148,7 +152,7 @@ class _InstructorCreateCourseScreenState
 
         elevation: 0,
 
-        centerTitle: true,
+        centerTitle: false,
 
         leading: IconButton(
           onPressed: _isSaving
@@ -157,7 +161,7 @@ class _InstructorCreateCourseScreenState
                   Navigator.pop(context);
                 },
 
-          icon: const Icon(
+          icon: Icon(
             Icons.arrow_back_ios_new_rounded,
 
             color: textDark,
@@ -166,7 +170,7 @@ class _InstructorCreateCourseScreenState
           ),
         ),
 
-        title: const Text(
+        title: Text(
           'Create New Subject',
 
           style: TextStyle(
@@ -174,7 +178,7 @@ class _InstructorCreateCourseScreenState
 
             fontSize: 18,
 
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
@@ -343,6 +347,10 @@ class _InstructorCreateCourseScreenState
                         ),
                       ),
                     ],
+
+                    const SizedBox(height: 22),
+
+                    _buildClassCodeInfo(),
                   ],
                 ),
               ),
@@ -394,7 +402,7 @@ class _InstructorCreateCourseScreenState
 
                       fontSize: 14,
 
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
           ),
@@ -434,7 +442,7 @@ class _InstructorCreateCourseScreenState
 
                     fontSize: 16,
 
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
 
@@ -452,6 +460,38 @@ class _InstructorCreateCourseScreenState
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClassCodeInfo() {
+    return Container(
+      width: double.infinity,
+
+      padding: const EdgeInsets.all(16),
+
+      decoration: BoxDecoration(
+        color: AppColors.resolve(context, AppColors.greenTint),
+
+        borderRadius: BorderRadius.circular(15),
+      ),
+
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+
+        children: [
+          Icon(Icons.vpn_key_rounded, color: primaryTeal),
+
+          SizedBox(width: 11),
+
+          Expanded(
+            child: Text(
+              'After creating a course, open a section and invite students using their registered Campus ID. Only invited students can join.',
+
+              style: TextStyle(color: textGrey, fontSize: 11, height: 1.5),
             ),
           ),
         ],
@@ -497,26 +537,26 @@ class _InstructorCreateCourseScreenState
 
       filled: true,
 
-      fillColor: Colors.white,
+      fillColor: Theme.of(context).colorScheme.surface,
 
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
 
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
 
-        borderSide: const BorderSide(color: borderColor),
+        borderSide: BorderSide(color: borderColor),
       ),
 
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
 
-        borderSide: const BorderSide(color: borderColor),
+        borderSide: BorderSide(color: borderColor),
       ),
 
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
 
-        borderSide: const BorderSide(color: primaryTeal, width: 1.8),
+        borderSide: BorderSide(color: primaryTeal, width: 1.8),
       ),
     );
   }

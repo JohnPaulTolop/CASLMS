@@ -1,50 +1,51 @@
+import '../shared/page_loading_state.dart';
+import '../../core/app_colors.dart';
+import '../shared/workspace_shell.dart';
+import '../shared/workspace_widgets.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/student_assessment_query_service.dart';
+import '../../services/section_audience_service.dart';
 
-import 'student_module_detail_page.dart';
+import 'student_course_modules_page.dart';
 
 class StudentAssignmentsScreen extends StatefulWidget {
-  const StudentAssignmentsScreen({
-    super.key,
-  });
+  const StudentAssignmentsScreen({super.key});
 
   @override
   State<StudentAssignmentsScreen> createState() =>
       _StudentAssignmentsScreenState();
 }
 
-class _StudentAssignmentsScreenState
-    extends State<StudentAssignmentsScreen> {
+class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
   // ============================================================
   // DESIGN
   // ============================================================
 
-  static const Color primaryBlue = Color(0xFF1769FF);
-  static const Color background = Color(0xFFF7F9FC);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
-  static const Color borderColor = Color(0xFFE6EAF0);
+  Color get primaryBlue => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
 
-  static const Color orange = Color(0xFFFF9418);
-  static const Color green = Color(0xFF26A65B);
-  static const Color red = Color(0xFFFF4B4B);
-  static const Color purple = Color(0xFF7B4DFF);
+  Color get orange => AppColors.resolve(context, AppColors.amber);
+  Color get green => AppColors.resolve(context, AppColors.green);
+  Color get red => AppColors.resolve(context, AppColors.error);
+  Color get purple => AppColors.resolve(context, AppColors.purple);
 
   // ============================================================
   // FIREBASE
   // ============================================================
 
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   final StudentAssessmentQueryService _assessmentQuery =
       StudentAssessmentQueryService();
 
-  final FirebaseAuth _auth =
-      FirebaseAuth.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // ============================================================
   // STATE
@@ -84,127 +85,88 @@ class _StudentAssignmentsScreenState
     }
 
     try {
-      final String? studentId =
-          _auth.currentUser?.uid;
+      final String? studentId = _auth.currentUser?.uid;
 
-      if (studentId == null ||
-          studentId.isEmpty) {
-        throw Exception(
-          'You must be logged in to view your tasks.',
-        );
+      if (studentId == null || studentId.isEmpty) {
+        throw Exception('You must be logged in to view your tasks.');
       }
 
       // ========================================================
       // VERIFY STUDENT
       // ========================================================
 
-      final DocumentSnapshot<Map<String, dynamic>>
-          userDocument =
-          await _firestore
-              .collection('users')
-              .doc(studentId)
-              .get();
+      final DocumentSnapshot<Map<String, dynamic>> userDocument =
+          await _firestore.collection('users').doc(studentId).get();
 
-      if (!userDocument.exists ||
-          userDocument.data() == null) {
-        throw Exception(
-          'Student profile could not be found.',
-        );
+      if (!userDocument.exists || userDocument.data() == null) {
+        throw Exception('Student profile could not be found.');
       }
 
-      final Map<String, dynamic> userData =
-          userDocument.data()!;
+      final Map<String, dynamic> userData = userDocument.data()!;
 
-      final String role =
-          (userData['role'] ?? '')
-              .toString()
-              .trim()
-              .toLowerCase();
+      final String role = (userData['role'] ?? '')
+          .toString()
+          .trim()
+          .toLowerCase();
 
       if (role != 'student') {
-        throw Exception(
-          'Only students can access My Tasks.',
-        );
+        throw Exception('Only students can access My Tasks.');
       }
 
-      final String userStatus =
-          (userData['status'] ?? 'active')
-              .toString()
-              .trim()
-              .toLowerCase();
+      final String userStatus = (userData['status'] ?? 'active')
+          .toString()
+          .trim()
+          .toLowerCase();
 
       if (userStatus != 'active') {
-        throw Exception(
-          'Your student account is not active.',
-        );
+        throw Exception('Your student account is not active.');
       }
 
       // ========================================================
       // ACTIVE ENROLLMENTS
       // ========================================================
 
-      final QuerySnapshot<Map<String, dynamic>>
-          enrollmentSnapshot =
+      final QuerySnapshot<Map<String, dynamic>> enrollmentSnapshot =
           await _firestore
               .collection('enrollments')
-              .where(
-                'studentId',
-                isEqualTo: studentId,
-              )
+              .where('studentId', isEqualTo: studentId)
               .get();
 
-      final List<Map<String, dynamic>>
-          activeEnrollments = [];
+      final List<Map<String, dynamic>> activeEnrollments = [];
 
-      for (final document
-          in enrollmentSnapshot.docs) {
-        final Map<String, dynamic> data =
-            document.data();
+      for (final document in enrollmentSnapshot.docs) {
+        final Map<String, dynamic> data = document.data();
 
-        final String status =
-            (data['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String status = (data['status'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (status != 'active') {
           continue;
         }
 
-        activeEnrollments.add({
-          ...data,
-          'id': document.id,
-        });
+        activeEnrollments.add({...data, 'id': document.id});
       }
 
       // ========================================================
       // CURRENT STUDENT ASSESSMENT SUBMISSIONS
       // ========================================================
 
-      final QuerySnapshot<Map<String, dynamic>>
-          submissionSnapshot =
+      final QuerySnapshot<Map<String, dynamic>> submissionSnapshot =
           await _firestore
-              .collection(
-                'assessmentSubmissions',
-              )
-              .where(
-                'studentId',
-                isEqualTo: studentId,
-              )
+              .collection('assessmentSubmissions')
+              .where('studentId', isEqualTo: studentId)
               .get();
 
-      final Map<String, Map<String, dynamic>>
-          submissionByAssessment = {};
+      final Map<String, Map<String, dynamic>> submissionByAssessment = {};
 
-      for (final document
-          in submissionSnapshot.docs) {
-        final Map<String, dynamic> data =
-            document.data();
+      for (final document in submissionSnapshot.docs) {
+        final Map<String, dynamic> data = document.data();
 
-        final String assessmentId =
-            (data['assessmentId'] ?? '')
-                .toString()
-                .trim();
+        final String assessmentId = (data['assessmentId'] ?? '')
+            .toString()
+            .trim();
 
         if (assessmentId.isEmpty) {
           continue;
@@ -221,15 +183,13 @@ class _StudentAssignmentsScreenState
       // BUILD TASK LIST FROM ENROLLED COURSES
       // ========================================================
 
-      final List<Map<String, dynamic>>
-          loadedTasks = [];
+      final List<Map<String, dynamic>> loadedTasks = [];
 
-      for (final enrollment
-          in activeEnrollments) {
-        final String courseId =
-            (enrollment['courseId'] ?? '')
-                .toString()
-                .trim();
+      for (final enrollment in activeEnrollments) {
+        final String courseId = (enrollment['courseId'] ?? '')
+            .toString()
+            .trim();
+        final sectionId = (enrollment['sectionId'] ?? '').toString().trim();
 
         if (courseId.isEmpty) {
           continue;
@@ -239,26 +199,19 @@ class _StudentAssignmentsScreenState
         // COURSE
         // --------------------------------------------------------
 
-        final DocumentSnapshot<Map<String, dynamic>>
-            courseDocument =
-            await _firestore
-                .collection('courses')
-                .doc(courseId)
-                .get();
+        final DocumentSnapshot<Map<String, dynamic>> courseDocument =
+            await _firestore.collection('courses').doc(courseId).get();
 
-        if (!courseDocument.exists ||
-            courseDocument.data() == null) {
+        if (!courseDocument.exists || courseDocument.data() == null) {
           continue;
         }
 
-        final Map<String, dynamic> course =
-            courseDocument.data()!;
+        final Map<String, dynamic> course = courseDocument.data()!;
 
-        final String courseStatus =
-            (course['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String courseStatus = (course['status'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (courseStatus != 'active') {
           continue;
@@ -268,29 +221,29 @@ class _StudentAssignmentsScreenState
         // PUBLISHED MODULES
         // --------------------------------------------------------
 
-        final QuerySnapshot<Map<String, dynamic>>
-            moduleSnapshot =
+        final QuerySnapshot<Map<String, dynamic>> moduleSnapshot =
             await _firestore
                 .collection('modules')
+                .where('courseId', isEqualTo: courseId)
+                .where('status', isEqualTo: 'published')
                 .where(
-                  'courseId',
-                  isEqualTo: courseId,
+                  'sectionIds',
+                  arrayContainsAny: <String>[
+                    SectionAudienceService.allSections,
+                    sectionId,
+                  ],
                 )
                 .get();
 
-        final Map<String, Map<String, dynamic>>
-            publishedModules = {};
+        final Map<String, Map<String, dynamic>> publishedModules = {};
 
-        for (final moduleDocument
-            in moduleSnapshot.docs) {
-          final Map<String, dynamic> module =
-              moduleDocument.data();
+        for (final moduleDocument in moduleSnapshot.docs) {
+          final Map<String, dynamic> module = moduleDocument.data();
 
-          final String status =
-              (module['status'] ?? '')
-                  .toString()
-                  .trim()
-                  .toLowerCase();
+          final String status = (module['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
 
           if (status != 'published') {
             continue;
@@ -311,28 +264,22 @@ class _StudentAssignmentsScreenState
         // ASSESSMENTS
         // --------------------------------------------------------
 
-        final assessmentDocuments = await _assessmentQuery.getVisibleAssessments(
-          courseId: courseId,
-        );
+        final assessmentDocuments = await _assessmentQuery
+            .getVisibleAssessments(courseId: courseId);
 
-        for (final assessmentDocument
-            in assessmentDocuments) {
-          final Map<String, dynamic> assessment =
-              assessmentDocument.data();
+        for (final assessmentDocument in assessmentDocuments) {
+          final Map<String, dynamic> assessment = assessmentDocument.data();
 
-          final String assessmentId =
-              assessmentDocument.id;
+          final String assessmentId = assessmentDocument.id;
 
-          final String moduleId =
-              (assessment['moduleId'] ?? '')
-                  .toString()
-                  .trim();
+          final String moduleId = (assessment['moduleId'] ?? '')
+              .toString()
+              .trim();
 
-          final String status =
-              (assessment['status'] ?? '')
-                  .toString()
-                  .trim()
-                  .toLowerCase();
+          final String status = (assessment['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
 
           // Students must never see drafts.
           if (status == 'draft') {
@@ -340,27 +287,22 @@ class _StudentAssignmentsScreenState
           }
 
           // Only assessments attached to a published module.
-          if (!publishedModules.containsKey(
-            moduleId,
-          )) {
+          if (!publishedModules.containsKey(moduleId)) {
             continue;
           }
 
           final Map<String, dynamic>? submission =
-              submissionByAssessment[
-                  assessmentId];
+              submissionByAssessment[assessmentId];
 
-          final String submissionStatus =
-              (submission?['status'] ?? '')
-                  .toString()
-                  .trim()
-                  .toLowerCase();
+          final String submissionStatus = (submission?['status'] ?? '')
+              .toString()
+              .trim()
+              .toLowerCase();
 
           // A closed assessment with no existing submission
           // does not need to remain in the student's active
           // global task list.
-          if (status == 'closed' &&
-              submission == null) {
+          if (status == 'closed' && submission == null) {
             continue;
           }
 
@@ -368,36 +310,24 @@ class _StudentAssignmentsScreenState
             ...assessment,
 
             'id': assessmentId,
-            'assessmentId':
-                assessmentId,
+            'assessmentId': assessmentId,
 
             'courseId': courseId,
 
-            'courseCode':
-                (course['code'] ?? '')
-                    .toString(),
+            'courseCode': (course['code'] ?? '').toString(),
 
-            'courseTitle':
-                (course['title'] ?? '')
-                    .toString(),
+            'courseTitle': (course['title'] ?? '').toString(),
 
-            'classCode':
-                (course['classCode'] ?? '')
-                    .toString(),
+            'classCode': (course['classCode'] ?? '').toString(),
 
             'moduleId': moduleId,
 
-            'moduleTitle':
-                (publishedModules[moduleId]
-                            ?['title'] ??
-                        '')
-                    .toString(),
+            'moduleTitle': (publishedModules[moduleId]?['title'] ?? '')
+                .toString(),
 
-            'submission':
-                submission,
+            'submission': submission,
 
-            'submissionStatus':
-                submissionStatus,
+            'submissionStatus': submissionStatus,
           });
         }
       }
@@ -406,36 +336,25 @@ class _StudentAssignmentsScreenState
       // SORT BY DUE DATE
       // ========================================================
 
-      loadedTasks.sort(
-        (a, b) {
-          final DateTime? aDue =
-              _dateFrom(
-            a['dueAt'],
-          );
+      loadedTasks.sort((a, b) {
+        final DateTime? aDue = _dateFrom(a['dueAt']);
 
-          final DateTime? bDue =
-              _dateFrom(
-            b['dueAt'],
-          );
+        final DateTime? bDue = _dateFrom(b['dueAt']);
 
-          if (aDue == null &&
-              bDue == null) {
-            return 0;
-          }
+        if (aDue == null && bDue == null) {
+          return 0;
+        }
 
-          if (aDue == null) {
-            return 1;
-          }
+        if (aDue == null) {
+          return 1;
+        }
 
-          if (bDue == null) {
-            return -1;
-          }
+        if (bDue == null) {
+          return -1;
+        }
 
-          return aDue.compareTo(
-            bDue,
-          );
-        },
-      );
+        return aDue.compareTo(bDue);
+      });
 
       if (!mounted) {
         return;
@@ -453,12 +372,7 @@ class _StudentAssignmentsScreenState
       setState(() {
         _isLoading = false;
 
-        _errorMessage = e
-            .toString()
-            .replaceFirst(
-              'Exception: ',
-              '',
-            );
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -468,119 +382,95 @@ class _StudentAssignmentsScreenState
   // ============================================================
 
   int get _todoCount {
-    return _tasks.where(
-      (task) {
-        final String status =
-            (task['submissionStatus'] ?? '')
-                .toString()
-                .toLowerCase();
+    return _tasks.where((task) {
+      final String status = (task['submissionStatus'] ?? '')
+          .toString()
+          .toLowerCase();
 
-        final String assessmentStatus =
-            (task['status'] ?? '')
-                .toString()
-                .toLowerCase();
+      final String assessmentStatus = (task['status'] ?? '')
+          .toString()
+          .toLowerCase();
 
-        return status.isEmpty &&
-            assessmentStatus == 'published';
-      },
-    ).length;
+      return status.isEmpty && assessmentStatus == 'published';
+    }).length;
   }
 
   int get _submittedCount {
-    return _tasks.where(
-      (task) {
-        return (task['submissionStatus'] ?? '')
-                .toString()
-                .toLowerCase() ==
-            'submitted';
-      },
-    ).length;
+    return _tasks.where((task) {
+      return (task['submissionStatus'] ?? '').toString().toLowerCase() ==
+          'submitted';
+    }).length;
   }
 
   int get _completedCount {
-    return _tasks.where(
-      (task) {
-        return (task['submissionStatus'] ?? '')
-                .toString()
-                .toLowerCase() ==
-            'graded';
-      },
-    ).length;
+    return _tasks.where((task) {
+      return (task['submissionStatus'] ?? '').toString().toLowerCase() ==
+          'graded';
+    }).length;
   }
 
   // ============================================================
   // FILTERED TASKS
   // ============================================================
 
-  List<Map<String, dynamic>>
-      get _visibleTasks {
-    Iterable<Map<String, dynamic>>
-        result = _tasks;
+  List<Map<String, dynamic>> get _visibleTasks {
+    Iterable<Map<String, dynamic>> result = _tasks;
 
     if (_selectedTab == 0) {
-      result = result.where(
-        (task) {
-          final String submissionStatus =
-              (task['submissionStatus'] ?? '')
-                  .toString()
-                  .toLowerCase();
+      result = result.where((task) {
+        final String submissionStatus = (task['submissionStatus'] ?? '')
+            .toString()
+            .toLowerCase();
 
-          final String assessmentStatus =
-              (task['status'] ?? '')
-                  .toString()
-                  .toLowerCase();
+        final String assessmentStatus = (task['status'] ?? '')
+            .toString()
+            .toLowerCase();
 
-          return submissionStatus.isEmpty &&
-              assessmentStatus ==
-                  'published';
-        },
-      );
+        return submissionStatus.isEmpty && assessmentStatus == 'published';
+      });
     } else if (_selectedTab == 1) {
-      result = result.where(
-        (task) {
-          return (task['submissionStatus'] ?? '')
-                  .toString()
-                  .toLowerCase() ==
-              'submitted';
-        },
-      );
+      result = result.where((task) {
+        return (task['submissionStatus'] ?? '').toString().toLowerCase() ==
+            'submitted';
+      });
     } else {
-      result = result.where(
-        (task) {
-          return (task['submissionStatus'] ?? '')
-                  .toString()
-                  .toLowerCase() ==
-              'graded';
-        },
-      );
+      result = result.where((task) {
+        return (task['submissionStatus'] ?? '').toString().toLowerCase() ==
+            'graded';
+      });
     }
 
     if (_selectedDate != null) {
-      result = result.where(
-        (task) {
-          final DateTime? dueAt =
-              _dateFrom(
-            task['dueAt'],
-          );
+      result = result.where((task) {
+        final DateTime? dueAt = _dateFrom(task['dueAt']);
 
-          if (dueAt == null) {
-            return false;
-          }
+        if (dueAt == null) {
+          return false;
+        }
 
-          final DateTime local =
-              dueAt.toLocal();
+        final DateTime local = dueAt.toLocal();
 
-          return local.year ==
-                  _selectedDate!.year &&
-              local.month ==
-                  _selectedDate!.month &&
-              local.day ==
-                  _selectedDate!.day;
-        },
-      );
+        return local.year == _selectedDate!.year &&
+            local.month == _selectedDate!.month &&
+            local.day == _selectedDate!.day;
+      });
     }
 
-    return result.toList();
+    final tasks = result.toList();
+    if (_selectedTab == 0) {
+      tasks.sort((a, b) {
+        final overdue = (_isPastDue(a) ? 1 : 0).compareTo(
+          _isPastDue(b) ? 1 : 0,
+        );
+        if (overdue != 0) return overdue;
+        final aDue = _dateFrom(a['dueAt']);
+        final bDue = _dateFrom(b['dueAt']);
+        if (aDue == null) return bDue == null ? 0 : 1;
+        if (bDue == null) return -1;
+        return aDue.compareTo(bDue);
+      });
+    }
+    return tasks;
   }
 
   // ============================================================
@@ -588,55 +478,21 @@ class _StudentAssignmentsScreenState
   // ============================================================
 
   Future<void> _openCalendar() async {
-    final DateTime now =
-        DateTime.now();
+    final DateTime now = DateTime.now();
 
-    final DateTime? selected =
-        await showDatePicker(
+    final DateTime? selected = await showDatePicker(
       context: context,
-      initialDate:
-          _selectedDate ?? now,
-      firstDate:
-          DateTime(
-        now.year - 2,
-      ),
-      lastDate:
-          DateTime(
-        now.year + 5,
-        12,
-        31,
-      ),
-      builder: (
-        context,
-        child,
-      ) {
-        return Theme(
-          data:
-              Theme.of(context)
-                  .copyWith(
-            colorScheme:
-                const ColorScheme.light(
-              primary:
-                  primaryBlue,
-              onPrimary:
-                  Colors.white,
-              onSurface:
-                  textDark,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      initialDate: _selectedDate ?? now,
+      firstDate: DateTime(now.year - 2),
+      lastDate: DateTime(now.year + 5, 12, 31),
     );
 
-    if (selected == null ||
-        !mounted) {
+    if (selected == null || !mounted) {
       return;
     }
 
     setState(() {
-      _selectedDate =
-          selected;
+      _selectedDate = selected;
     });
   }
 
@@ -650,24 +506,13 @@ class _StudentAssignmentsScreenState
   // OPEN MODULE
   // ============================================================
 
-  Future<void> _openTask(
-    Map<String, dynamic> task,
-  ) async {
-    final String courseId =
-        (task['courseId'] ?? '')
-            .toString()
-            .trim();
+  Future<void> _openTask(Map<String, dynamic> task) async {
+    final String courseId = (task['courseId'] ?? '').toString().trim();
 
-    final String moduleId =
-        (task['moduleId'] ?? '')
-            .toString()
-            .trim();
+    final String moduleId = (task['moduleId'] ?? '').toString().trim();
 
-    if (courseId.isEmpty ||
-        moduleId.isEmpty) {
-      _showError(
-        'Course or module information is missing.',
-      );
+    if (courseId.isEmpty || moduleId.isEmpty) {
+      _showError('Course or module information is missing.');
 
       return;
     }
@@ -675,16 +520,15 @@ class _StudentAssignmentsScreenState
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            StudentModuleDetailScreen(
+        builder: (context) => StudentCourseModulesScreen(
           courseId: courseId,
-          courseCode:
-              (task['courseCode'] ?? '')
-                  .toString(),
-          courseTitle:
-              (task['courseTitle'] ?? '')
-                  .toString(),
-          moduleId: moduleId,
+          courseCode: (task['courseCode'] ?? '').toString(),
+          courseTitle: (task['courseTitle'] ?? '').toString(),
+          instructorName: (task['instructorName'] ?? '').toString(),
+          initialModuleId: moduleId,
+          initialAssessmentId: (task['assessmentId'] ?? task['id'] ?? '')
+              .toString(),
+          initialView: 1,
         ),
       ),
     );
@@ -700,9 +544,7 @@ class _StudentAssignmentsScreenState
   // DATE HELPERS
   // ============================================================
 
-  DateTime? _dateFrom(
-    dynamic value,
-  ) {
+  DateTime? _dateFrom(dynamic value) {
     if (value is Timestamp) {
       return value.toDate();
     }
@@ -714,18 +556,14 @@ class _StudentAssignmentsScreenState
     return null;
   }
 
-  String _formatDate(
-    dynamic value,
-  ) {
-    final DateTime? date =
-        _dateFrom(value);
+  String _formatDate(dynamic value) {
+    final DateTime? date = _dateFrom(value);
 
     if (date == null) {
       return 'No due date';
     }
 
-    final DateTime local =
-        date.toLocal();
+    final DateTime local = date.toLocal();
 
     const List<String> months = [
       'Jan',
@@ -744,10 +582,7 @@ class _StudentAssignmentsScreenState
 
     int hour = local.hour;
 
-    final String period =
-        hour >= 12
-            ? 'PM'
-            : 'AM';
+    final String period = hour >= 12 ? 'PM' : 'AM';
 
     if (hour == 0) {
       hour = 12;
@@ -755,22 +590,14 @@ class _StudentAssignmentsScreenState
       hour -= 12;
     }
 
-    final String minute =
-        local.minute
-            .toString()
-            .padLeft(
-              2,
-              '0',
-            );
+    final String minute = local.minute.toString().padLeft(2, '0');
 
     return '${months[local.month - 1]} '
         '${local.day}, ${local.year} • '
         '$hour:$minute $period';
   }
 
-  String _formatShortDate(
-    DateTime date,
-  ) {
+  String _formatShortDate(DateTime date) {
     const List<String> months = [
       'Jan',
       'Feb',
@@ -790,57 +617,37 @@ class _StudentAssignmentsScreenState
         '${date.day}, ${date.year}';
   }
 
-  bool _isPastDue(
-    Map<String, dynamic> task,
-  ) {
-    final DateTime? dueAt =
-        _dateFrom(
-      task['dueAt'],
-    );
+  bool _isPastDue(Map<String, dynamic> task) {
+    final DateTime? dueAt = _dateFrom(task['dueAt']);
 
     if (dueAt == null) {
       return false;
     }
 
-    return DateTime.now()
-        .isAfter(
-      dueAt,
-    );
+    return DateTime.now().isAfter(dueAt);
   }
 
-  bool _isDueToday(
-    Map<String, dynamic> task,
-  ) {
-    final DateTime? dueAt =
-        _dateFrom(
-      task['dueAt'],
-    );
+  bool _isDueToday(Map<String, dynamic> task) {
+    final DateTime? dueAt = _dateFrom(task['dueAt']);
 
     if (dueAt == null) {
       return false;
     }
 
-    final DateTime now =
-        DateTime.now();
+    final DateTime now = DateTime.now();
 
-    final DateTime local =
-        dueAt.toLocal();
+    final DateTime local = dueAt.toLocal();
 
-    return now.year ==
-            local.year &&
-        now.month ==
-            local.month &&
-        now.day ==
-            local.day;
+    return now.year == local.year &&
+        now.month == local.month &&
+        now.day == local.day;
   }
 
   // ============================================================
   // ASSESSMENT UI HELPERS
   // ============================================================
 
-  IconData _assessmentIcon(
-    String type,
-  ) {
+  IconData _assessmentIcon(String type) {
     switch (type.toLowerCase()) {
       case 'quiz':
         return Icons.quiz_outlined;
@@ -859,9 +666,7 @@ class _StudentAssignmentsScreenState
     }
   }
 
-  Color _assessmentColor(
-    String type,
-  ) {
+  Color _assessmentColor(String type) {
     switch (type.toLowerCase()) {
       case 'quiz':
         return primaryBlue;
@@ -880,9 +685,7 @@ class _StudentAssignmentsScreenState
     }
   }
 
-  String _capitalize(
-    String value,
-  ) {
+  String _capitalize(String value) {
     if (value.isEmpty) {
       return value;
     }
@@ -895,97 +698,57 @@ class _StudentAssignmentsScreenState
   // BADGE
   // ============================================================
 
-  ({
-    String text,
-    Color color,
-  }) _badgeFor(
-    Map<String, dynamic> task,
-  ) {
-    final String submissionStatus =
-        (task['submissionStatus'] ?? '')
-            .toString()
-            .toLowerCase();
+  ({String text, Color color}) _badgeFor(Map<String, dynamic> task) {
+    final String submissionStatus = (task['submissionStatus'] ?? '')
+        .toString()
+        .toLowerCase();
 
-    if (submissionStatus ==
-        'graded') {
-      final Map<String, dynamic>?
-          submission =
-          task['submission']
-              as Map<String, dynamic>?;
+    if (submissionStatus == 'graded') {
+      final Map<String, dynamic>? submission =
+          task['submission'] as Map<String, dynamic>?;
 
-      final dynamic score =
-          submission?['score'];
+      final dynamic score = submission?['score'];
 
-      final num totalPoints =
-          (task['totalPoints'] as num?) ??
-              0;
+      final num totalPoints = (task['totalPoints'] as num?) ?? 0;
 
       if (score is num) {
-        return (
-          text:
-              '$score / $totalPoints',
-          color: green,
-        );
+        return (text: '$score / $totalPoints', color: green);
       }
 
-      return (
-        text: 'Graded',
-        color: green,
-      );
+      return (text: 'Graded', color: green);
     }
 
-    if (submissionStatus ==
-        'submitted') {
-      return (
-        text: 'Submitted',
-        color: purple,
-      );
+    if (submissionStatus == 'submitted') {
+      return (text: 'Submitted', color: purple);
     }
 
     if (_isPastDue(task)) {
-      return (
-        text:
-            'Deadline Passed',
-        color: red,
-      );
+      return (text: 'Deadline Passed', color: red);
     }
 
     if (_isDueToday(task)) {
-      return (
-        text: 'Due Today',
-        color: orange,
-      );
+      return (text: 'Due Today', color: orange);
     }
 
-    return (
-      text: 'To Do',
-      color: primaryBlue,
-    );
+    return (text: 'To Do', color: primaryBlue);
   }
 
   // ============================================================
   // ERROR
   // ============================================================
 
-  void _showError(
-    String message,
-  ) {
+  void _showError(String message) {
     if (!mounted) {
       return;
     }
 
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          message,
-        ),
+        content: Text(message),
         backgroundColor: red,
-        behavior:
-            SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -995,99 +758,60 @@ class _StudentAssignmentsScreenState
   // ============================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
+    if (_isLoading) return const PageLoadingState();
     return Scaffold(
       backgroundColor: background,
-
-      appBar: AppBar(
-        automaticallyImplyLeading:
-            false,
-
-        backgroundColor: background,
-
-        elevation: 0,
-
-        centerTitle: true,
-
-        title: const Text(
-          'My Tasks',
-          style: TextStyle(
-            color: textDark,
-            fontSize: 18,
-            fontWeight:
-                FontWeight.w800,
-          ),
-        ),
-
-        actions: [
-          IconButton(
-            tooltip:
-                'Filter by due date',
-
-            onPressed:
-                _openCalendar,
-
-            icon: Icon(
-              Icons
-                  .calendar_month_outlined,
-
-              color:
-                  _selectedDate ==
-                          null
-                      ? textDark
-                      : primaryBlue,
-            ),
-          ),
-
-          if (_selectedDate != null)
-            IconButton(
-              tooltip:
-                  'Clear date filter',
-
-              onPressed:
-                  _clearDateFilter,
-
-              icon: const Icon(
-                Icons
-                    .close_rounded,
-
-                color: red,
-              ),
-            ),
-
-          IconButton(
-            tooltip:
-                'Refresh',
-
-            onPressed:
-                _loadTasks,
-
-            icon: const Icon(
-              Icons.refresh_rounded,
-              color: textDark,
-            ),
-          ),
-
-          const SizedBox(
-            width: 5,
-          ),
-        ],
-      ),
-
       body: SafeArea(
         child: Align(
-          alignment:
-              Alignment.topCenter,
-
+          alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints:
-                const BoxConstraints(
-              maxWidth: 1200,
+            constraints: const BoxConstraints(maxWidth: 1450),
+            child: WorkspaceScrollingBody(
+              header: Column(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      workspaceInset(MediaQuery.sizeOf(context).width),
+                      0,
+                      workspaceInset(MediaQuery.sizeOf(context).width),
+                      0,
+                    ),
+                    child: WorkspaceHeading(
+                      showEyebrow: false,
+                      title: 'My tasks',
+                      subtitle: 'Keep track of what is due and what you have completed.',
+                      eyebrow: 'YOUR LEARNING',
+                      actions: [
+                        IconButton(
+                          tooltip: 'Filter by due date',
+                          onPressed: _openCalendar,
+                          icon: Icon(
+                            Icons.calendar_month_outlined,
+                            color: _selectedDate == null
+                                ? textDark
+                                : primaryBlue,
+                          ),
+                        ),
+                        if (_selectedDate != null)
+                          IconButton(
+                            tooltip: 'Clear date filter',
+                            onPressed: _clearDateFilter,
+                            icon: Icon(Icons.close_rounded, color: red),
+                          ),
+                        IconButton(
+                          tooltip: 'Refresh',
+                          onPressed: _loadTasks,
+                          icon: Icon(Icons.refresh_rounded, color: textDark),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+              ),
+              body: _buildBody(),
             ),
-
-            child: _buildBody(),
           ),
         ),
       ),
@@ -1099,13 +823,12 @@ class _StudentAssignmentsScreenState
   // ============================================================
 
   Widget _buildBody() {
+    final tasks = _visibleTasks;
+    final width = MediaQuery.sizeOf(context).width;
+    final inset = workspaceInset(width);
+
     if (_isLoading) {
-      return const Center(
-        child:
-            CircularProgressIndicator(
-          color: primaryBlue,
-        ),
-      );
+      return Center(child: CircularProgressIndicator(color: primaryBlue));
     }
 
     if (_errorMessage != null) {
@@ -1120,78 +843,44 @@ class _StudentAssignmentsScreenState
 
         if (_selectedDate != null)
           Container(
-            margin:
-                const EdgeInsets.fromLTRB(
-              22,
-              8,
-              22,
-              0,
-            ),
+            margin: EdgeInsets.fromLTRB(inset, 8, inset, 0),
 
-            padding:
-                const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 10,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
 
-            decoration:
-                BoxDecoration(
-              color: primaryBlue
-                  .withValues(
-                alpha: 0.08,
-              ),
+            decoration: BoxDecoration(
+              color: primaryBlue.withValues(alpha: 0.08),
 
-              borderRadius:
-                  BorderRadius.circular(
-                12,
-              ),
+              borderRadius: BorderRadius.circular(12),
             ),
 
             child: Row(
               children: [
-                const Icon(
-                  Icons
-                      .event_rounded,
-                  color:
-                      primaryBlue,
-                  size: 18,
-                ),
+                Icon(Icons.event_rounded, color: primaryBlue, size: 18),
 
-                const SizedBox(
-                  width: 8,
-                ),
+                const SizedBox(width: 8),
 
                 Expanded(
                   child: Text(
                     'Showing tasks due ${_formatShortDate(_selectedDate!)}',
 
-                    style:
-                        const TextStyle(
-                      color:
-                          primaryBlue,
+                    style: TextStyle(
+                      color: primaryBlue,
                       fontSize: 11,
-                      fontWeight:
-                          FontWeight
-                              .w700,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
 
                 GestureDetector(
-                  onTap:
-                      _clearDateFilter,
+                  onTap: _clearDateFilter,
 
-                  child: const Text(
+                  child: Text(
                     'Clear',
 
-                    style:
-                        TextStyle(
-                      color:
-                          primaryBlue,
+                    style: TextStyle(
+                      color: primaryBlue,
                       fontSize: 11,
-                      fontWeight:
-                          FontWeight
-                              .w800,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
@@ -1202,62 +891,26 @@ class _StudentAssignmentsScreenState
         // ======================================================
         // TABS
         // ======================================================
-
         Container(
-          margin:
-              const EdgeInsets.symmetric(
-            horizontal: 22,
-            vertical: 12,
-          ),
+          margin: EdgeInsets.symmetric(horizontal: inset, vertical: 12),
 
-          padding:
-              const EdgeInsets.all(
-            4,
-          ),
+          padding: const EdgeInsets.all(4),
 
-          constraints:
-              const BoxConstraints(
-            maxWidth: 620,
-          ),
+          constraints: const BoxConstraints(maxWidth: 620),
 
-          decoration:
-              BoxDecoration(
-            color:
-                const Color(
-              0xFFEEEFF3,
-            ),
-
-            borderRadius:
-                BorderRadius.circular(
-              14,
-            ),
+          decoration: BoxDecoration(
+            color: AppColors.resolve(context, AppColors.blueTint),
+            border: Border.all(color: borderColor),
+            borderRadius: BorderRadius.circular(16),
           ),
 
           child: Row(
             children: [
-              Expanded(
-                child:
-                    _buildTab(
-                  'To Do ($_todoCount)',
-                  0,
-                ),
-              ),
+              Expanded(child: _buildTab('To Do ($_todoCount)', 0)),
 
-              Expanded(
-                child:
-                    _buildTab(
-                  'Submitted ($_submittedCount)',
-                  1,
-                ),
-              ),
+              Expanded(child: _buildTab('Submitted ($_submittedCount)', 1)),
 
-              Expanded(
-                child:
-                    _buildTab(
-                  'Completed ($_completedCount)',
-                  2,
-                ),
-              ),
+              Expanded(child: _buildTab('Completed ($_completedCount)', 2)),
             ],
           ),
         ),
@@ -1265,40 +918,43 @@ class _StudentAssignmentsScreenState
         // ======================================================
         // TASK LIST
         // ======================================================
-
         Expanded(
           child: RefreshIndicator(
-            onRefresh:
-                _loadTasks,
+            onRefresh: _loadTasks,
 
-            color:
-                primaryBlue,
+            color: primaryBlue,
 
-            child: _visibleTasks
-                    .isEmpty
+            child: tasks.isEmpty
                 ? _buildEmptyList()
                 : ListView.builder(
-                    physics:
-                        const AlwaysScrollableScrollPhysics(),
+                    physics: const AlwaysScrollableScrollPhysics(),
 
-                    padding:
-                        const EdgeInsets.fromLTRB(
-                      22,
-                      8,
-                      22,
-                      40,
-                    ),
+                    padding: EdgeInsets.fromLTRB(inset, 8, inset, 40),
 
-                    itemCount:
-                        _visibleTasks.length,
+                    itemCount: tasks.length,
 
-                    itemBuilder: (
-                      context,
-                      index,
-                    ) {
-                      return _buildTaskCard(
-                        _visibleTasks[
-                            index],
+                    itemBuilder: (context, index) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (_selectedTab == 0 &&
+                              (index == 0 ||
+                                  _isPastDue(tasks[index]) !=
+                                      _isPastDue(tasks[index - 1])))
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Text(
+                                _isPastDue(tasks[index])
+                                    ? 'Overdue'
+                                    : 'Upcoming',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: textGrey,
+                                ),
+                              ),
+                            ),
+                          _buildTaskCard(tasks[index]),
+                        ],
                       );
                     },
                   ),
@@ -1312,12 +968,8 @@ class _StudentAssignmentsScreenState
   // TAB
   // ============================================================
 
-  Widget _buildTab(
-    String title,
-    int index,
-  ) {
-    final bool selected =
-        _selectedTab == index;
+  Widget _buildTab(String title, int index) {
+    final bool selected = _selectedTab == index;
 
     return GestureDetector(
       onTap: () {
@@ -1327,50 +979,18 @@ class _StudentAssignmentsScreenState
       },
 
       child: AnimatedContainer(
-        duration:
-            const Duration(
-          milliseconds: 180,
-        ),
+        duration: const Duration(milliseconds: 180),
 
-        padding:
-            const EdgeInsets.symmetric(
-          vertical: 10,
-          horizontal: 3,
-        ),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 3),
 
-        alignment:
-            Alignment.center,
+        alignment: Alignment.center,
 
-        decoration:
-            BoxDecoration(
+        decoration: BoxDecoration(
           color: selected
-              ? Colors.white
+              ? AppColors.resolve(context, Colors.white)
               : Colors.transparent,
 
-          borderRadius:
-              BorderRadius.circular(
-            10,
-          ),
-
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color:
-                        Colors.black
-                            .withValues(
-                      alpha: 0.04,
-                    ),
-
-                    blurRadius: 8,
-
-                    offset:
-                        const Offset(
-                      0,
-                      2,
-                    ),
-                  ),
-                ]
-              : [],
+          borderRadius: BorderRadius.circular(12),
         ),
 
         child: FittedBox(
@@ -1381,20 +1001,12 @@ class _StudentAssignmentsScreenState
 
             maxLines: 1,
 
-            style:
-                TextStyle(
-              color: selected
-                  ? primaryBlue
-                  : textGrey,
+            style: TextStyle(
+              color: selected ? primaryBlue : textGrey,
 
               fontSize: 11.5,
 
-              fontWeight:
-                  selected
-                      ? FontWeight
-                          .w800
-                      : FontWeight
-                          .w600,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
             ),
           ),
         ),
@@ -1406,147 +1018,82 @@ class _StudentAssignmentsScreenState
   // TASK CARD
   // ============================================================
 
-  Widget _buildTaskCard(
-    Map<String, dynamic> task,
-  ) {
-    final String title =
-        (task['title'] ??
-                'Assessment')
-            .toString();
+  Widget _buildTaskCard(Map<String, dynamic> task) {
+    final String title = (task['title'] ?? 'Assessment').toString();
 
-    final String type =
-        (task['assessmentType'] ??
-                'assessment')
-            .toString()
-            .toLowerCase();
+    final String type = (task['assessmentType'] ?? 'assessment')
+        .toString()
+        .toLowerCase();
 
-    final String courseCode =
-        (task['courseCode'] ?? '')
-            .toString();
+    final String courseCode = (task['courseCode'] ?? '').toString();
 
-    final String courseTitle =
-        (task['courseTitle'] ?? '')
-            .toString();
+    final String courseTitle = (task['courseTitle'] ?? '').toString();
 
-    final String moduleTitle =
-        (task['moduleTitle'] ?? '')
-            .toString();
+    final String moduleTitle = (task['moduleTitle'] ?? '').toString();
 
-    final num points =
-        (task['totalPoints'] as num?) ??
-            0;
+    final num points = (task['totalPoints'] as num?) ?? 0;
 
-    final ({
-      String text,
-      Color color,
-    }) badge =
-        _badgeFor(
-      task,
-    );
+    final ({String text, Color color}) badge = _badgeFor(task);
 
-    final Color typeColor =
-        _assessmentColor(
-      type,
-    );
+    final Color typeColor = _assessmentColor(type);
 
-    final String subtitle =
-        [
-          if (courseCode.isNotEmpty)
-            courseCode,
-          if (courseTitle.isNotEmpty)
-            courseTitle,
-        ].join(' • ');
+    final String subtitle = [
+      if (courseCode.isNotEmpty) courseCode,
+      if (courseTitle.isNotEmpty) courseTitle,
+    ].join(' • ');
 
     return Padding(
-      padding:
-          const EdgeInsets.only(
-        bottom: 13,
-      ),
+      padding: const EdgeInsets.only(bottom: 13),
 
       child: Material(
-        color: Colors.white,
+        color: AppColors.resolve(context, Colors.white),
 
-        borderRadius:
-            BorderRadius.circular(
-          18,
-        ),
+        borderRadius: BorderRadius.circular(18),
 
         child: InkWell(
           onTap: () {
-            _openTask(
-              task,
-            );
+            _openTask(task);
           },
 
-          borderRadius:
-              BorderRadius.circular(
-            18,
-          ),
+          borderRadius: BorderRadius.circular(18),
 
           child: Container(
-            padding:
-                const EdgeInsets.all(
-              16,
-            ),
+            padding: const EdgeInsets.all(16),
 
-            decoration:
-                BoxDecoration(
-              borderRadius:
-                  BorderRadius
-                      .circular(
-                18,
-              ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
 
-              border: Border.all(
-                color:
-                    borderColor,
-              ),
+              border: Border.all(color: borderColor),
             ),
 
             child: Row(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
 
               children: [
                 Container(
                   width: 49,
                   height: 49,
 
-                  decoration:
-                      BoxDecoration(
-                    color: typeColor
-                        .withValues(
-                      alpha: 0.10,
-                    ),
+                  decoration: BoxDecoration(
+                    color: typeColor.withValues(alpha: 0.10),
 
-                    borderRadius:
-                        BorderRadius
-                            .circular(
-                      14,
-                    ),
+                    borderRadius: BorderRadius.circular(14),
                   ),
 
                   child: Icon(
-                    _assessmentIcon(
-                      type,
-                    ),
+                    _assessmentIcon(type),
 
-                    color:
-                        typeColor,
+                    color: typeColor,
 
                     size: 24,
                   ),
                 ),
 
-                const SizedBox(
-                  width: 13,
-                ),
+                const SizedBox(width: 13),
 
                 Expanded(
                   child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment
-                            .start,
+                    crossAxisAlignment: CrossAxisAlignment.start,
 
                     children: [
                       Row(
@@ -1555,164 +1102,103 @@ class _StudentAssignmentsScreenState
                             child: Text(
                               title,
 
-                              style:
-                                  const TextStyle(
-                                color:
-                                    textDark,
+                              style: TextStyle(
+                                color: textDark,
 
-                                fontSize:
-                                    14,
+                                fontSize: 14,
 
-                                fontWeight:
-                                    FontWeight
-                                        .w800,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
                           ),
 
-                          const SizedBox(
-                            width: 8,
-                          ),
+                          const SizedBox(width: 8),
 
                           Container(
-                            padding:
-                                const EdgeInsets
-                                    .symmetric(
-                              horizontal:
-                                  8,
-                              vertical:
-                                  5,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 5,
                             ),
 
-                            decoration:
-                                BoxDecoration(
-                              color: badge
-                                  .color
-                                  .withValues(
-                                alpha:
-                                    0.10,
-                              ),
+                            decoration: BoxDecoration(
+                              color: badge.color.withValues(alpha: 0.10),
 
-                              borderRadius:
-                                  BorderRadius
-                                      .circular(
-                                8,
-                              ),
+                              borderRadius: BorderRadius.circular(8),
                             ),
 
                             child: Text(
                               badge.text,
 
-                              style:
-                                  TextStyle(
-                                color:
-                                    badge.color,
+                              style: TextStyle(
+                                color: badge.color,
 
-                                fontSize:
-                                    8.5,
+                                fontSize: 8.5,
 
-                                fontWeight:
-                                    FontWeight
-                                        .w800,
+                                fontWeight: FontWeight.w800,
                               ),
                             ),
                           ),
                         ],
                       ),
 
-                      const SizedBox(
-                        height: 5,
-                      ),
+                      const SizedBox(height: 5),
 
                       Text(
                         '${_capitalize(type)} • $points points',
 
-                        style:
-                            TextStyle(
-                          color:
-                              typeColor,
+                        style: TextStyle(
+                          color: typeColor,
 
-                          fontSize:
-                              10.5,
+                          fontSize: 10.5,
 
-                          fontWeight:
-                              FontWeight
-                                  .w700,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
 
-                      if (subtitle
-                          .isNotEmpty) ...[
-                        const SizedBox(
-                          height: 5,
-                        ),
+                      if (subtitle.isNotEmpty) ...[
+                        const SizedBox(height: 5),
 
                         Text(
                           subtitle,
 
                           maxLines: 1,
 
-                          overflow:
-                              TextOverflow
-                                  .ellipsis,
+                          overflow: TextOverflow.ellipsis,
 
-                          style:
-                              const TextStyle(
-                            color:
-                                textGrey,
+                          style: TextStyle(
+                            color: textGrey,
 
-                            fontSize:
-                                10.5,
+                            fontSize: 10.5,
 
-                            fontWeight:
-                                FontWeight
-                                    .w600,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
 
-                      if (moduleTitle
-                          .isNotEmpty) ...[
-                        const SizedBox(
-                          height: 3,
-                        ),
+                      if (moduleTitle.isNotEmpty) ...[
+                        const SizedBox(height: 3),
 
                         Text(
                           moduleTitle,
 
                           maxLines: 1,
 
-                          overflow:
-                              TextOverflow
-                                  .ellipsis,
+                          overflow: TextOverflow.ellipsis,
 
-                          style:
-                              const TextStyle(
-                            color:
-                                textGrey,
-
-                            fontSize:
-                                10,
-                          ),
+                          style: TextStyle(color: textGrey, fontSize: 10),
                         ),
                       ],
 
-                      const SizedBox(
-                        height: 9,
-                      ),
+                      const SizedBox(height: 9),
 
                       Row(
                         children: [
                           Icon(
-                            Icons
-                                .schedule_rounded,
+                            Icons.schedule_rounded,
 
                             color:
-                                _isPastDue(
-                                      task,
-                                    ) &&
-                                    (task['submissionStatus'] ??
-                                            '')
+                                _isPastDue(task) &&
+                                    (task['submissionStatus'] ?? '')
                                         .toString()
                                         .isEmpty
                                 ? red
@@ -1721,45 +1207,32 @@ class _StudentAssignmentsScreenState
                             size: 15,
                           ),
 
-                          const SizedBox(
-                            width: 5,
-                          ),
+                          const SizedBox(width: 5),
 
                           Expanded(
                             child: Text(
                               'Due ${_formatDate(task['dueAt'])}',
 
-                              style:
-                                  TextStyle(
+                              style: TextStyle(
                                 color:
-                                    _isPastDue(
-                                              task,
-                                            ) &&
-                                            (task['submissionStatus'] ??
-                                                    '')
-                                                .toString()
-                                                .isEmpty
-                                        ? red
-                                        : textGrey,
+                                    _isPastDue(task) &&
+                                        (task['submissionStatus'] ?? '')
+                                            .toString()
+                                            .isEmpty
+                                    ? red
+                                    : textGrey,
 
-                                fontSize:
-                                    10.5,
+                                fontSize: 10.5,
 
-                                fontWeight:
-                                    FontWeight
-                                        .w500,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ),
 
                           const Icon(
-                            Icons
-                                .chevron_right_rounded,
+                            Icons.chevron_right_rounded,
 
-                            color:
-                                Color(
-                              0xFF9BA4B4,
-                            ),
+                            color: Color(0xFF9BA4B4),
 
                             size: 21,
                           ),
@@ -1786,78 +1259,49 @@ class _StudentAssignmentsScreenState
     IconData icon;
 
     if (_selectedDate != null) {
-      title =
-          'No tasks on this date';
+      title = 'No tasks on this date';
 
       message =
           'There are no assessments due on ${_formatShortDate(_selectedDate!)}.';
 
-      icon =
-          Icons.event_available_outlined;
+      icon = Icons.event_available_outlined;
     } else if (_selectedTab == 0) {
-      title =
-          'You are all caught up';
+      title = 'You are all caught up';
 
-      message =
-          'You currently have no pending assessments.';
+      message = 'You currently have no pending assessments.';
 
-      icon =
-          Icons.check_circle_outline_rounded;
+      icon = Icons.check_circle_outline_rounded;
     } else if (_selectedTab == 1) {
-      title =
-          'No submitted assessments';
+      title = 'No submitted assessments';
 
-      message =
-          'Assessments waiting for instructor grading will appear here.';
+      message = 'Assessments waiting for instructor grading will appear here.';
 
-      icon =
-          Icons.upload_file_outlined;
+      icon = Icons.upload_file_outlined;
     } else {
-      title =
-          'No completed assessments';
+      title = 'No completed assessments';
 
-      message =
-          'Your graded assessments will appear here.';
+      message = 'Your graded assessments will appear here.';
 
-      icon =
-          Icons.grade_outlined;
+      icon = Icons.grade_outlined;
     }
 
     return ListView(
-      physics:
-          const AlwaysScrollableScrollPhysics(),
+      physics: const AlwaysScrollableScrollPhysics(),
 
-      padding:
-          const EdgeInsets.fromLTRB(
-        22,
-        65,
-        22,
-        40,
-      ),
+      padding: const EdgeInsets.fromLTRB(22, 65, 22, 40),
 
       children: [
         Container(
-          width:
-              double.infinity,
+          width: double.infinity,
 
-          padding:
-              const EdgeInsets.all(
-            30,
-          ),
+          padding: const EdgeInsets.all(30),
 
-          decoration:
-              BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: AppColors.resolve(context, Colors.white),
 
-            borderRadius:
-                BorderRadius.circular(
-              18,
-            ),
+            borderRadius: BorderRadius.circular(18),
 
-            border: Border.all(
-              color:
-                  borderColor,
-            ),
+            border: Border.all(color: borderColor),
           ),
 
           child: Column(
@@ -1866,70 +1310,39 @@ class _StudentAssignmentsScreenState
                 width: 62,
                 height: 62,
 
-                decoration:
-                    BoxDecoration(
-                  color: primaryBlue
-                      .withValues(
-                    alpha: 0.09,
-                  ),
+                decoration: BoxDecoration(
+                  color: primaryBlue.withValues(alpha: 0.09),
 
-                  shape:
-                      BoxShape.circle,
+                  shape: BoxShape.circle,
                 ),
 
-                child: Icon(
-                  icon,
-                  color:
-                      primaryBlue,
-                  size: 29,
-                ),
+                child: Icon(icon, color: primaryBlue, size: 29),
               ),
 
-              const SizedBox(
-                height: 13,
-              ),
+              const SizedBox(height: 13),
 
               Text(
                 title,
 
-                textAlign:
-                    TextAlign.center,
+                textAlign: TextAlign.center,
 
-                style:
-                    const TextStyle(
-                  color:
-                      textDark,
+                style: TextStyle(
+                  color: textDark,
 
-                  fontSize:
-                      15,
+                  fontSize: 15,
 
-                  fontWeight:
-                      FontWeight
-                          .w800,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
 
-              const SizedBox(
-                height: 5,
-              ),
+              const SizedBox(height: 5),
 
               Text(
                 message,
 
-                textAlign:
-                    TextAlign.center,
+                textAlign: TextAlign.center,
 
-                style:
-                    const TextStyle(
-                  color:
-                      textGrey,
-
-                  fontSize:
-                      11,
-
-                  height:
-                      1.5,
-                ),
+                style: TextStyle(color: textGrey, fontSize: 11, height: 1.5),
               ),
             ],
           ),
@@ -1944,89 +1357,45 @@ class _StudentAssignmentsScreenState
 
   Widget _buildErrorState() {
     return RefreshIndicator(
-      onRefresh:
-          _loadTasks,
+      onRefresh: _loadTasks,
 
-      color:
-          primaryBlue,
+      color: primaryBlue,
 
       child: ListView(
-        physics:
-            const AlwaysScrollableScrollPhysics(),
+        physics: const AlwaysScrollableScrollPhysics(),
 
-        padding:
-            const EdgeInsets.all(
-          30,
-        ),
+        padding: const EdgeInsets.all(30),
 
         children: [
-          const SizedBox(
-            height: 120,
-          ),
+          const SizedBox(height: 120),
 
-          const Icon(
-            Icons
-                .error_outline_rounded,
+          Icon(Icons.error_outline_rounded, color: red, size: 50),
 
-            color: red,
-
-            size: 50,
-          ),
-
-          const SizedBox(
-            height: 13,
-          ),
+          const SizedBox(height: 13),
 
           Text(
-            _errorMessage ??
-                'Unable to load your tasks.',
+            _errorMessage ?? 'Unable to load your tasks.',
 
-            textAlign:
-                TextAlign.center,
+            textAlign: TextAlign.center,
 
-            style:
-                const TextStyle(
-              color: textGrey,
-
-              fontWeight:
-                  FontWeight.w600,
-            ),
+            style: TextStyle(color: textGrey, fontWeight: FontWeight.w600),
           ),
 
-          const SizedBox(
-            height: 20,
-          ),
+          const SizedBox(height: 20),
 
           Center(
-            child:
-                ElevatedButton.icon(
-              onPressed:
-                  _loadTasks,
+            child: ElevatedButton.icon(
+              onPressed: _loadTasks,
 
-              icon: const Icon(
-                Icons
-                    .refresh_rounded,
+              icon: const Icon(Icons.refresh_rounded, color: Colors.white),
 
-                color:
-                    Colors.white,
-              ),
-
-              label:
-                  const Text(
+              label: const Text(
                 'Try Again',
 
-                style:
-                    TextStyle(
-                  color:
-                      Colors.white,
-                ),
+                style: TextStyle(color: Colors.white),
               ),
 
-              style:
-                  ElevatedButton.styleFrom(
-                backgroundColor:
-                    primaryBlue,
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: primaryBlue),
             ),
           ),
         ],

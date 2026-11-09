@@ -1,3 +1,5 @@
+import '../../core/app_colors.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -26,14 +28,14 @@ class StudentProfileEditor extends StatefulWidget {
 }
 
 class _StudentProfileEditorState extends State<StudentProfileEditor> {
-  static const _blue = Color(0xFF1769FF);
-  static const _ink = Color(0xFF10182F);
-  static const _muted = Color(0xFF68738A);
-  static const _border = Color(0xFFE6EAF0);
+  Color get _blue => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get _ink => AppColors.resolve(context, AppColors.darkText);
+  Color get _muted => AppColors.resolve(context, AppColors.secondaryText);
+  Color get _border => AppColors.resolve(context, AppColors.inputBorder);
   final _form = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _email = TextEditingController();
-  final _service = StudentProfileService();
+  late final _service = StudentProfileService();
   int? _year;
   String? _pendingEmail;
   bool _saving = false;
@@ -239,15 +241,15 @@ class _StudentProfileEditorState extends State<StudentProfileEditor> {
     labelText: label,
     prefixIcon: Icon(icon, color: _muted, size: 21),
     filled: true,
-    fillColor: const Color(0xFFF8FAFC),
+    fillColor: AppColors.resolve(context, AppColors.background),
     border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
     enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: _border),
+      borderSide: BorderSide(color: _border),
     ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(12),
-      borderSide: const BorderSide(color: _blue, width: 1.5),
+      borderSide: BorderSide(color: _blue, width: 1.5),
     ),
   );
 
@@ -255,7 +257,7 @@ class _StudentProfileEditorState extends State<StudentProfileEditor> {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(24),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surface,
       borderRadius: BorderRadius.circular(20),
       border: Border.all(color: _border),
     ),
@@ -264,7 +266,7 @@ class _StudentProfileEditorState extends State<StudentProfileEditor> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               Icon(Icons.manage_accounts_outlined, color: _blue),
               SizedBox(width: 10),
@@ -273,13 +275,13 @@ class _StudentProfileEditorState extends State<StudentProfileEditor> {
                 style: TextStyle(
                   color: _ink,
                   fontSize: 20,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Manage your display name, year level and email in one place.',
             style: TextStyle(color: _muted, height: 1.5),
           ),
@@ -380,13 +382,15 @@ class _StudentProfileEditorState extends State<StudentProfileEditor> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FF),
+                color: AppColors.resolve(context, AppColors.blueTint),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFBFDBFE)),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
               ),
               child: Text(
                 'Confirmation sent to $_pendingEmail. Your registered email remains $_registeredEmail until you confirm the new address.',
-                style: const TextStyle(color: _ink, height: 1.5),
+                style: TextStyle(color: _ink, height: 1.5),
               ),
             ),
             const SizedBox(height: 12),
@@ -442,11 +446,11 @@ class _StudentProfileEditorState extends State<StudentProfileEditor> {
                     ),
                   ),
                   icon: _saving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 17,
                           height: 17,
                           child: CircularProgressIndicator(
-                            color: Colors.white,
+                            color: Theme.of(context).colorScheme.onPrimary,
                             strokeWidth: 2,
                           ),
                         )
@@ -460,7 +464,7 @@ class _StudentProfileEditorState extends State<StudentProfileEditor> {
                     : _pendingEmail != null
                     ? 'Email confirmation pending.'
                     : 'Your profile is up to date.',
-                style: const TextStyle(color: _muted, fontSize: 12),
+                style: TextStyle(color: _muted, fontSize: 12),
               ),
             ],
           ),

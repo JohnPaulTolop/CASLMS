@@ -1,3 +1,5 @@
+import '../../core/app_colors.dart';
+
 import 'package:flutter/material.dart';
 
 /// Adds pointer/focus feedback without owning taps or adding a tab stop.
@@ -6,7 +8,7 @@ class DashboardHover extends StatefulWidget {
   const DashboardHover({
     super.key,
     required this.child,
-    this.accent = const Color(0xFF2563EB),
+    this.accent = AppColors.primaryBlue,
     this.borderRadius = const BorderRadius.all(Radius.circular(18)),
     this.lift = 3,
     this.showBorder = true,
@@ -31,7 +33,6 @@ class _DashboardHoverState extends State<DashboardHover> {
   @override
   Widget build(BuildContext context) {
     final active = widget.enabled && (_hovered || _focused);
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return MouseRegion(
       // Preserve child cursors: informational cards must not imply a click.
       cursor: MouseCursor.defer,
@@ -43,26 +44,9 @@ class _DashboardHoverState extends State<DashboardHover> {
         includeSemantics: false,
         onFocusChange: (focused) => setState(() => _focused = focused),
         child: AnimatedContainer(
-          duration: reduceMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 180),
+          duration: Duration.zero,
           curve: Curves.easeOutCubic,
-          transform: Matrix4.translationValues(
-            0,
-            active && !reduceMotion ? -widget.lift : 0,
-            0,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: widget.borderRadius,
-            boxShadow: [
-              BoxShadow(
-                color: widget.accent.withValues(alpha: active ? .12 : 0),
-                blurRadius: active ? 20 : 0,
-                spreadRadius: active ? 1 : 0,
-                offset: Offset(0, active ? 7 : 0),
-              ),
-            ],
-          ),
+          decoration: BoxDecoration(borderRadius: widget.borderRadius),
           foregroundDecoration: BoxDecoration(
             borderRadius: widget.borderRadius,
             border: Border.all(

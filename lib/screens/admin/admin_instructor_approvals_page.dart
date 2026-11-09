@@ -1,3 +1,5 @@
+import '../../core/app_colors.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -5,7 +7,6 @@ import '../../services/instructor_approval_service.dart';
 
 class AdminInstructorApprovalsScreen extends StatefulWidget {
   const AdminInstructorApprovalsScreen({super.key, this.applicationId = ''});
-
   final String applicationId;
 
   @override
@@ -15,21 +16,21 @@ class AdminInstructorApprovalsScreen extends StatefulWidget {
 
 class _AdminInstructorApprovalsScreenState
     extends State<AdminInstructorApprovalsScreen> {
-  static const Color adminTheme = Color(0xFF4F46E5);
+  static const Color adminTheme = AppColors.primaryBlue;
 
-  static const Color background = Color(0xFFF8F9FA);
+  static const Color background = AppColors.background;
 
-  static const Color textDark = Color(0xFF10182F);
+  static const Color textDark = AppColors.darkText;
 
-  static const Color textGrey = Color(0xFF68738A);
+  static const Color textGrey = AppColors.secondaryText;
 
-  static const Color borderColor = Color(0xFFE6EAF0);
+  static const Color borderColor = AppColors.inputBorder;
 
-  static const Color green = Color(0xFF26A65B);
+  static const Color green = AppColors.green;
 
-  static const Color red = Color(0xFFFF4B4B);
+  static const Color red = AppColors.error;
 
-  static const Color orange = Color(0xFFFF9418);
+  static const Color orange = AppColors.amber;
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -99,7 +100,7 @@ class _AdminInstructorApprovalsScreenState
             return AlertDialog(
               title: const Text(
                 'Approve Instructor',
-                style: TextStyle(fontWeight: FontWeight.w800),
+                style: TextStyle(fontWeight: FontWeight.w700),
               ),
               content: Text(
                 'Approve ${_name(application)} as a CASLMS instructor?',
@@ -221,7 +222,7 @@ class _AdminInstructorApprovalsScreenState
               style: TextStyle(
                 color: textDark,
                 fontSize: 18,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
             Text(
@@ -302,9 +303,7 @@ class _AdminInstructorApprovalsScreenState
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF4F46E5), Color(0xFF6D63F1)],
-        ),
+        color: AppColors.primaryBlue,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
@@ -332,7 +331,7 @@ class _AdminInstructorApprovalsScreenState
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -416,7 +415,7 @@ class _AdminInstructorApprovalsScreenState
                   _initials(_name(application)),
                   style: const TextStyle(
                     color: adminTheme,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -430,7 +429,7 @@ class _AdminInstructorApprovalsScreenState
                       style: const TextStyle(
                         color: textDark,
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -587,7 +586,7 @@ class _AdminInstructorApprovalsScreenState
         style: TextStyle(
           color: color,
           fontSize: 9.5,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -621,7 +620,7 @@ class _AdminInstructorApprovalsScreenState
             const Text(
               'Unable to load instructor applications.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: textDark, fontWeight: FontWeight.w800),
+              style: TextStyle(color: textDark, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 8),
             Text(
@@ -788,7 +787,7 @@ class _DenialReasonDialogState extends State<_DenialReasonDialog> {
     return AlertDialog(
       title: const Text(
         'Deny Application',
-        style: TextStyle(fontWeight: FontWeight.w800),
+        style: TextStyle(fontWeight: FontWeight.w700),
       ),
       content: SingleChildScrollView(
         child: Column(
@@ -830,7 +829,7 @@ class _DenialReasonDialogState extends State<_DenialReasonDialog> {
             Navigator.of(context).pop(reason);
           },
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFFF4B4B),
+            backgroundColor: AppColors.error,
             foregroundColor: Colors.white,
           ),
           child: const Text('Deny Application'),

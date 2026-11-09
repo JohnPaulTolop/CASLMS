@@ -1,3 +1,8 @@
+import '../shared/page_loading_state.dart';
+import '../shared/aligned_page_app_bar.dart';
+import '../../core/app_colors.dart';
+import '../../services/course_invitation_service.dart';
+import 'invite_student_dialog.dart';
 import '../shared/grading_ui.dart';
 
 import 'dart:async';
@@ -11,6 +16,7 @@ import '../shared/live_classes_page.dart';
 import 'instructor_assessment_grading_page.dart';
 import 'instructor_semester_grades_page.dart';
 import 'instructor_class_details_page.dart';
+import 'instructor_module_detail_page.dart';
 
 class InstructorSectionDetailsScreen extends StatefulWidget {
   const InstructorSectionDetailsScreen({
@@ -51,18 +57,24 @@ class _SectionViewData {
 
 class _InstructorSectionDetailsScreenState
     extends State<InstructorSectionDetailsScreen> {
-  static const Color teal = Color(0xFF00897B);
-  static const Color darkTeal = Color(0xFF00695C);
-  static const Color background = Color(0xFFF5F8FC);
-  static const Color heading = Color(0xFF172B4D);
-  static const Color secondaryText = Color(0xFF6B7C93);
-  static const Color borderColor = Color(0xFFE5ECF3);
+  Color get teal => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get darkTeal => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get heading => AppColors.resolve(context, AppColors.darkText);
+  Color get secondaryText =>
+      AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
   final CourseSectionService _sections = CourseSectionService();
 
   late Future<_SectionViewData> _future;
 
+  late final _invitationStream = _db
+      .collection('courseInvitations')
+      .where('courseId', isEqualTo: widget.courseId)
+      .snapshots();
+  final Set<String> _cancellingInvitations = {};
   bool _transferring = false;
   bool _overviewExpanded = false;
   final List<StreamSubscription> _changes = [];
@@ -80,7 +92,6 @@ class _InstructorSectionDetailsScreenState
             .collection(collection)
             .where('courseId', isEqualTo: widget.courseId)
             .snapshots()
-            .skip(1)
             .listen(
               (_) {
                 _refreshTimer?.cancel();
@@ -276,7 +287,10 @@ class _InstructorSectionDetailsScreenState
 
               return ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: const Color(0xFFE0F2F1),
+                  backgroundColor: AppColors.resolve(
+                    context,
+                    AppColors.greenTint,
+                  ),
                   foregroundColor: darkTeal,
                   child: Text(
                     (name.isNotEmpty ? name : id).substring(0, 1).toUpperCase(),
@@ -366,12 +380,31 @@ class _InstructorSectionDetailsScreenState
       MaterialPageRoute<void>(
         builder: (_) => InstructorClassDetailsScreen(
           courseId: widget.courseId,
+          sectionId: widget.sectionId,
           courseCode: _text(data.course['code']),
           courseTitle: _text(data.course['title']),
         ),
       ),
     );
 
+    if (mounted) await _refresh();
+  }
+
+  Future<void> _openModule(
+    Map<String, dynamic> module,
+    _SectionViewData data,
+  ) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => InstructorModuleDetailScreen(
+          courseId: widget.courseId,
+          moduleId: _text(module['moduleId'] ?? module['id']),
+          courseCode: _text(data.course['code']),
+          courseTitle: _text(data.course['title']),
+          moduleTitle: _text(module['title']),
+        ),
+      ),
+    );
     if (mounted) await _refresh();
   }
 
@@ -387,16 +420,9 @@ class _InstructorSectionDetailsScreenState
       width: double.infinity,
       padding: padding,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: heading.withValues(alpha: 0.035),
-            blurRadius: 16,
-            offset: const Offset(0, 5),
-          ),
-        ],
       ),
       child: child,
     );
@@ -411,16 +437,16 @@ class _InstructorSectionDetailsScreenState
             children: [
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 17,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
                   color: heading,
                 ),
               ),
               const SizedBox(height: 5),
               Text(
                 subtitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   color: secondaryText,
                   height: 1.4,
@@ -436,10 +462,11 @@ class _InstructorSectionDetailsScreenState
 
   Widget _pill(
     String label, {
-    Color color = teal,
+    Color? color,
     Color? backgroundColor,
     IconData? icon,
   }) {
+    color ??= teal;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
@@ -457,7 +484,7 @@ class _InstructorSectionDetailsScreenState
             label,
             style: TextStyle(
               fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               color: color,
             ),
           ),
@@ -470,7 +497,7 @@ class _InstructorSectionDetailsScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F8FC),
+        color: AppColors.resolve(context, AppColors.background),
         borderRadius: BorderRadius.circular(13),
         border: Border.all(color: borderColor),
       ),
@@ -480,10 +507,10 @@ class _InstructorSectionDetailsScreenState
           const SizedBox(height: 7),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               color: heading,
               fontSize: 18,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 3),
@@ -492,7 +519,7 @@ class _InstructorSectionDetailsScreenState
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               color: secondaryText,
               fontSize: 10,
               fontWeight: FontWeight.w600,
@@ -507,7 +534,7 @@ class _InstructorSectionDetailsScreenState
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
       decoration: BoxDecoration(
-        color: const Color(0xFFE7F6F3),
+        color: AppColors.resolve(context, AppColors.greenTint),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -517,7 +544,7 @@ class _InstructorSectionDetailsScreenState
           const SizedBox(width: 7),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               color: darkTeal,
               fontSize: 11,
               fontWeight: FontWeight.w700,
@@ -536,7 +563,7 @@ class _InstructorSectionDetailsScreenState
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: const Color(0xFFE7F6F3),
+          color: AppColors.resolve(context, AppColors.greenTint),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Icon(fallbackIcon, color: teal, size: 22),
@@ -554,18 +581,16 @@ class _InstructorSectionDetailsScreenState
       width: 44,
       height: 44,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFFDDF5F0), Color(0xFFB9E9DF)],
-        ),
+      decoration: BoxDecoration(
+        color: AppColors.resolve(context, AppColors.greenTint),
         borderRadius: BorderRadius.all(Radius.circular(14)),
       ),
       child: Text(
         initials,
-        style: const TextStyle(
+        style: TextStyle(
           color: darkTeal,
           fontSize: 13,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -581,7 +606,7 @@ class _InstructorSectionDetailsScreenState
     return Container(
       margin: const EdgeInsets.only(top: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: borderColor),
       ),
@@ -605,10 +630,10 @@ class _InstructorSectionDetailsScreenState
                         title,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: heading,
                           fontSize: 13,
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 5),
@@ -616,7 +641,7 @@ class _InstructorSectionDetailsScreenState
                         subtitle,
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: secondaryText,
                           fontSize: 11,
                           height: 1.4,
@@ -647,7 +672,7 @@ class _InstructorSectionDetailsScreenState
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: const Color(0xFFE7F6F3),
+              color: AppColors.resolve(context, AppColors.greenTint),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(icon, size: 30, color: teal),
@@ -656,9 +681,9 @@ class _InstructorSectionDetailsScreenState
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               color: heading,
             ),
           ),
@@ -666,11 +691,7 @@ class _InstructorSectionDetailsScreenState
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: secondaryText,
-              fontSize: 12,
-              height: 1.5,
-            ),
+            style: TextStyle(color: secondaryText, fontSize: 12, height: 1.5),
           ),
         ],
       ),
@@ -690,16 +711,9 @@ class _InstructorSectionDetailsScreenState
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: heading.withValues(alpha: 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         children: [
@@ -718,9 +732,7 @@ class _InstructorSectionDetailsScreenState
                     width: 46,
                     height: 46,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF00796B), Color(0xFF26A69A)],
-                      ),
+                      color: AppColors.primaryBlue,
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Icon(
@@ -740,10 +752,10 @@ class _InstructorSectionDetailsScreenState
                               : sectionName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: heading,
                             fontSize: 15,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 5),
@@ -752,7 +764,7 @@ class _InstructorSectionDetailsScreenState
                           '${identifier.isNotEmpty ? ' • $identifier' : ''}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: secondaryText,
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
@@ -769,18 +781,16 @@ class _InstructorSectionDetailsScreenState
                     ),
                     decoration: BoxDecoration(
                       color: isActive
-                          ? const Color(0xFFE3F6EF)
-                          : const Color(0xFFFFF1DB),
+                          ? AppColors.greenTint
+                          : AppColors.resolve(context, AppColors.amberTint),
                       borderRadius: BorderRadius.circular(30),
                     ),
                     child: Text(
                       status.isEmpty ? 'Unknown' : status,
                       style: TextStyle(
-                        color: isActive
-                            ? const Color(0xFF13805D)
-                            : const Color(0xFF9A6B13),
+                        color: isActive ? AppColors.green : AppColors.amber,
                         fontSize: 10,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -788,7 +798,7 @@ class _InstructorSectionDetailsScreenState
                   AnimatedRotation(
                     turns: _overviewExpanded ? 0.5 : 0,
                     duration: const Duration(milliseconds: 250),
-                    child: const Icon(
+                    child: Icon(
                       Icons.keyboard_arrow_down_rounded,
                       color: secondaryText,
                       size: 23,
@@ -809,7 +819,7 @@ class _InstructorSectionDetailsScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Divider(color: borderColor, height: 1),
+                  Divider(color: borderColor, height: 1),
                   const SizedBox(height: 14),
                   Wrap(
                     spacing: 8,
@@ -871,6 +881,104 @@ class _InstructorSectionDetailsScreenState
   // STUDENTS TAB
   // ============================================================
 
+  Widget _pendingInvitations(_SectionViewData data) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _invitationStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text(
+            'Unable to sync pending invitations. Reopen this section to retry.',
+          );
+        }
+        final pending =
+            snapshot.data?.docs
+                .where(
+                  (d) =>
+                      d.data()['status'] == 'pending' &&
+                      (d.data()['sectionId'] ?? data.course['classCode']) ==
+                          widget.sectionId,
+                )
+                .toList() ??
+            [];
+        if (pending.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pending invitations (${pending.length})',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            ...pending.map(
+              (invitation) => ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.mark_email_unread_outlined, color: teal),
+                title: Text(
+                  (invitation.data()['studentName'] ?? 'Student').toString(),
+                ),
+                subtitle: Text(
+                  'Campus ID: ${invitation.data()['studentCampusId'] ?? ''}',
+                ),
+                trailing: TextButton(
+                  onPressed: _cancellingInvitations.contains(invitation.id)
+                      ? null
+                      : () async {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (dialogContext) => AlertDialog(
+                              title: const Text('Cancel invitation?'),
+                              content: const Text(
+                                'The student will no longer be able to accept this invitation.',
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogContext, false),
+                                  child: const Text('Keep'),
+                                ),
+                                FilledButton(
+                                  onPressed: () =>
+                                      Navigator.pop(dialogContext, true),
+                                  child: const Text('Cancel invitation'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (!mounted || confirmed != true) return;
+                          setState(
+                            () => _cancellingInvitations.add(invitation.id),
+                          );
+                          try {
+                            await CourseInvitationService().cancelInvitation(
+                              invitation.id,
+                            );
+                          } on CourseInvitationException catch (error) {
+                            _notice(error.message);
+                          } finally {
+                            if (mounted) {
+                              setState(
+                                () => _cancellingInvitations.remove(
+                                  invitation.id,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  child: Text(
+                    _cancellingInvitations.contains(invitation.id)
+                        ? 'Cancelling…'
+                        : 'Cancel',
+                  ),
+                ),
+              ),
+            ),
+            const Divider(height: 24),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _studentsTab(_SectionViewData data) {
     final isActive = _text(data.section['status']).toLowerCase() == 'active';
 
@@ -912,7 +1020,36 @@ class _InstructorSectionDetailsScreenState
                   label: Text(_transferring ? 'Transferring' : 'Transfer'),
                 ),
               ),
+              const SizedBox(height: 14),
+              FilledButton.icon(
+                onPressed: !isActive
+                    ? null
+                    : () async {
+                        final sent = await showDialog<bool>(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (_) => InviteStudentDialog(
+                            courseId: widget.courseId,
+                            sectionId: widget.sectionId,
+                          ),
+                        );
+                        if (!mounted || sent != true) return;
+                        _notice(
+                          'Invitation sent. This roster updates when the student accepts.',
+                        );
+                      },
+                icon: const Icon(Icons.mail_outline_rounded),
+                label: const Text('Invite student'),
+              ),
+              Padding(
+                padding: EdgeInsets.only(top: 10),
+                child: Text(
+                  'Invitation-only enrollment. Accepted students appear here automatically.',
+                  style: TextStyle(color: secondaryText, fontSize: 12),
+                ),
+              ),
               const SizedBox(height: 18),
+              _pendingInvitations(data),
               if (data.students.isEmpty)
                 _emptyState(
                   icon: Icons.people_outline_rounded,
@@ -961,7 +1098,7 @@ class _InstructorSectionDetailsScreenState
               Container(
                 padding: const EdgeInsets.all(13),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF0F7FF),
+                  color: AppColors.resolve(context, AppColors.blueTint),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: const Color(0xFFDDEBFA)),
                 ),
@@ -1002,9 +1139,10 @@ class _InstructorSectionDetailsScreenState
                   return _contentCard(
                     leading: _leadingAvatar('', Icons.menu_book_rounded),
                     title: title.isEmpty ? 'Untitled module' : title,
+                    onTap: () => _openModule(module, data),
                     subtitle:
                         'Status: ${status.isEmpty ? 'Not specified' : status}',
-                    trailing: const Icon(
+                    trailing: Icon(
                       Icons.chevron_right_rounded,
                       color: secondaryText,
                     ),
@@ -1024,7 +1162,7 @@ class _InstructorSectionDetailsScreenState
                     ),
                   ),
                   icon: const Icon(Icons.folder_open_outlined, size: 19),
-                  label: const Text('Open course-wide tools'),
+                  label: const Text('Open course workspace'),
                 ),
               ),
             ],
@@ -1070,7 +1208,7 @@ class _InstructorSectionDetailsScreenState
                     subtitle:
                         'Status: ${status.isEmpty ? 'Not specified' : status}'
                         '${type.isNotEmpty ? ' • Type: $type' : ''}',
-                    trailing: const Icon(
+                    trailing: Icon(
                       Icons.arrow_forward_ios_rounded,
                       size: 15,
                       color: secondaryText,
@@ -1083,7 +1221,7 @@ class _InstructorSectionDetailsScreenState
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF8E8),
+                    color: AppColors.resolve(context, AppColors.amberTint),
                     borderRadius: BorderRadius.circular(15),
                     border: Border.all(color: const Color(0xFFF5E6BD)),
                   ),
@@ -1092,7 +1230,7 @@ class _InstructorSectionDetailsScreenState
                     children: [
                       const Icon(
                         Icons.info_outline_rounded,
-                        color: Color(0xFF9A6B13),
+                        color: AppColors.amber,
                       ),
                       const SizedBox(width: 11),
                       Expanded(
@@ -1103,7 +1241,7 @@ class _InstructorSectionDetailsScreenState
                               '${data.courseWideCount} course-wide assessment(s)',
                               style: const TextStyle(
                                 color: Color(0xFF765211),
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 fontSize: 13,
                               ),
                             ),
@@ -1215,10 +1353,7 @@ class _InstructorSectionDetailsScreenState
                         'Student: ${displayStudent.isEmpty ? 'Unknown student' : displayStudent}'
                         '\nStatus: ${status.isEmpty ? 'Not specified' : status}'
                         '${score is num ? '\nScore: $score' : ''}',
-                    trailing: const Icon(
-                      Icons.description_outlined,
-                      color: teal,
-                    ),
+                    trailing: Icon(Icons.description_outlined, color: teal),
                   );
                 }),
             ],
@@ -1233,73 +1368,84 @@ class _InstructorSectionDetailsScreenState
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => FutureBuilder<_SectionViewData>(
+    future: _future,
+    builder: (context, snapshot) =>
+        snapshot.connectionState != ConnectionState.done
+        ? const PageLoadingState()
+        : _buildLoadedPage(context),
+  );
+
+  Widget _buildLoadedPage(BuildContext context) {
     return DefaultTabController(
       length: 4,
+      initialIndex: 3,
       child: Scaffold(
         backgroundColor: background,
-        appBar: AppBar(
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.transparent,
-          leading: IconButton(
-            tooltip: 'Back',
-            onPressed: () => Navigator.of(context).maybePop(),
-            icon: const Icon(Icons.arrow_back_rounded, color: heading),
-          ),
-          title: const Text(
-            'Section Details',
-            style: TextStyle(
-              color: heading,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
+        appBar: AlignedPageAppBar(
+          maxWidth: double.infinity,
+          inset: 16,
+          child: AppBar(
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            surfaceTintColor: Colors.transparent,
+            leading: IconButton(
+              tooltip: 'Back',
+              onPressed: () => Navigator.of(context).maybePop(),
+              icon: Icon(Icons.arrow_back_rounded, color: heading),
             ),
-          ),
-          actions: [
-            IconButton(
-              tooltip: 'Live Classes',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => LiveClassesScreen(
-                    courseId: widget.courseId,
-                    sectionId: widget.sectionId,
+            title: Text(
+              'Section Details',
+              style: TextStyle(
+                color: heading,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            actions: [
+              IconButton(
+                tooltip: 'Live Classes',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => LiveClassesScreen(
+                      courseId: widget.courseId,
+                      sectionId: widget.sectionId,
+                    ),
+                  ),
+                ),
+                icon: Icon(Icons.video_call_outlined, color: teal),
+              ),
+              RoundGradeAction(
+                label: 'Compute & Finalize Semester Grades',
+                icon: Icons.calculate_outlined,
+                onTap: () => Navigator.of(context).push(
+                  GradeRoute<void>(
+                    builder: (_) => InstructorSemesterGradesScreen(
+                      courseId: widget.courseId,
+                      sectionId: widget.sectionId,
+                    ),
                   ),
                 ),
               ),
-              icon: const Icon(Icons.video_call_outlined, color: teal),
-            ),
-            RoundGradeAction(
-              label: 'Compute & Finalize Semester Grades',
-              icon: Icons.calculate_outlined,
-              onTap: () => Navigator.of(context).push(
-                GradeRoute<void>(
-                  builder: (_) => InstructorSemesterGradesScreen(
-                    courseId: widget.courseId,
-                    sectionId: widget.sectionId,
-                  ),
-                ),
+              IconButton(
+                tooltip: 'Refresh section',
+                onPressed: _refresh,
+                icon: Icon(Icons.refresh_rounded, color: teal),
               ),
+              const SizedBox(width: 6),
+            ],
+            bottom: PreferredSize(
+              preferredSize: Size.fromHeight(1),
+              child: Divider(height: 1, color: borderColor),
             ),
-            IconButton(
-              tooltip: 'Refresh section',
-              onPressed: _refresh,
-              icon: const Icon(Icons.refresh_rounded, color: teal),
-            ),
-            const SizedBox(width: 6),
-          ],
-          bottom: const PreferredSize(
-            preferredSize: Size.fromHeight(1),
-            child: Divider(height: 1, color: borderColor),
           ),
         ),
         body: FutureBuilder<_SectionViewData>(
           future: _future,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
-              return const Center(
-                child: CircularProgressIndicator(color: teal),
-              );
+              return Center(child: CircularProgressIndicator(color: teal));
             }
 
             if (snapshot.hasError) {
@@ -1310,28 +1456,21 @@ class _InstructorSectionDetailsScreenState
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.cloud_off_outlined,
-                          size: 42,
-                          color: teal,
-                        ),
+                        Icon(Icons.cloud_off_outlined, size: 42, color: teal),
                         const SizedBox(height: 14),
-                        const Text(
+                        Text(
                           'Unable to load section',
                           style: TextStyle(
                             color: heading,
                             fontSize: 17,
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           '${snapshot.error}',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: secondaryText,
-                            fontSize: 12,
-                          ),
+                          style: TextStyle(color: secondaryText, fontSize: 12),
                         ),
                         const SizedBox(height: 16),
                         FilledButton.icon(
@@ -1360,16 +1499,18 @@ class _InstructorSectionDetailsScreenState
                     margin: const EdgeInsets.fromLTRB(12, 7, 12, 0),
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: borderColor),
                     ),
-                    child: const TabBar(
-                      isScrollable: false,
+                    child: TabBar(
+                      isScrollable:
+                          MediaQuery.sizeOf(context).width < 600 ||
+                          MediaQuery.textScalerOf(context).scale(14) > 20,
                       dividerColor: Colors.transparent,
                       indicatorSize: TabBarIndicatorSize.tab,
                       indicator: BoxDecoration(
-                        color: Color(0xFFE4F5F1),
+                        color: AppColors.resolve(context, AppColors.greenTint),
                         borderRadius: BorderRadius.all(Radius.circular(10)),
                       ),
                       labelPadding: EdgeInsets.symmetric(horizontal: 4),
@@ -1377,17 +1518,17 @@ class _InstructorSectionDetailsScreenState
                       unselectedLabelColor: secondaryText,
                       labelStyle: TextStyle(
                         fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                       unselectedLabelStyle: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
                       tabs: [
-                        Tab(height: 36, text: 'Students'),
-                        Tab(height: 36, text: 'Modules'),
-                        Tab(height: 36, text: 'Assessments'),
+                        Tab(height: 36, text: 'Content'),
+                        Tab(height: 36, text: 'Activities'),
                         Tab(height: 36, text: 'Grades'),
+                        Tab(height: 36, text: 'Students'),
                       ],
                     ),
                   ),
@@ -1395,10 +1536,10 @@ class _InstructorSectionDetailsScreenState
                   Expanded(
                     child: TabBarView(
                       children: [
-                        _studentsTab(data),
                         _modulesTab(data),
                         _assessmentsTab(data),
                         _gradesTab(data),
+                        _studentsTab(data),
                       ],
                     ),
                   ),

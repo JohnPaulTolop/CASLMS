@@ -1,3 +1,12 @@
+import { submissionNotice } from "../_shared/notification_payload.ts";
+import {
+  assertActiveSections,
+  assertChildAudience,
+  audience,
+  canAccessSectionContent,
+  storedAudience,
+} from "../_shared/section_audience.ts";
+import { getAppCheck } from "npm:firebase-admin@13.4.0/app-check";
 import {
   cert,
   getApps,
@@ -21,7 +30,7 @@ import {
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, apikey, content-type, x-client-info",
+    "authorization, apikey, content-type, x-client-info, x-firebase-appcheck",
   "Access-Control-Allow-Methods":
     "POST, OPTIONS",
 };
@@ -456,6 +465,16 @@ async function requireActiveUser(
   };
 }
 
+async function requireAppCheck(request: Request): Promise<void> {
+  const token = request.headers.get("X-Firebase-AppCheck");
+  if (!token) throw new RequestError("App verification is required.", 403);
+  try {
+    await getAppCheck(firebaseApp).verifyToken(token);
+  } catch (_) {
+    throw new RequestError("App verification failed. Refresh and retry.", 403);
+  }
+}
+
 async function requireStudentAssessment(
   request: Request,
   assessmentId: string,
@@ -586,6 +605,22 @@ async function requireStudentAssessment(
     );
   }
 
+  const moduleDocument = await firestore.collection("modules").doc(moduleId).get();
+  const module = moduleDocument.data();
+  if (
+    !moduleDocument.exists || !module ||
+    !canAccessSectionContent({
+      studentId: user.uid,
+      courseId,
+      moduleId,
+      enrollment,
+      module,
+      child: assessment,
+    })
+  ) {
+    throw new RequestError("This assessment is not assigned to your section.", 403);
+  }
+
   const dueAt =
     assessment.dueAt;
 
@@ -609,6 +644,40 @@ async function requireStudentAssessment(
     courseId,
     moduleId,
   };
+}
+
+async function studentRoster(request: Request, body: Record<string, unknown>): Promise<Response> {
+  const user = await requireActiveUser(request);
+  if (clean(user.profile.role).toLowerCase() !== "student") {
+    throw new RequestError("An active student account is required.", 403);
+  }
+  const courseId = clean(body.courseId);
+  if (!courseId || courseId.includes("/")) throw new RequestError("A valid course is required.");
+  const [courseDoc, enrollmentDoc] = await Promise.all([
+    firestore.collection("courses").doc(courseId).get(),
+    firestore.collection("enrollments").doc(`${courseId}_${user.uid}`).get(),
+  ]);
+  const course = courseDoc.data();
+  const enrollment = enrollmentDoc.data();
+  if (!course || clean(course.status).toLowerCase() !== "active" ||
+      !enrollment || enrollment.studentId !== user.uid || enrollment.courseId !== courseId ||
+      clean(enrollment.status).toLowerCase() !== "active") {
+    throw new RequestError("An active course enrollment is required.", 403);
+  }
+  const sectionId = clean(enrollment.sectionId) || clean(course.classCode);
+  const snapshot = await firestore.collection("enrollments").where("courseId", "==", courseId).get();
+  const seen = new Set<string>();
+  const students = [];
+  for (const document of snapshot.docs) {
+    const row = document.data();
+    const uid = clean(row.studentId);
+    if (!uid || seen.has(uid) || clean(row.status).toLowerCase() !== "active" ||
+        (clean(row.sectionId) || clean(course.classCode)) !== sectionId) continue;
+    seen.add(uid);
+    students.push({ name: clean(row.studentName) || "Student", isCurrentStudent: uid === user.uid });
+  }
+  students.sort((a, b) => a.name.localeCompare(b.name));
+  return json({ success: true, students });
 }
 
 async function publishAiQuiz(
@@ -668,8 +737,9 @@ async function publishAiQuiz(
   }
 
   const initialCourseId = clean(initialDoc.data()?.courseId);
+  const initialModuleId = clean(initialDoc.data()?.moduleId);
 
-  if (!initialCourseId) {
+  if (!initialCourseId || !initialModuleId) {
     throw new RequestError("Assessment course is missing.");
   }
 
@@ -680,6 +750,7 @@ async function publishAiQuiz(
   const sectionRef = firestore
     .collection("courseSections")
     .doc(sectionId);
+  const moduleRef = firestore.collection("modules").doc(initialModuleId);
 
   const quizVersion = crypto.randomUUID();
 
@@ -689,16 +760,18 @@ async function publishAiQuiz(
     const courseDoc = await transaction.get(courseRef);
     const existingKeyDoc = await transaction.get(keyRef);
     const sectionDoc = await transaction.get(sectionRef);
+    const moduleDoc = await transaction.get(moduleRef);
 
     const assessment = assessmentDoc.data();
     const course = courseDoc.data();
     const section = sectionDoc.data();
+    const module = moduleDoc.data();
 
     if (
       !assessmentDoc.exists ||
       !assessment ||
       !courseDoc.exists ||
-      !course
+      !course || !moduleDoc.exists || !module
     ) {
       throw new RequestError(
         "Assessment or course could not be found.",
@@ -718,12 +791,12 @@ async function publishAiQuiz(
     }
 
     if (
-      clean(assessment.status).toLowerCase() !== "draft" ||
+      !["draft", "published"].includes(clean(assessment.status).toLowerCase()) ||
       clean(assessment.assessmentType).toLowerCase() !== "quiz" ||
       clean(assessment.deliveryType).toLowerCase() !== "ai_generated"
     ) {
       throw new RequestError(
-        "Only draft AI quizzes can be securely published.",
+        "Only draft or unprepared published AI quizzes can be securely published.",
         409,
       );
     }
@@ -745,6 +818,14 @@ async function publishAiQuiz(
     if (!validStoredSection && !validLegacySection) {
       throw new RequestError(
         "The selected section is not active or does not belong to this course.",
+        403,
+      );
+    }
+    try {
+      assertChildAudience(storedAudience(module), [sectionId]);
+    } catch (_) {
+      throw new RequestError(
+        "The selected section is outside this module's audience.",
         403,
       );
     }
@@ -882,6 +963,7 @@ async function publishAiQuiz(
     // explanations do not remain in the public document.
     transaction.update(assessmentRef, {
       sectionId,
+      sectionIds: [sectionId],
       questions: publicQuestions,
       questionCount: publicQuestions.length,
       totalPoints,
@@ -1027,14 +1109,26 @@ async function submitAiQuiz(
 
       const enrollment = enrollmentDoc.data();
 
+      const moduleDoc = await transaction.get(
+        firestore.collection("modules").doc(moduleId),
+      );
+      const module = moduleDoc.data();
+
       if (
         !enrollmentDoc.exists ||
         !enrollment ||
         enrollment.studentId !== user.uid ||
         enrollment.courseId !== courseId ||
         clean(enrollment.status).toLowerCase() !== "active" ||
-        clean(enrollment.sectionId) !==
-          clean(assessment.sectionId)
+        !moduleDoc.exists || !module ||
+        !canAccessSectionContent({
+          studentId: user.uid,
+          courseId,
+          moduleId,
+          enrollment,
+          module,
+          child: assessment,
+        })
       ) {
         throw new RequestError(
           "You are not enrolled in the required course section.",
@@ -1042,6 +1136,7 @@ async function submitAiQuiz(
         );
       }
 
+      const noticeCourse = await transaction.get(firestore.collection("courses").doc(courseId));
       const answerKeyDoc =
         await transaction.get(answerKeyRef);
 
@@ -1235,6 +1330,10 @@ async function submitAiQuiz(
         updatedAt: FieldValue.serverTimestamp(),
       });
 
+      const noticeInstructor = clean(noticeCourse.data()?.instructorId);
+      if (noticeInstructor) transaction.set(firestore.collection("notifications").doc(
+        `assessmentReceived_${submissionId}_${noticeInstructor}`),
+        submissionNotice(submissionId, {courseId,moduleId,studentId:user.uid}, noticeInstructor, FieldValue.serverTimestamp()));
       transaction.set(notificationRef, {
         userId: user.uid,
         type: "grade",
@@ -1582,10 +1681,14 @@ async function submitAssessment(
   };
 
   try {
-    await submissionReference
-      .set(
-        submissionData,
-      );
+    const noticeCourse = await firestore.collection("courses").doc(context.courseId).get();
+    const noticeInstructor = clean(noticeCourse.data()?.instructorId);
+    const submissionBatch = firestore.batch();
+    submissionBatch.set(submissionReference, submissionData);
+    if (noticeInstructor) submissionBatch.set(firestore.collection("notifications").doc(
+      `assessmentReceived_${submissionId}_${noticeInstructor}`),
+      submissionNotice(submissionId, submissionData, noticeInstructor, FieldValue.serverTimestamp()));
+    await submissionBatch.commit();
   } catch (error) {
     if (storagePath) {
       await supabase
@@ -1786,6 +1889,22 @@ async function recordGoogleFormSubmission(
     );
   }
 
+  const moduleDocument = await firestore.collection("modules").doc(moduleId).get();
+  const module = moduleDocument.data();
+  if (
+    !moduleDocument.exists || !module ||
+    !canAccessSectionContent({
+      studentId: firebaseUser.uid,
+      courseId,
+      moduleId,
+      enrollment,
+      module,
+      child: assessment,
+    })
+  ) {
+    throw new RequestError("This assessment is not assigned to the student's section.", 403);
+  }
+
   const submissionId =
     `${assessmentId}_${firebaseUser.uid}`;
 
@@ -1843,6 +1962,11 @@ async function recordGoogleFormSubmission(
           clean(latest.data()?.googleFormResponseId) === responseId) return;
       throw new RequestError("This student already has a recorded submission.", 409);
     }
+    const noticeCourse = await transaction.get(firestore.collection("courses").doc(courseId));
+    const noticeInstructor = clean(noticeCourse.data()?.instructorId);
+    if (noticeInstructor) transaction.set(firestore.collection("notifications").doc(
+      `assessmentReceived_${submissionId}_${noticeInstructor}`),
+      submissionNotice(submissionId, {courseId,moduleId,studentId:firebaseUser.uid}, noticeInstructor, FieldValue.serverTimestamp()));
     transaction.set(submissionReference, {
     assessmentId,
     courseId,
@@ -2035,6 +2159,178 @@ async function openSubmissionFile(
   });
 }
 
+async function openLearningMaterialFile(
+  request: Request,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const resourceId = clean(body.resourceId);
+  if (!resourceId || resourceId.includes("/")) {
+    throw new RequestError("A valid material ID is required.");
+  }
+  const user = await requireActiveUser(request);
+  const resourceDocument = await firestore
+    .collection("moduleResources")
+    .doc(resourceId)
+    .get();
+  const resource = resourceDocument.data();
+  if (!resourceDocument.exists || !resource) {
+    throw new RequestError("Learning material could not be found.", 404);
+  }
+  const courseId = clean(resource.courseId);
+  const moduleId = clean(resource.moduleId);
+  const role = clean(user.profile.role).toLowerCase();
+  let allowed = role === "admin";
+  if (role === "instructor") {
+    const course = await firestore.collection("courses").doc(courseId).get();
+    allowed = course.data()?.instructorId === user.uid;
+  } else if (role === "student") {
+    const [enrollmentDocument, moduleDocument] = await Promise.all([
+      firestore.collection("enrollments").doc(`${courseId}_${user.uid}`).get(),
+      firestore.collection("modules").doc(moduleId).get(),
+    ]);
+    const enrollment = enrollmentDocument.data();
+    const module = moduleDocument.data();
+    allowed = !!enrollment && !!module && canAccessSectionContent({
+      studentId: user.uid,
+      courseId,
+      moduleId,
+      enrollment,
+      module,
+      child: resource,
+    });
+  }
+  if (!allowed) {
+    throw new RequestError("This material is not assigned to your section.", 403);
+  }
+  const storagePath = clean(resource.storagePath);
+  const storageBucket = clean(resource.storageBucket);
+  if (
+    storageBucket !== "caslms-learning-materials" ||
+    !storagePath.startsWith(`courses/${courseId}/modules/${moduleId}/${resourceId}/`)
+  ) {
+    throw new RequestError("This material has no protected file.", 400);
+  }
+  const expiresIn = 300;
+  const signed = await supabase.storage
+    .from(storageBucket)
+    .createSignedUrl(storagePath, expiresIn);
+  if (signed.error || !signed.data?.signedUrl) {
+    throw new RequestError("Unable to create a secure material link.", 500);
+  }
+  return json({
+    success: true,
+    url: signed.data.signedUrl,
+    expiresIn,
+    fileName: clean(resource.fileName),
+  });
+}
+
+const learningMaterialsBucket = "caslms-learning-materials";
+
+function validMaterialStoragePath(
+  path: string,
+  courseId: string,
+  moduleId: string,
+  resourceId: string,
+): boolean {
+  return path.startsWith(
+    `courses/${courseId}/modules/${moduleId}/${resourceId}/`,
+  ) && !path.includes("..") && !path.endsWith("/");
+}
+
+async function requireOwnedMaterialTarget(
+  request: Request,
+  body: Record<string, unknown>,
+) {
+  const user = await requireActiveUser(request);
+  if (clean(user.profile.role).toLowerCase() !== "instructor") {
+    throw new RequestError("Only active instructors can manage material files.", 403);
+  }
+  const courseId = clean(body.courseId);
+  const moduleId = clean(body.moduleId);
+  const resourceId = clean(body.resourceId);
+  const storagePath = clean(body.storagePath);
+  if (
+    [courseId, moduleId, resourceId].some((id) => !id || id.includes("/")) ||
+    !validMaterialStoragePath(storagePath, courseId, moduleId, resourceId)
+  ) {
+    throw new RequestError("Invalid material storage target.");
+  }
+  const [courseDocument, moduleDocument] = await Promise.all([
+    firestore.collection("courses").doc(courseId).get(),
+    firestore.collection("modules").doc(moduleId).get(),
+  ]);
+  const course = courseDocument.data();
+  const module = moduleDocument.data();
+  if (
+    !courseDocument.exists || !course || course.instructorId !== user.uid ||
+    clean(course.status).toLowerCase() !== "active"
+  ) {
+    throw new RequestError("You do not own this active course.", 403);
+  }
+  if (!moduleDocument.exists || !module || module.courseId !== courseId) {
+    throw new RequestError("The module does not belong to this course.", 403);
+  }
+  return { courseId, moduleId, resourceId, storagePath, course, module };
+}
+
+async function prepareLearningMaterialUpload(
+  request: Request,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const target = await requireOwnedMaterialTarget(request, body);
+  let selected: string[];
+  try {
+    selected = audience(body.sectionIds);
+    assertChildAudience(storedAudience(target.module), selected);
+    const sectionSnapshot = await firestore.collection("courseSections")
+      .where("courseId", "==", target.courseId).get();
+    const sections = sectionSnapshot.docs.map((document) => ({
+      id: document.id,
+      courseId: clean(document.data().courseId),
+      status: clean(document.data().status).toLowerCase(),
+    }));
+    const legacySectionId = clean(target.course.classCode);
+    if (legacySectionId && !sections.some((section) => section.id === legacySectionId)) {
+      sections.push({
+        id: legacySectionId,
+        courseId: target.courseId,
+        status: "active",
+      });
+    }
+    assertActiveSections(selected, target.courseId, sections);
+  } catch (_) {
+    throw new RequestError(
+      "Choose active sections within the module audience.",
+      403,
+    );
+  }
+  const signed = await supabase.storage.from(learningMaterialsBucket)
+    .createSignedUploadUrl(target.storagePath, { upsert: false });
+  if (signed.error || !signed.data?.token) {
+    throw new RequestError("Unable to authorize the material upload.", 500);
+  }
+  return json({
+    success: true,
+    path: target.storagePath,
+    token: signed.data.token,
+    expiresIn: 60,
+  });
+}
+
+async function deleteLearningMaterialFile(
+  request: Request,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const target = await requireOwnedMaterialTarget(request, body);
+  const removed = await supabase.storage.from(learningMaterialsBucket)
+    .remove([target.storagePath]);
+  if (removed.error) {
+    throw new RequestError("Unable to remove the protected material file.", 500);
+  }
+  return json({ success: true });
+}
+
 Deno.serve(
   async (
     request: Request,
@@ -2079,7 +2375,13 @@ Deno.serve(
           body.action,
         ).toLowerCase();
 
+      if (action !== "record_google_form_submission") {
+        await requireAppCheck(request);
+      }
+
       switch (action) {
+        case "student_roster":
+          return await studentRoster(request, body);
         case "publish_ai_quiz":
           return await publishAiQuiz(
             request,
@@ -2101,6 +2403,14 @@ Deno.serve(
             request,
             body,
           );
+        case "open_material_file":
+          return await openLearningMaterialFile(request, body);
+        case "prepare_material_upload":
+          return await prepareLearningMaterialUpload(request, body);
+        case "delete_material_file":
+          return await deleteLearningMaterialFile(request, body);
+        case "record_google_form_submission":
+          return await recordGoogleFormSubmission(body);
 
         default:
           throw new RequestError(

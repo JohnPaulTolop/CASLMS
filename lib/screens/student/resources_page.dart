@@ -1,3 +1,5 @@
+import '../../core/app_colors.dart';
+
 import 'package:flutter/material.dart';
 
 class ResourcesScreen extends StatelessWidget {
@@ -7,10 +9,10 @@ class ResourcesScreen extends StatelessWidget {
   // CASLMS DESIGN SYSTEM
   // ==============================================================
 
-  static const Color primaryBlue = Color(0xFF1769FF);
-  static const Color darkText = Color(0xFF10182F);
-  static const Color greyText = Color(0xFF68738A);
-  static const Color background = Color(0xFFF7F9FC);
+  static const Color primaryBlue = AppColors.primaryBlue;
+  static const Color darkText = AppColors.darkText;
+  static const Color greyText = AppColors.secondaryText;
+  static const Color background = AppColors.background;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +42,7 @@ class ResourcesScreen extends StatelessWidget {
                               'Resources',
                               style: TextStyle(
                                 fontSize: 26,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: darkText,
                                 letterSpacing: -0.7,
                               ),
@@ -63,9 +65,7 @@ class ResourcesScreen extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: const Color(0xFFE5E9F0),
-                          ),
+                          border: Border.all(color: const Color(0xFFE5E9F0)),
                         ),
                         child: const Icon(
                           Icons.folder_outlined,
@@ -81,7 +81,6 @@ class ResourcesScreen extends StatelessWidget {
                   // ==================================================
                   // SEARCH
                   // ==================================================
-
                   _buildSearchBar(),
 
                   const SizedBox(height: 27),
@@ -89,7 +88,6 @@ class ResourcesScreen extends StatelessWidget {
                   // ==================================================
                   // QUICK CATEGORIES
                   // ==================================================
-
                   _buildSectionTitle(
                     'Browse Resources',
                     'Quick access to useful materials',
@@ -106,7 +104,7 @@ class ResourcesScreen extends StatelessWidget {
                         _buildCategory(
                           icon: Icons.picture_as_pdf_outlined,
                           label: 'Documents',
-                          color: const Color(0xFFE45757),
+                          color: AppColors.error,
                         ),
                         _buildCategory(
                           icon: Icons.code_rounded,
@@ -116,12 +114,12 @@ class ResourcesScreen extends StatelessWidget {
                         _buildCategory(
                           icon: Icons.school_outlined,
                           label: 'Academic',
-                          color: const Color(0xFF7956D8),
+                          color: AppColors.purple,
                         ),
                         _buildCategory(
                           icon: Icons.link_rounded,
                           label: 'Web Links',
-                          color: const Color(0xFF26A65B),
+                          color: AppColors.green,
                         ),
                       ],
                     ),
@@ -132,7 +130,6 @@ class ResourcesScreen extends StatelessWidget {
                   // ==================================================
                   // UNIVERSITY GUIDELINES
                   // ==================================================
-
                   _buildSectionTitle(
                     'University Guidelines',
                     'Official academic references and documents',
@@ -144,14 +141,14 @@ class ResourcesScreen extends StatelessWidget {
                     icon: Icons.picture_as_pdf_rounded,
                     title: 'SSU IT Capstone Format Guide',
                     subtitle: 'PDF Document • 2.4 MB',
-                    color: const Color(0xFFE45757),
+                    color: AppColors.error,
                   ),
 
                   _buildResourceItem(
                     icon: Icons.picture_as_pdf_rounded,
                     title: 'Student Handbook 2026',
                     subtitle: 'PDF Document • 5.1 MB',
-                    color: const Color(0xFFE45757),
+                    color: AppColors.error,
                   ),
 
                   const SizedBox(height: 16),
@@ -159,7 +156,6 @@ class ResourcesScreen extends StatelessWidget {
                   // ==================================================
                   // DEVELOPMENT
                   // ==================================================
-
                   _buildSectionTitle(
                     'Development Cheat Sheets',
                     'Helpful references for IT development',
@@ -178,14 +174,14 @@ class ResourcesScreen extends StatelessWidget {
                     icon: Icons.security_rounded,
                     title: 'Firebase Security Rules Template',
                     subtitle: 'Code Snippet',
-                    color: const Color(0xFFFF9418),
+                    color: AppColors.amber,
                   ),
 
                   _buildResourceItem(
                     icon: Icons.compare_arrows_rounded,
                     title: 'React Native vs Jetpack Compose',
                     subtitle: 'Article',
-                    color: const Color(0xFF26A65B),
+                    color: AppColors.green,
                   ),
 
                   const SizedBox(height: 16),
@@ -193,7 +189,6 @@ class ResourcesScreen extends StatelessWidget {
                   // ==================================================
                   // RECENTLY ADDED
                   // ==================================================
-
                   _buildSectionTitle(
                     'Recently Added',
                     'New resources available for you',
@@ -205,7 +200,7 @@ class ResourcesScreen extends StatelessWidget {
                     'Mobile UI/UX Design Principles',
                     'Article • 8 min read',
                     Icons.design_services_outlined,
-                    const Color(0xFF7956D8),
+                    AppColors.purple,
                   ),
 
                   _buildRecentResource(
@@ -220,7 +215,6 @@ class ResourcesScreen extends StatelessWidget {
                   // ==================================================
                   // INFO CARD
                   // ==================================================
-
                   _buildInfoCard(),
                 ],
               ),
@@ -241,16 +235,7 @@ class ResourcesScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFE3E7EE),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.025),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: AppColors.inputBorder),
       ),
       child: TextField(
         decoration: InputDecoration(
@@ -271,7 +256,7 @@ class ResourcesScreen extends StatelessWidget {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: const Color(0xFFEAF2FF),
+                color: AppColors.blueTint,
                 borderRadius: BorderRadius.circular(11),
               ),
               child: const Icon(
@@ -282,9 +267,7 @@ class ResourcesScreen extends StatelessWidget {
             ),
           ),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 16,
-          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 16),
         ),
       ),
     );
@@ -294,10 +277,7 @@ class ResourcesScreen extends StatelessWidget {
   // SECTION TITLE
   // ==============================================================
 
-  Widget _buildSectionTitle(
-    String title,
-    String subtitle,
-  ) {
+  Widget _buildSectionTitle(String title, String subtitle) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -305,7 +285,7 @@ class ResourcesScreen extends StatelessWidget {
           title,
           style: const TextStyle(
             fontSize: 17,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
             color: darkText,
             letterSpacing: -0.3,
           ),
@@ -339,9 +319,7 @@ class ResourcesScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: const Color(0xFFE6EAF0),
-        ),
+        border: Border.all(color: AppColors.inputBorder),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -353,11 +331,7 @@ class ResourcesScreen extends StatelessWidget {
               color: color.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 19,
-            ),
+            child: Icon(icon, color: color, size: 19),
           ),
           const SizedBox(height: 6),
           Text(
@@ -388,16 +362,7 @@ class ResourcesScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(17),
-        border: Border.all(
-          color: const Color(0xFFE6EAF0),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.025),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(color: AppColors.inputBorder),
       ),
       child: Material(
         color: Colors.transparent,
@@ -415,11 +380,7 @@ class ResourcesScreen extends StatelessWidget {
                     color: color.withValues(alpha: 0.10),
                     borderRadius: BorderRadius.circular(13),
                   ),
-                  child: Icon(
-                    icon,
-                    color: color,
-                    size: 21,
-                  ),
+                  child: Icon(icon, color: color, size: 21),
                 ),
 
                 const SizedBox(width: 12),
@@ -433,7 +394,7 @@ class ResourcesScreen extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                           fontSize: 12.5,
                           color: darkText,
                         ),
@@ -457,7 +418,7 @@ class ResourcesScreen extends StatelessWidget {
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEAF2FF),
+                    color: AppColors.blueTint,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
@@ -490,9 +451,7 @@ class ResourcesScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(17),
-        border: Border.all(
-          color: const Color(0xFFE6EAF0),
-        ),
+        border: Border.all(color: AppColors.inputBorder),
       ),
       child: Row(
         children: [
@@ -503,11 +462,7 @@ class ResourcesScreen extends StatelessWidget {
               color: color.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 20,
-            ),
+            child: Icon(icon, color: color, size: 20),
           ),
 
           const SizedBox(width: 12),
@@ -522,7 +477,7 @@ class ResourcesScreen extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: darkText,
                   ),
                 ),
@@ -557,17 +512,13 @@ class ResourcesScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFEAF2FF),
+        color: AppColors.blueTint,
         borderRadius: BorderRadius.circular(18),
       ),
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.info_outline_rounded,
-            color: primaryBlue,
-            size: 21,
-          ),
+          Icon(Icons.info_outline_rounded, color: primaryBlue, size: 21),
           SizedBox(width: 10),
           Expanded(
             child: Text(

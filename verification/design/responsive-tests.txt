@@ -1,0 +1,24 @@
+00:00 +0: loading C:/Users/Rolando/VSCodeProjects/CASLMS-fix-password-reset-appcheck/test/workspace_redesign_test.dart
+00:00 +0: (setUpAll)
+00:00 +0: Dashboard 320.0 px, text 1.0: layout, scroll and actions
+00:02 +1: Dashboard 320.0 px, text 2.0: layout, scroll and actions
+00:02 +2: Dashboard 390.0 px, text 1.0: layout, scroll and actions
+00:03 +3: Dashboard 390.0 px, text 2.0: layout, scroll and actions
+00:03 +4: Dashboard 600.0 px, text 1.0: layout, scroll and actions
+00:04 +5: Dashboard 600.0 px, text 2.0: layout, scroll and actions
+00:04 +6: Dashboard 900.0 px, text 1.0: layout, scroll and actions
+00:04 +7: Dashboard 900.0 px, text 2.0: layout, scroll and actions
+00:05 +8: Dashboard 1024.0 px, text 1.0: layout, scroll and actions
+00:05 +9: Dashboard 1024.0 px, text 2.0: layout, scroll and actions
+00:06 +10: Dashboard 1440.0 px, text 1.0: layout, scroll and actions
+00:06 +11: Dashboard 1440.0 px, text 2.0: layout, scroll and actions
+00:07 +12: Dashboard 2560.0 px, text 1.0: layout, scroll and actions
+00:07 +13: Dashboard 2560.0 px, text 2.0: layout, scroll and actions
+00:08 +14: Short screen Size(320.0, 568.0): safe areas and complete navigation
+00:09 +15: Short screen Size(600.0, 320.0): safe areas and complete navigation
+00:09 +16: Short screen Size(1440.0, 400.0): safe areas and complete navigation
+00:09 +17: Container width controls navigation independently of viewport
+00:09 +18: Unavailable totals stay unknown and empty courses open invitations
+00:10 +19: Keyboard focus activates the real course callback
+00:10 +20: (tearDownAll)
+00:10 +20: All tests passed!

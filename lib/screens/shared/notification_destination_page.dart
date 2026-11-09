@@ -6,13 +6,11 @@ import '../../services/notification_service.dart';
 import '../../models/notification_target.dart';
 import '../admin/admin_instructor_approvals_page.dart';
 import '../instructor/instructor_assessment_grading_page.dart';
-import '../instructor/instructor_course_sections_page.dart';
+import '../instructor/instructor_class_details_page.dart';
 import '../instructor/instructor_module_detail_page.dart';
 import '../instructor/instructor_chat_page.dart';
 import '../student/student_chat_page.dart';
 import '../student/student_course_modules_page.dart';
-import '../student/student_module_detail_page.dart';
-import '../student/assignment_details_page.dart';
 import '../student/posted_grades_page.dart';
 import 'live_classes_page.dart';
 import 'legacy_submission_review_page.dart';
@@ -157,23 +155,27 @@ class _NotificationDestinationScreenState
       );
     }
     if (d.role == 'student') {
-      if (t.collection == 'assignments') {
-        return AssignmentDetailsScreen(assignmentId: t.id);
-      }
-      if (t.collection == 'submissions') {
-        return AssignmentDetailsScreen(assignmentId: text(r['assignmentId']));
-      }
-      if (moduleId.isNotEmpty) {
-        return StudentModuleDetailScreen(
+      if (moduleId.isNotEmpty ||
+          t.collection == 'assignments' ||
+          t.collection == 'submissions' ||
+          t.collection == 'assessments' ||
+          t.collection == 'assessmentSubmissions') {
+        final assessmentId = t.collection == 'assessments'
+            ? t.id
+            : text(r['assessmentId']);
+        return StudentCourseModulesScreen(
           courseId: courseId,
           courseCode: text(c['code']),
           courseTitle: text(c['title']),
-          moduleId: moduleId,
-          focusAssessmentId: t.collection == 'assessments'
-              ? t.id
-              : text(r['assessmentId']),
-          showGrades: t.collection == 'assessmentSubmissions',
-          focusResourceId: t.kind == 'moduleResource' ? t.id : '',
+          instructorName: text(c['instructorName']),
+          initialModuleId: moduleId,
+          initialAssessmentId: assessmentId,
+          initialResourceId: t.kind == 'moduleResource' ? t.id : '',
+          initialView: t.kind == 'module' || t.kind == 'moduleResource'
+              ? 0
+              : t.collection == 'assessmentSubmissions'
+              ? 2
+              : 1,
         );
       }
       if (t.kind != 'course' && t.kind != 'enrollment') {
@@ -213,7 +215,7 @@ class _NotificationDestinationScreenState
           focusResourceId: t.kind == 'moduleResource' ? t.id : '',
         );
       }
-      return InstructorCourseSectionsScreen(courseId: courseId);
+      return InstructorClassDetailsScreen(courseId: courseId);
     }
     // Admins inspect the exact authoritative course without impersonating a student.
     return Scaffold(

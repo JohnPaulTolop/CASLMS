@@ -8,6 +8,7 @@ class MeetingChatPanel extends StatefulWidget {
     super.key,
     required this.service,
     required this.messages,
+    required this.liveClassId,
     required this.courseId,
     required this.sectionId,
     required this.sessionId,
@@ -16,6 +17,7 @@ class MeetingChatPanel extends StatefulWidget {
 
   final MeetingChatService service;
   final Stream<List<MeetingChatMessage>> messages;
+  final String liveClassId;
   final String courseId;
   final String sectionId;
   final String sessionId;
@@ -52,6 +54,7 @@ class _MeetingChatPanelState extends State<MeetingChatPanel> {
     setState(() => _sending = true);
     try {
       await widget.service.sendMessage(
+        liveClassId: widget.liveClassId,
         courseId: widget.courseId,
         sectionId: widget.sectionId,
         sessionId: widget.sessionId,
@@ -92,7 +95,9 @@ class _MeetingChatPanelState extends State<MeetingChatPanel> {
         if (_scroll.hasClients) {
           _scroll.animateTo(
             _scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 180),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 180),
             curve: Curves.easeOut,
           );
         }
@@ -169,9 +174,27 @@ class _MeetingChatPanelState extends State<MeetingChatPanel> {
                     itemCount: messages.length,
                     itemBuilder: (context, index) {
                       final message = messages[index];
-                      return _MessageBubble(
-                        message: message,
-                        mine: message.isMine(widget.service.currentUserId),
+                      final reduceMotion = MediaQuery.disableAnimationsOf(
+                        context,
+                      );
+                      return TweenAnimationBuilder<double>(
+                        key: ValueKey(message.id),
+                        tween: Tween(begin: reduceMotion ? 1 : 0, end: 1),
+                        duration: reduceMotion
+                            ? Duration.zero
+                            : const Duration(milliseconds: 180),
+                        curve: Curves.easeOut,
+                        builder: (context, value, child) => Opacity(
+                          opacity: value,
+                          child: Transform.translate(
+                            offset: Offset(0, (1 - value) * 8),
+                            child: child,
+                          ),
+                        ),
+                        child: _MessageBubble(
+                          message: message,
+                          mine: message.isMine(widget.service.currentUserId),
+                        ),
                       );
                     },
                   );

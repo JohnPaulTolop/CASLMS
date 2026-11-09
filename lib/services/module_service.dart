@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'notification_service.dart';
+import 'section_audience_service.dart';
 
 class ModuleService {
   ModuleService({
@@ -21,6 +22,10 @@ class ModuleService {
   final FirebaseAuth _auth;
 
   final NotificationService _notificationService;
+
+  late final SectionAudienceService _sectionAudience = SectionAudienceService(
+    firestore: _firestore,
+  );
 
   String? get currentUserId => _auth.currentUser?.uid;
 
@@ -211,6 +216,7 @@ class ModuleService {
     required String title,
     required String description,
     required int order,
+    required List<String> sectionIds,
     String status = 'published',
   }) async {
     try {
@@ -244,9 +250,15 @@ class ModuleService {
         throw ModuleServiceException('Invalid module status.');
       }
 
-      await _requireOwnedCourse(
+      final course = await _requireOwnedCourse(
         courseId: cleanCourseId,
         instructorId: instructor.uid,
+      );
+
+      final audience = await _sectionAudience.requireActiveCourseSections(
+        courseId: cleanCourseId,
+        course: course,
+        sectionIds: sectionIds,
       );
 
       final DocumentReference<Map<String, dynamic>> document = await _firestore
@@ -261,6 +273,8 @@ class ModuleService {
             'order': order,
 
             'status': cleanStatus,
+
+            'sectionIds': audience,
 
             'createdBy': instructor.uid,
 
@@ -281,6 +295,63 @@ class ModuleService {
     } catch (_) {
       throw ModuleServiceException('Unable to create module.');
     }
+  }
+
+  /// Published audiences are immutable from the client. Move the module to a
+  /// draft first so narrowing cannot race with student reads or submissions.
+  Future<void> updateDraftModuleAudience({
+    required String moduleId,
+    required List<String> sectionIds,
+  }) async {
+    final instructor = await _requireInstructor();
+    final cleanModuleId = moduleId.trim();
+    final reference = _firestore.collection('modules').doc(cleanModuleId);
+    final document = await reference.get();
+    final module = document.data();
+    if (module == null) {
+      throw ModuleServiceException('Module could not be found.');
+    }
+    if (module['status'] != 'draft') {
+      throw ModuleServiceException(
+        'Unpublish this module before changing its assigned sections.',
+      );
+    }
+    final courseId = (module['courseId'] ?? '').toString().trim();
+    final course = await _requireOwnedCourse(
+      courseId: courseId,
+      instructorId: instructor.uid,
+    );
+    final audience = await _sectionAudience.requireActiveCourseSections(
+      courseId: courseId,
+      course: course,
+      sectionIds: sectionIds,
+    );
+    final children = await Future.wait([
+      _firestore
+          .collection('moduleResources')
+          .where('moduleId', isEqualTo: cleanModuleId)
+          .get(),
+      _firestore
+          .collection('assessments')
+          .where('moduleId', isEqualTo: cleanModuleId)
+          .get(),
+    ]);
+    for (final snapshot in children) {
+      for (final child in snapshot.docs) {
+        try {
+          SectionAudienceService.assertChild(
+            parent: audience,
+            child: SectionAudienceService.stored(child.data()),
+          );
+        } on FormatException catch (error) {
+          throw ModuleServiceException(error.message);
+        }
+      }
+    }
+    await reference.update({
+      'sectionIds': audience,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   // ============================================================

@@ -348,7 +348,7 @@ class _AdminFilesScreenState extends State<AdminFilesScreen> {
                             Text(
                               '${files.length} file${files.length == 1 ? '' : 's'} shown',
                               style: const TextStyle(
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: AdminUi.ink,
                               ),
                             ),

@@ -1,0 +1,28 @@
+Analyzing lib...                                                
+
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\instructor\instructor_add_learning_material_page.dart:1307:15 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\instructor\instructor_add_learning_material_page.dart:1310:15 - deprecated_member_use
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\instructor\instructor_ai_quiz_editor_page.dart:998:21 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\instructor\instructor_ai_quiz_editor_page.dart:1000:21 - deprecated_member_use
+   info - Use an initializing formal to assign a parameter to a field. Try using an initialing formal ('this.correctAnswerIndex') to initialize the field - lib\screens\instructor\instructor_ai_quiz_editor_page.dart:1103:8 - prefer_initializing_formals
+warning - The '!' will have no effect because the receiver can't be null. Try removing the '!' operator - lib\screens\shared\authenticated_workspace.dart:27:104 - unnecessary_non_null_assertion
+   info - Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor - lib\screens\shared\workspace_widgets.dart:11:9 - use_key_in_widget_constructors
+   info - Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor - lib\screens\shared\workspace_widgets.dart:42:9 - use_key_in_widget_constructors
+   info - Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor - lib\screens\shared\workspace_widgets.dart:58:9 - use_key_in_widget_constructors
+   info - Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor - lib\screens\shared\workspace_widgets.dart:82:9 - use_key_in_widget_constructors
+   info - Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor - lib\screens\shared\workspace_widgets.dart:178:9 - use_key_in_widget_constructors
+   info - Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor - lib\screens\shared\workspace_widgets.dart:251:9 - use_key_in_widget_constructors
+   info - Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor - lib\screens\shared\workspace_widgets.dart:305:9 - use_key_in_widget_constructors
+   info - Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor - lib\screens\shared\workspace_widgets.dart:402:9 - use_key_in_widget_constructors
+   info - Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor - lib\screens\shared\workspace_widgets.dart:433:9 - use_key_in_widget_constructors
+   info - Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor - lib\screens\shared\workspace_widgets.dart:505:9 - use_key_in_widget_constructors
+   info - Constructors for public widgets should have a named 'key' parameter. Try adding a named parameter to the constructor - lib\screens\shared\workspace_widgets.dart:529:9 - use_key_in_widget_constructors
+warning - The value of the field 'red' isn't used. Try removing the field, or using it - lib\screens\student\assignments_page.dart:21:22 - unused_field
+warning - The value of the field 'green' isn't used. Try removing the field, or using it - lib\screens\student\subject_overview_page.dart:47:22 - unused_field
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\services\learner_assistant_report.dart:70:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\services\learner_assistant_report.dart:79:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\services\learner_assistant_report.dart:96:7 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\services\learner_assistant_report.dart:141:5 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\services\learner_assistant_report.dart:162:5 - curly_braces_in_flow_control_structures
+
+24 issues found. (ran in 43.7s)

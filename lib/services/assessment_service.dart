@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'notification_service.dart';
+import 'section_audience_service.dart';
 
 class AssessmentService {
   AssessmentService({
@@ -19,6 +20,9 @@ class AssessmentService {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
   final NotificationService _notificationService;
+  late final SectionAudienceService _sectionAudience = SectionAudienceService(
+    firestore: _firestore,
+  );
 
   // ============================================================
   // COLLECTION NAMES
@@ -305,6 +309,8 @@ class AssessmentService {
     ],
     required num totalPoints,
     required DateTime dueAt,
+    required List<String> sectionIds,
+    String sectionId = '',
     String status = 'published',
   }) async {
     final String cleanCourseId = courseId.trim();
@@ -345,7 +351,32 @@ class AssessmentService {
 
     final Map<String, dynamic> instructor = await _requireInstructor();
 
-    await _requireModule(courseId: cleanCourseId, moduleId: cleanModuleId);
+    final module = await _requireModule(
+      courseId: cleanCourseId,
+      moduleId: cleanModuleId,
+    );
+    final course = await _requireOwnedCourse(cleanCourseId);
+    late final List<String> audience;
+    try {
+      audience = await _sectionAudience.requireActiveCourseSections(
+        courseId: cleanCourseId,
+        course: course,
+        sectionIds: sectionIds,
+      );
+      SectionAudienceService.assertChild(
+        parent: SectionAudienceService.stored(module),
+        child: audience,
+      );
+      final singleSection = sectionId.trim();
+      if (singleSection.isNotEmpty &&
+          !SectionAudienceService.allows(audience, singleSection)) {
+        throw const FormatException(
+          'The assessment section must be inside its selected audience.',
+        );
+      }
+    } on FormatException catch (error) {
+      throw AssessmentServiceException(error.message);
+    }
 
     final String instructorId = instructor['id'].toString();
 
@@ -354,8 +385,9 @@ class AssessmentService {
 
     final Map<String, dynamic> data = {
       'courseId': cleanCourseId,
-      // Course-wide assessment: explicitly index legacy scope.
-      'sectionId': '',
+      // Existing single-section restrictions remain an extra intersection.
+      'sectionId': sectionId.trim(),
+      'sectionIds': audience,
       'moduleId': cleanModuleId,
 
       // Creator
@@ -615,6 +647,15 @@ class AssessmentService {
     );
 
     final String cleanStatus = _validateStatus(status);
+
+    if (cleanStatus == 'published' &&
+        assessment['assessmentType'] == 'quiz' &&
+        assessment['deliveryType'] == 'ai_generated' &&
+        (assessment['quizVersion'] ?? '').toString().trim().isEmpty) {
+      throw AssessmentServiceException(
+        'Use Validate & Publish AI Quiz to prepare secure grading before publishing.',
+      );
+    }
 
     await _firestore
         .collection(assessmentsCollection)

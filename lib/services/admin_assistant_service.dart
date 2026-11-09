@@ -1,25 +1,18 @@
+import 'dart:async';
+
+import 'ai_router_service.dart';
+
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_ai/firebase_ai.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'lms_assistant_policy.dart';
-
 class AdminAssistantService {
-  AdminAssistantService({
-    FirebaseAuth? auth,
-    FirebaseFirestore? firestore,
-    GenerativeModel? model,
-  }) : _auth = auth ?? FirebaseAuth.instance,
-       _firestore = firestore ?? FirebaseFirestore.instance,
-       _model =
-           model ??
-           FirebaseAI.googleAI().generativeModel(model: 'gemini-3.7-flash');
-
+  AdminAssistantService({FirebaseAuth? auth, FirebaseFirestore? firestore})
+    : _auth = auth ?? FirebaseAuth.instance,
+      _firestore = firestore ?? FirebaseFirestore.instance;
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
-  final GenerativeModel _model;
 
   _AdminAssistantData? _cachedData;
   DateTime? _cacheCreatedAt;
@@ -143,44 +136,14 @@ class AdminAssistantService {
     required _AdminAssistantData data,
   }) async {
     final Map<String, dynamic> context = data.aiContext(question);
-    final String encodedContext = jsonEncode(context);
-
-    final String prompt =
-        '''
-${LmsAssistantPolicy.system}
-
-You are currently assisting an active CASLMS administrator with authorized records.
-
-Answer the administrator's question using ONLY the supplied CASLMS record context.
-Never invent a student, subject, approval, requirement, grade, status, or personal detail.
-If the records do not contain enough information, clearly say what is unavailable.
-Treat a subject as registered only when its enrollment status is active.
-Treat an assessment requirement as completed only when the supplied record marks it completed.
-Do not expose internal document IDs, authentication email aliases, tokens, or security configuration.
-Use concise plain text with short headings and bullet points when useful.
-The context can be incomplete when the system has more records than the safety limit; mention that when relevant.
-If the question is outside the allowed LMS, academic, or education-technology scope, use the exact fallback response in your system policy and do not discuss the record context.
-
-ADMIN QUESTION:
-$question
-
-CASLMS RECORD CONTEXT:
-$encodedContext
-''';
-
+    final prompt = jsonEncode({'question': question, 'records': context});
     try {
-      final GenerateContentResponse response = await _model.generateContent(
-        <Content>[Content.text(prompt)],
+      return await AiRouterService().complete(
+        task: 'records_summary',
+        messages: [
+          {'role': 'user', 'content': prompt},
+        ],
       );
-      final String answer = (response.text ?? '').trim();
-
-      if (answer.isEmpty) {
-        throw const AdminAssistantException(
-          'The assistant returned an empty response. Please try again.',
-        );
-      }
-
-      return answer;
     } on AdminAssistantException {
       rethrow;
     } catch (_) {

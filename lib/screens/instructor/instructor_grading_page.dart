@@ -1,8 +1,11 @@
+import '../../core/app_colors.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'instructor_ui.dart';
+import 'instructor_workspace_widgets.dart';
 import '../shared/grading_ui.dart';
 
 import 'instructor_assessment_grading_page.dart';
@@ -21,17 +24,17 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
   // DESIGN
   // ============================================================
 
-  static const Color primaryTeal = Color(0xFF00897B);
-  static const Color background = Color(0xFFF7F9FC);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
-  static const Color borderColor = Color(0xFFE6EAF0);
+  Color get primaryTeal => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
 
-  static const Color green = Color(0xFF26A65B);
-  static const Color orange = Color(0xFFFF9418);
-  static const Color red = Color(0xFFFF4B4B);
-  static const Color blue = Color(0xFF1769FF);
-  static const Color purple = Color(0xFF7B4DFF);
+  Color get green => AppColors.resolve(context, AppColors.green);
+  Color get orange => AppColors.resolve(context, AppColors.amber);
+  Color get red => AppColors.resolve(context, AppColors.error);
+  Color get blue => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get purple => AppColors.resolve(context, AppColors.purple);
 
   // ============================================================
   // FIREBASE
@@ -546,64 +549,20 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
-    return instructorScaffold(
-      context: context,
-      backgroundColor: background,
-
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-
-        backgroundColor: background,
-
-        elevation: 0,
-
-        centerTitle: true,
-
-        title: const Text(
-          'Grades & Feedback',
-          style: TextStyle(
-            color: textDark,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-
-        actions: [
-          RoundGradeAction(
-            icon: Icons.edit_note_rounded,
-            label: 'Manual Grade Input',
-            onTap: _isLoading ? null : _selectManualAssessment,
-          ),
-          const SizedBox(width: 8),
-          RoundGradeAction(
-            icon: Icons.calculate_outlined,
-            label: 'Compute & Finalize Semester Grades',
-            onTap: _openSemesterGrades,
-          ),
-          const SizedBox(width: 8),
-          RoundGradeAction(
-            icon: Icons.refresh_rounded,
-            label: 'Refresh grading',
-            onTap: _isLoading ? null : _loadGradingData,
-          ),
-          const SizedBox(width: 8),
-        ],
+  Widget build(BuildContext context) => instructorScaffold(
+    loading: _isLoading,
+    context: context,
+    title: 'Grading',
+    subtitle: 'Review submissions and manage your class results.',
+    actions: [
+      IconButton(
+        tooltip: 'Refresh grading',
+        onPressed: _isLoading ? null : _loadGradingData,
+        icon: const Icon(Icons.refresh_rounded),
       ),
-
-      body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
-
-            child: _buildBody(),
-          ),
-        ),
-      ),
-    );
-  }
+    ],
+    body: _buildBody(),
+  );
 
   // ============================================================
   // BODY
@@ -611,7 +570,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: primaryTeal));
+      return Center(child: CircularProgressIndicator(color: primaryTeal));
     }
 
     if (_errorMessage != null) {
@@ -629,16 +588,6 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
         padding: const EdgeInsets.fromLTRB(22, 12, 22, 40),
 
         children: [
-          const GradeEntrance(
-            child: GradeHero(
-              title: 'A clearer path to grading.',
-              subtitle: 'Review submissions, enter external scores, then preview and post semester grades.',
-              icon: Icons.school_outlined,
-              accent: gradeTeal,
-              eyebrow: 'INSTRUCTOR WORKSPACE',
-            ),
-          ),
-          const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, constraints) => Wrap(
               spacing: 14,
@@ -674,59 +623,44 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
           // SUMMARY
           // ======================================================
 
-          Row(
+          InstructorTiles(
+            minWidth: 88,
             children: [
-              Expanded(
-                child: _buildStatCard(
-                  label: 'To Grade',
-                  value: '$_pendingCount',
-                  icon: Icons.pending_actions_rounded,
-                  color: orange,
-                ),
+              InstructorMetric(
+                label: 'Awaiting review',
+                value: '$_pendingCount',
+                icon: Icons.pending_actions_rounded,
               ),
-
-              const SizedBox(width: 10),
-
-              Expanded(
-                child: _buildStatCard(
-                  label: 'Graded',
-                  value: '$_gradedCount',
-                  icon: Icons.verified_outlined,
-                  color: green,
-                ),
+              InstructorMetric(
+                label: 'Graded',
+                value: '$_gradedCount',
+                icon: Icons.verified_outlined,
               ),
-
-              const SizedBox(width: 10),
-
-              Expanded(
-                child: _buildStatCard(
-                  label: 'Total',
-                  value: '${_submissions.length}',
-                  icon: Icons.assignment_turned_in_outlined,
-                  color: primaryTeal,
-                ),
+              InstructorMetric(
+                label: 'Submissions',
+                value: _submissions.length.toString(),
+                icon: Icons.assignment_turned_in_outlined,
               ),
             ],
           ),
-
           const SizedBox(height: 26),
 
           // ======================================================
           // HEADER
           // ======================================================
-          const Text(
+          Text(
             'Assessment Submissions',
 
             style: TextStyle(
               color: textDark,
               fontSize: 18,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
 
           const SizedBox(height: 4),
 
-          const Text(
+          Text(
             'Review and grade assessment submissions from your classes.',
 
             style: TextStyle(color: textGrey, fontSize: 11.5),
@@ -776,57 +710,6 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
   // STAT CARD
   // ============================================================
 
-  Widget _buildStatCard({
-    required String label,
-    required String value,
-    required IconData icon,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
-
-      decoration: BoxDecoration(
-        color: Colors.white,
-
-        borderRadius: BorderRadius.circular(16),
-
-        border: Border.all(color: borderColor),
-      ),
-
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 22),
-
-          const SizedBox(height: 6),
-
-          Text(
-            value,
-
-            style: const TextStyle(
-              color: textDark,
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-
-          const SizedBox(height: 2),
-
-          Text(
-            label,
-
-            textAlign: TextAlign.center,
-
-            style: const TextStyle(color: textGrey, fontSize: 9.5),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // FILTER CHIP
-  // ============================================================
-
   Widget _buildFilter({required String value, required String label}) {
     final bool selected = _selectedFilter == value;
 
@@ -837,7 +720,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
 
       selectedColor: primaryTeal.withValues(alpha: 0.12),
 
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).colorScheme.surface,
 
       side: BorderSide(color: selected ? primaryTeal : borderColor),
 
@@ -846,7 +729,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
 
         fontSize: 11,
 
-        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
       ),
 
       onSelected: (_) {
@@ -898,7 +781,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
       padding: const EdgeInsets.only(bottom: 13),
 
       child: Material(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
 
         borderRadius: BorderRadius.circular(18),
 
@@ -936,10 +819,10 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
                       child: Text(
                         studentInitial,
 
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: primaryTeal,
 
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -954,12 +837,12 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
                           Text(
                             studentName,
 
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: textDark,
 
                               fontSize: 13.5,
 
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
 
@@ -970,11 +853,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
                                 ? 'Graded ${_formatDate(submission['gradedAt'])}'
                                 : 'Submitted ${_formatDate(submission['submittedAt'])}',
 
-                            style: const TextStyle(
-                              color: textGrey,
-
-                              fontSize: 10.5,
-                            ),
+                            style: TextStyle(color: textGrey, fontSize: 10.5),
                           ),
                         ],
                       ),
@@ -1002,7 +881,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
 
                           fontSize: 8,
 
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -1011,7 +890,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
 
                 const SizedBox(height: 15),
 
-                const Divider(height: 1, color: borderColor),
+                Divider(height: 1, color: borderColor),
 
                 const SizedBox(height: 14),
 
@@ -1051,12 +930,12 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
                           Text(
                             assessmentTitle,
 
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: textDark,
 
                               fontSize: 13,
 
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
 
@@ -1073,7 +952,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
 
                             overflow: TextOverflow.ellipsis,
 
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: textGrey,
 
                               fontSize: 10.5,
@@ -1088,11 +967,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
                             Text(
                               moduleTitle,
 
-                              style: const TextStyle(
-                                color: textGrey,
-
-                                fontSize: 10,
-                              ),
+                              style: TextStyle(color: textGrey, fontSize: 10),
                             ),
                           ],
                         ],
@@ -1103,12 +978,12 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
                       Text(
                         score is num ? '$score / $totalPoints' : 'Graded',
 
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: green,
 
                           fontSize: 12,
 
-                          fontWeight: FontWeight.w800,
+                          fontWeight: FontWeight.w700,
                         ),
                       )
                     else
@@ -1148,7 +1023,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
                       style: const TextStyle(
                         color: Colors.white,
 
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
 
@@ -1206,7 +1081,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
       padding: const EdgeInsets.all(30),
 
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
 
         borderRadius: BorderRadius.circular(18),
 
@@ -1235,12 +1110,12 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
 
             textAlign: TextAlign.center,
 
-            style: const TextStyle(
+            style: TextStyle(
               color: textDark,
 
               fontSize: 15,
 
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
 
@@ -1251,7 +1126,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
 
             textAlign: TextAlign.center,
 
-            style: const TextStyle(color: textGrey, fontSize: 11, height: 1.5),
+            style: TextStyle(color: textGrey, fontSize: 11, height: 1.5),
           ),
         ],
       ),
@@ -1276,7 +1151,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
         children: [
           const SizedBox(height: 120),
 
-          const Icon(Icons.error_outline_rounded, color: red, size: 50),
+          Icon(Icons.error_outline_rounded, color: red, size: 50),
 
           const SizedBox(height: 13),
 
@@ -1285,11 +1160,7 @@ class _InstructorGradingScreenState extends State<InstructorGradingScreen> {
 
             textAlign: TextAlign.center,
 
-            style: const TextStyle(
-              color: textGrey,
-
-              fontWeight: FontWeight.w600,
-            ),
+            style: TextStyle(color: textGrey, fontWeight: FontWeight.w600),
           ),
 
           const SizedBox(height: 20),

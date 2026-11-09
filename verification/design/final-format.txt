@@ -1,0 +1,7 @@
+Formatted lib/screens/shared/workspace_widgets.dart
+Formatted lib/screens/shared/workspace_shell.dart
+Formatted lib/screens/student/student_dashboard_page.dart
+Formatted lib/screens/student/activities_scores_page.dart
+Formatted lib/screens/student/subject_overview_page.dart
+Formatted test/workspace_pages_test.dart
+Formatted 11 files (6 changed) in 0.29 seconds.

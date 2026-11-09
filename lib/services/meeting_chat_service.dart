@@ -56,11 +56,15 @@ class MeetingChatService {
   String get currentUserId => _auth.currentUser?.uid ?? '';
 
   Stream<List<MeetingChatMessage>> watchMessages({
+    required String liveClassId,
     required String courseId,
     required String sectionId,
     required String sessionId,
   }) {
-    if (courseId.isEmpty || sectionId.isEmpty || sessionId.isEmpty) {
+    if (liveClassId.isEmpty ||
+        courseId.isEmpty ||
+        sectionId.isEmpty ||
+        sessionId.isEmpty) {
       return Stream.error(
         const MeetingChatException('Meeting information is incomplete.'),
       );
@@ -68,19 +72,23 @@ class MeetingChatService {
 
     return _firestore
         .collection('meetingMessages')
+        .where('liveClassId', isEqualTo: liveClassId)
         .where('courseId', isEqualTo: courseId)
         .where('sectionId', isEqualTo: sectionId)
         .where('sessionId', isEqualTo: sessionId)
-        .orderBy('createdAt')
+        .orderBy('createdAt', descending: true)
         .limit(500)
         .snapshots()
-        .map(
-          (snapshot) =>
-              snapshot.docs.map(MeetingChatMessage.fromDocument).toList(),
-        );
+        .map((snapshot) {
+          final messages = snapshot.docs
+              .map(MeetingChatMessage.fromDocument)
+              .toList();
+          return messages.reversed.toList(growable: false);
+        });
   }
 
   Future<void> sendMessage({
+    required String liveClassId,
     required String courseId,
     required String sectionId,
     required String sessionId,
@@ -99,7 +107,10 @@ class MeetingChatService {
         'Meeting messages must be 2,000 characters or fewer.',
       );
     }
-    if (courseId.isEmpty || sectionId.isEmpty || sessionId.isEmpty) {
+    if (liveClassId.isEmpty ||
+        courseId.isEmpty ||
+        sectionId.isEmpty ||
+        sessionId.isEmpty) {
       throw const MeetingChatException('Meeting information is incomplete.');
     }
 
@@ -113,6 +124,7 @@ class MeetingChatService {
       final nonce = DateTime.now().microsecondsSinceEpoch.toString();
       final documentId = '${user.uid}_$nonce';
       await _firestore.collection('meetingMessages').doc(documentId).set({
+        'liveClassId': liveClassId,
         'courseId': courseId,
         'sectionId': sectionId,
         'sessionId': sessionId,
@@ -138,9 +150,7 @@ class MeetingChatService {
     final profile = (await _firestore.collection('users').doc(uid).get())
         .data();
     final role = (profile?['role'] ?? '').toString();
-    final name = (profile?['name'] ?? _auth.currentUser?.displayName ?? '')
-        .toString()
-        .trim();
+    final name = (profile?['name'] ?? '').toString().trim();
     if (!['student', 'instructor'].contains(role)) {
       throw const MeetingChatException(
         'Only meeting participants can use meeting chat.',

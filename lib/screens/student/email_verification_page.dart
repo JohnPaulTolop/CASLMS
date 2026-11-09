@@ -1,3 +1,5 @@
+import '../../core/app_colors.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -116,7 +118,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen>
                   const Icon(
                     Icons.mark_email_unread_outlined,
                     size: 64,
-                    color: Color(0xFF1769FF),
+                    color: AppColors.primaryBlue,
                   ),
                   const SizedBox(height: 18),
                   const Text(

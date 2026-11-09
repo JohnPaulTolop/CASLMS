@@ -1,11 +1,13 @@
+import '../../core/app_colors.dart';
+
 import 'package:flutter/material.dart';
 
-const gradeBlue = Color(0xFF1769FF);
-const gradeTeal = Color(0xFF00897B);
-const gradeInk = Color(0xFF14233D);
-const gradeMuted = Color(0xFF687B94);
-const gradeBackground = Color(0xFFF4F7FC);
-const gradeBorder = Color(0xFFE4EBF5);
+const gradeBlue = AppColors.primaryBlue;
+const gradeTeal = AppColors.primaryBlue;
+const gradeInk = AppColors.darkText;
+const gradeMuted = AppColors.secondaryText;
+const gradeBackground = AppColors.background;
+const gradeBorder = AppColors.inputBorder;
 
 Duration gradeMotion(BuildContext context, [int milliseconds = 240]) =>
     MediaQuery.disableAnimationsOf(context)
@@ -68,21 +70,13 @@ class GradeSurface extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: padding,
-    decoration: BoxDecoration(
-      color: Colors.white,
+  Widget build(BuildContext context) => Material(
+    color: AppColors.resolve(context, Colors.white),
+    shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(22),
-      border: Border.all(color: gradeBorder),
-      boxShadow: [
-        BoxShadow(
-          color: gradeInk.withValues(alpha: .025),
-          blurRadius: 20,
-          offset: const Offset(0, 6),
-        ),
-      ],
+      side: BorderSide(color: AppColors.resolve(context, gradeBorder)),
     ),
-    child: child,
+    child: Padding(padding: padding, child: child),
   );
 }
 
@@ -104,12 +98,8 @@ class GradeHero extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(24),
     decoration: BoxDecoration(
-      gradient: LinearGradient(
-        colors: [accent, Color.lerp(accent, const Color(0xFF122C66), .5)!],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-      borderRadius: BorderRadius.circular(24),
+      color: AppColors.resolve(context, AppColors.blueTint),
+      borderRadius: BorderRadius.circular(22),
     ),
     child: LayoutBuilder(
       builder: (context, constraints) => Column(
@@ -122,16 +112,16 @@ class GradeHero extends StatelessWidget {
                 height: 48,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: .16),
+                  color: AppColors.resolve(context, AppColors.darkText),
                 ),
-                child: Icon(icon, color: Colors.white),
+                child: Icon(icon, color: AppColors.resolve(context, accent)),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Text(
                   eyebrow,
-                  style: const TextStyle(
-                    color: Color(0xFFDCEAFF),
+                  style: TextStyle(
+                    color: AppColors.resolve(context, AppColors.primaryBlue),
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 1.8,
@@ -145,9 +135,9 @@ class GradeHero extends StatelessWidget {
           Text(
             title,
             style: TextStyle(
-              color: Colors.white,
+              color: AppColors.resolve(context, AppColors.darkText),
               fontSize: constraints.maxWidth < 480 ? 24 : 30,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               height: 1.15,
             ),
           ),
@@ -156,8 +146,8 @@ class GradeHero extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 650),
             child: Text(
               subtitle,
-              style: const TextStyle(
-                color: Color(0xFFE2EAFF),
+              style: TextStyle(
+                color: AppColors.resolve(context, AppColors.secondaryText),
                 fontSize: 13,
                 height: 1.6,
               ),
@@ -214,7 +204,7 @@ class _RoundGradeActionState extends State<RoundGradeAction> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: widget.onTap == null
-                  ? const Color(0xFFF0F3F8)
+                  ? AppColors.resolve(context, AppColors.background)
                   : widget.accent.withValues(alpha: _hover ? .16 : .09),
               border: Border.all(
                 color: _focus
@@ -265,10 +255,14 @@ class _GradeShortcutState extends State<GradeShortcut> {
   Widget build(BuildContext context) => AnimatedContainer(
     duration: gradeMotion(context, 180),
     decoration: BoxDecoration(
-      color: _hover ? widget.accent.withValues(alpha: .035) : Colors.white,
+      color: _hover
+          ? widget.accent.withValues(alpha: .035)
+          : AppColors.resolve(context, Colors.white),
       borderRadius: BorderRadius.circular(20),
       border: Border.all(
-        color: _hover ? widget.accent.withValues(alpha: .45) : gradeBorder,
+        color: _hover
+            ? widget.accent.withValues(alpha: .45)
+            : AppColors.resolve(context, gradeBorder),
       ),
     ),
     child: Material(
@@ -286,9 +280,16 @@ class _GradeShortcutState extends State<GradeShortcut> {
                 height: 52,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: widget.accent.withValues(alpha: .09),
+                  color: AppColors.resolve(
+                    context,
+                    widget.accent,
+                  ).withValues(alpha: .09),
                 ),
-                child: Icon(widget.icon, color: widget.accent, size: 26),
+                child: Icon(
+                  widget.icon,
+                  color: AppColors.resolve(context, widget.accent),
+                  size: 26,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -297,17 +298,17 @@ class _GradeShortcutState extends State<GradeShortcut> {
                   children: [
                     Text(
                       widget.title,
-                      style: const TextStyle(
-                        color: gradeInk,
-                        fontWeight: FontWeight.w800,
+                      style: TextStyle(
+                        color: AppColors.resolve(context, gradeInk),
+                        fontWeight: FontWeight.w700,
                         fontSize: 14,
                       ),
                     ),
                     const SizedBox(height: 5),
                     Text(
                       widget.subtitle,
-                      style: const TextStyle(
-                        color: gradeMuted,
+                      style: TextStyle(
+                        color: AppColors.resolve(context, gradeMuted),
                         fontSize: 12,
                         height: 1.4,
                       ),
@@ -316,7 +317,11 @@ class _GradeShortcutState extends State<GradeShortcut> {
                 ),
               ),
               const SizedBox(width: 6),
-              Icon(Icons.arrow_forward_rounded, size: 18, color: widget.accent),
+              Icon(
+                Icons.arrow_forward_rounded,
+                size: 18,
+                color: AppColors.resolve(context, widget.accent),
+              ),
             ],
           ),
         ),
@@ -330,49 +335,56 @@ class GradeStats extends StatelessWidget {
   final List<({String label, String value, IconData icon, Color color})> items;
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) => Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: items
-          .map(
-            (item) => SizedBox(
-              width:
-                  (constraints.maxWidth - (items.length - 1) * 10) /
-                  items.length,
-              child: GradeSurface(
-                padding: EdgeInsets.all(constraints.maxWidth < 600 ? 10 : 18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(item.icon, color: item.color, size: 19),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            item.value,
-                            style: const TextStyle(
-                              color: gradeInk,
-                              fontSize: 24,
-                              fontWeight: FontWeight.w800,
+    builder: (context, constraints) {
+      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      final columns = (constraints.maxWidth / (180 * scale)).floor().clamp(
+        1,
+        items.length,
+      );
+      return Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: items
+            .map(
+              (item) => SizedBox(
+                width: (constraints.maxWidth - (columns - 1) * 10) / columns,
+                child: GradeSurface(
+                  padding: EdgeInsets.all(constraints.maxWidth < 600 ? 10 : 18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(item.icon, color: item.color, size: 19),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              item.value,
+                              style: TextStyle(
+                                color: AppColors.resolve(context, gradeInk),
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        item.label,
+                        style: TextStyle(
+                          color: AppColors.resolve(context, gradeMuted),
+                          fontSize: 12,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      item.label,
-                      style: const TextStyle(color: gradeMuted, fontSize: 12),
-                      maxLines: 2,
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          )
-          .toList(),
-    ),
+            )
+            .toList(),
+      );
+    },
   );
 }
 
@@ -385,20 +397,20 @@ class GradeBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
     decoration: BoxDecoration(
-      color: color.withValues(alpha: .09),
+      color: AppColors.resolve(context, color).withValues(alpha: .09),
       borderRadius: BorderRadius.circular(30),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null) ...[
-          Icon(icon, size: 13, color: color),
+          Icon(icon, size: 13, color: AppColors.resolve(context, color)),
           const SizedBox(width: 5),
         ],
         Text(
           text,
           style: TextStyle(
-            color: color,
+            color: AppColors.resolve(context, color),
             fontSize: 11,
             fontWeight: FontWeight.w700,
           ),
@@ -428,28 +440,32 @@ class GradeStateMessage extends StatelessWidget {
           Container(
             width: 64,
             height: 64,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Color(0xFFEDF3FF),
+              color: AppColors.resolve(context, AppColors.blueTint),
             ),
-            child: Icon(icon, color: gradeBlue, size: 30),
+            child: Icon(
+              icon,
+              color: AppColors.resolve(context, gradeBlue),
+              size: 30,
+            ),
           ),
           const SizedBox(height: 16),
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: gradeInk,
+            style: TextStyle(
+              color: AppColors.resolve(context, gradeInk),
               fontSize: 18,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: gradeMuted,
+            style: TextStyle(
+              color: AppColors.resolve(context, gradeMuted),
               fontSize: 13,
               height: 1.5,
             ),
@@ -475,16 +491,7 @@ InputDecoration gradeInput(String label, {IconData? icon, String? hint}) =>
       hintText: hint,
       prefixIcon: icon == null ? null : Icon(icon, size: 20),
       filled: true,
-      fillColor: const Color(0xFFF8FAFE),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: gradeBorder),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: gradeBorder),
-      ),
     );
 
 IconData gradeTypeIcon(String type) => switch (type) {

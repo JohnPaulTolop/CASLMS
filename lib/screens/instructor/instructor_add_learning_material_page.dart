@@ -1,22 +1,34 @@
+import '../../core/app_colors.dart';
+
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
-import 'instructor_ui.dart';
+import 'instructor_task_widgets.dart';
 
 import '../../services/learning_material_service.dart';
+import '../../services/section_audience_service.dart';
+import 'section_audience_picker.dart';
 
 class InstructorAddLearningMaterialScreen extends StatefulWidget {
   final String courseId;
   final String moduleId;
   final String moduleTitle;
+  final LearningMaterialService? materialService;
+  final List<Map<String, dynamic>> sections;
+  final List<String> moduleSectionIds;
+  final String? initialSectionId;
 
   const InstructorAddLearningMaterialScreen({
     super.key,
     required this.courseId,
     required this.moduleId,
     required this.moduleTitle,
+    required this.sections,
+    required this.moduleSectionIds,
+    this.initialSectionId,
+    this.materialService,
   });
 
   @override
@@ -30,21 +42,22 @@ class _InstructorAddLearningMaterialScreenState
   // DESIGN
   // ============================================================
 
-  static const Color primaryTeal = Color(0xFF00897B);
-  static const Color background = Color(0xFFF7F9FC);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
-  static const Color borderColor = Color(0xFFE6EAF0);
+  Color get primaryTeal => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
 
-  static const Color red = Color(0xFFE45757);
-  static const Color blue = Color(0xFF1769FF);
-  static const Color green = Color(0xFF26A65B);
+  Color get red => AppColors.resolve(context, AppColors.error);
+  Color get blue => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get green => AppColors.resolve(context, AppColors.green);
 
   // ============================================================
   // SERVICE
   // ============================================================
 
-  final LearningMaterialService _materialService = LearningMaterialService();
+  late final LearningMaterialService _materialService =
+      widget.materialService ?? LearningMaterialService();
 
   // ============================================================
   // FORM
@@ -73,6 +86,18 @@ class _InstructorAddLearningMaterialScreenState
   PlatformFile? _selectedFile;
 
   Uint8List? _selectedFileBytes;
+  late List<String> _sectionIds;
+
+  @override
+  void initState() {
+    super.initState();
+    final parent = SectionAudienceService.validate(widget.moduleSectionIds);
+    final initial = widget.initialSectionId?.trim() ?? '';
+    _sectionIds =
+        initial.isNotEmpty && SectionAudienceService.allows(parent, initial)
+        ? <String>[initial]
+        : List<String>.from(parent);
+  }
 
   // ============================================================
   // DISPOSE
@@ -289,6 +314,10 @@ class _InstructorAddLearningMaterialScreenState
         return;
       }
     }
+    if (_sectionIds.isEmpty) {
+      _showError('Choose the sections assigned to this material.');
+      return;
+    }
 
     FocusScope.of(context).unfocus();
 
@@ -309,6 +338,7 @@ class _InstructorAddLearningMaterialScreenState
           description: _descriptionController.text,
           fileName: _selectedFile!.name,
           fileBytes: _selectedFileBytes!,
+          sectionIds: _sectionIds,
           status: _status,
         );
       }
@@ -322,6 +352,7 @@ class _InstructorAddLearningMaterialScreenState
           title: _titleController.text,
           description: _descriptionController.text,
           url: _urlController.text,
+          sectionIds: _sectionIds,
           resourceType: _linkType,
           status: _status,
         );
@@ -462,7 +493,7 @@ class _InstructorAddLearningMaterialScreenState
 
       case 'ppt':
       case 'pptx':
-        return const Color(0xFFFF9418);
+        return AppColors.amber;
 
       case 'xls':
       case 'xlsx':
@@ -473,7 +504,7 @@ class _InstructorAddLearningMaterialScreenState
       case 'png':
       case 'gif':
       case 'webp':
-        return const Color(0xFF7B4DFF);
+        return AppColors.purple;
 
       case 'mp4':
       case 'webm':
@@ -489,426 +520,136 @@ class _InstructorAddLearningMaterialScreenState
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      canPop: !_isSaving,
-
-      child: instructorScaffold(
-        context: context,
-        backgroundColor: background,
-
-        // ======================================================
-        // APP BAR
-        // ======================================================
-        appBar: AppBar(
-          backgroundColor: background,
-          elevation: 0,
-          foregroundColor: textDark,
-          centerTitle: true,
-
-          title: const Text(
-            'Add Learning Material',
-            style: TextStyle(
-              color: textDark,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ),
-
-        // ======================================================
-        // BODY
-        //
-        // IMPORTANT:
-        // Align(topCenter) prevents the form from being
-        // vertically centered / pushed away.
-        // ======================================================
-        body: SafeArea(
-          top: false,
-
-          child: Align(
-            alignment: Alignment.topCenter,
-
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 750),
-
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-
-                padding: const EdgeInsets.fromLTRB(22, 16, 22, 40),
-
-                child: Form(
-                  key: _formKey,
-
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-
-                    children: [
-                      // ========================================
-                      // CURRENT MODULE
-                      // ========================================
-
-                      _buildModuleCard(),
-
-                      const SizedBox(height: 24),
-
-                      // ========================================
-                      // SOURCE
-                      // ========================================
-                      const Text(
-                        'Material Source',
-                        style: TextStyle(
-                          color: textDark,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                        ),
+  Widget build(BuildContext context) => InstructorTaskScaffold(
+    title: 'Add learning material',
+    subtitle: 'Upload a file or share a useful link with your class.',
+    contextLabel: widget.moduleTitle,
+    busy: _isSaving,
+    body: SingleChildScrollView(
+      padding: InstructorTaskScaffold.paddingOf(context),
+      child: Form(
+        key: _formKey,
+        child: InstructorFormColumns(
+          primary: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              InstructorFormSection(
+                title: 'Material details',
+                child: Column(
+                  children: [
+                    TextFormField(
+                      key: const ValueKey('material-title'),
+                      controller: _titleController,
+                      enabled: !_isSaving,
+                      textInputAction: TextInputAction.next,
+                      decoration: const InputDecoration(
+                        labelText: 'Title',
+                        hintText: 'e.g. Chapter 1 lecture notes',
                       ),
-
-                      const SizedBox(height: 10),
-
-                      _buildModeSelector(),
-
-                      const SizedBox(height: 24),
-
-                      // ========================================
-                      // TITLE
-                      // ========================================
-                      _buildLabel('Title'),
-
-                      const SizedBox(height: 8),
-
-                      TextFormField(
-                        controller: _titleController,
-
-                        enabled: !_isSaving,
-
-                        textCapitalization: TextCapitalization.sentences,
-
-                        textInputAction: TextInputAction.next,
-
-                        decoration: _inputDecoration(
-                          hint: 'e.g. Chapter 1 Lecture Notes',
-                          icon: Icons.title_rounded,
-                        ),
-
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Please enter a material title';
-                          }
-
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 18),
-
-                      // ========================================
-                      // DESCRIPTION
-                      // ========================================
-                      _buildLabel('Description', optional: true),
-
-                      const SizedBox(height: 8),
-
-                      TextFormField(
-                        controller: _descriptionController,
-
-                        enabled: !_isSaving,
-
-                        minLines: 3,
-                        maxLines: 5,
-
-                        textCapitalization: TextCapitalization.sentences,
-
-                        decoration: _inputDecoration(
-                          hint: 'Add a short description or instructions...',
-                          icon: Icons.notes_rounded,
-                        ),
-                      ),
-
-                      const SizedBox(height: 22),
-
-                      // ========================================
-                      // FILE / LINK SECTION
-                      // ========================================
-                      if (_isUploadingFile)
-                        _buildFileSection()
-                      else
-                        _buildLinkSection(),
-
-                      const SizedBox(height: 24),
-
-                      // ========================================
-                      // VISIBILITY
-                      // ========================================
-                      _buildStatusSection(),
-
-                      const SizedBox(height: 20),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-
-        // ======================================================
-        // BOTTOM SAVE BUTTON
-        //
-        // IMPORTANT FIX:
-        // heightFactor: 1 prevents Center from taking the
-        // entire remaining screen height.
-        // ======================================================
-        bottomNavigationBar: SafeArea(
-          top: false,
-
-          child: Container(
-            color: background,
-
-            padding: const EdgeInsets.fromLTRB(22, 10, 22, 16),
-
-            child: Center(
-              heightFactor: 1,
-
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 750),
-
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 55,
-
-                  child: ElevatedButton.icon(
-                    onPressed: _isSaving ? null : _saveMaterial,
-
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryTeal,
-
-                      disabledBackgroundColor: primaryTeal.withValues(
-                        alpha: 0.55,
-                      ),
-
-                      foregroundColor: Colors.white,
-
-                      elevation: 0,
-
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
+                      validator: (v) => (v ?? '').trim().isEmpty
+                          ? 'Please enter a material title'
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _descriptionController,
+                      enabled: !_isSaving,
+                      minLines: 3,
+                      maxLines: 5,
+                      decoration: const InputDecoration(
+                        labelText: 'Description (optional)',
+                        alignLabelWithHint: true,
                       ),
                     ),
-
-                    icon: _isSaving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Icon(
-                            _status == 'published'
-                                ? Icons.publish_rounded
-                                : Icons.save_outlined,
-                          ),
-
-                    label: Text(
-                      _isSaving
-                          ? _isUploadingFile
-                                ? 'Uploading...'
-                                : 'Saving...'
-                          : _status == 'published'
-                          ? 'Publish Material'
-                          : 'Save as Draft',
-
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
+                  ],
                 ),
               ),
+              const SizedBox(height: 20),
+              InstructorFormSection(
+                title: 'Source',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildModeSelector(),
+                    const SizedBox(height: 18),
+                    if (_isUploadingFile)
+                      _buildFileSection()
+                    else
+                      _buildLinkSection(),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          secondary: InstructorFormSection(
+            title: 'Visibility',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Assigned sections',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Defaults to the module audience and can only be narrowed.',
+                ),
+                SectionAudiencePicker(
+                  sections: widget.sections,
+                  parentAudience: widget.moduleSectionIds,
+                  value: _sectionIds,
+                  enabled: !_isSaving,
+                  onChanged: (value) => setState(() => _sectionIds = value),
+                ),
+                const Divider(height: 28),
+                _buildStatusSection(),
+              ],
             ),
           ),
         ),
       ),
-    );
-  }
+    ),
+    footer: InstructorTaskActions(
+      children: [
+        FilledButton(
+          onPressed: _isSaving ? null : _saveMaterial,
+          child: Text(
+            _isSaving
+                ? 'Saving material…'
+                : _status == 'published'
+                ? 'Publish material'
+                : 'Save draft',
+          ),
+        ),
+      ],
+    ),
+  );
 
   // ============================================================
   // MODULE CARD
   // ============================================================
 
-  Widget _buildModuleCard() {
-    return Container(
-      width: double.infinity,
-
-      padding: const EdgeInsets.all(16),
-
-      decoration: BoxDecoration(
-        color: primaryTeal.withValues(alpha: 0.07),
-
-        borderRadius: BorderRadius.circular(16),
-
-        border: Border.all(color: primaryTeal.withValues(alpha: 0.18)),
-      ),
-
-      child: Row(
-        children: [
-          Container(
-            width: 46,
-            height: 46,
-
-            decoration: BoxDecoration(
-              color: primaryTeal.withValues(alpha: 0.12),
-
-              borderRadius: BorderRadius.circular(13),
-            ),
-
-            child: const Icon(Icons.menu_book_rounded, color: primaryTeal),
-          ),
-
-          const SizedBox(width: 13),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-
-              children: [
-                const Text(
-                  'Adding material to',
-                  style: TextStyle(color: textGrey, fontSize: 11),
-                ),
-
-                const SizedBox(height: 3),
-
-                Text(
-                  widget.moduleTitle,
-
-                  maxLines: 2,
-
-                  overflow: TextOverflow.ellipsis,
-
-                  style: const TextStyle(
-                    color: textDark,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ============================================================
   // SOURCE SELECTOR
   // ============================================================
 
-  Widget _buildModeSelector() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-
-      decoration: BoxDecoration(
-        color: const Color(0xFFEDEFF3),
-
-        borderRadius: BorderRadius.circular(14),
+  Widget _buildModeSelector() => SegmentedButton<bool>(
+    showSelectedIcon: false,
+    segments: const [
+      ButtonSegment(
+        value: true,
+        icon: Icon(Icons.upload_file_outlined),
+        label: Text('File'),
       ),
-
-      child: Row(
-        children: [
-          Expanded(
-            child: _sourceButton(
-              selected: _isUploadingFile,
-
-              icon: Icons.upload_file_rounded,
-
-              text: 'Upload File',
-
-              onTap: () {
-                _changeMode(true);
-              },
-            ),
-          ),
-
-          Expanded(
-            child: _sourceButton(
-              selected: !_isUploadingFile,
-
-              icon: Icons.link_rounded,
-
-              text: 'External Link',
-
-              onTap: () {
-                _changeMode(false);
-              },
-            ),
-          ),
-        ],
+      ButtonSegment(
+        value: false,
+        icon: Icon(Icons.link_rounded),
+        label: Text('Link'),
       ),
-    );
-  }
-
-  Widget _sourceButton({
-    required bool selected,
-    required IconData icon,
-    required String text,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-
-      borderRadius: BorderRadius.circular(11),
-
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-
-        padding: const EdgeInsets.symmetric(vertical: 12),
-
-        decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.transparent,
-
-          borderRadius: BorderRadius.circular(11),
-
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-
-                    blurRadius: 8,
-
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : [],
-        ),
-
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-
-          children: [
-            Icon(icon, size: 18, color: selected ? primaryTeal : textGrey),
-
-            const SizedBox(width: 7),
-
-            Text(
-              text,
-
-              style: TextStyle(
-                color: selected ? primaryTeal : textGrey,
-
-                fontSize: 12,
-
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    ],
+    selected: {_isUploadingFile},
+    onSelectionChanged: _isSaving ? null : (v) => _changeMode(v.first),
+  );
 
   // ============================================================
   // FILE SECTION
@@ -935,14 +676,14 @@ class _InstructorAddLearningMaterialScreenState
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
 
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.surface,
 
                 borderRadius: BorderRadius.circular(18),
 
                 border: Border.all(color: borderColor, width: 1.5),
               ),
 
-              child: const Column(
+              child: Column(
                 children: [
                   CircleAvatar(
                     radius: 28,
@@ -966,7 +707,7 @@ class _InstructorAddLearningMaterialScreenState
                     style: TextStyle(
                       color: textDark,
                       fontSize: 14,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
 
@@ -1014,7 +755,7 @@ class _InstructorAddLearningMaterialScreenState
       padding: const EdgeInsets.all(15),
 
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
 
         borderRadius: BorderRadius.circular(16),
 
@@ -1050,10 +791,10 @@ class _InstructorAddLearningMaterialScreenState
 
                   overflow: TextOverflow.ellipsis,
 
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: textDark,
                     fontSize: 13,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
 
@@ -1062,7 +803,7 @@ class _InstructorAddLearningMaterialScreenState
                 Text(
                   _formatFileSize(byteSize),
 
-                  style: const TextStyle(color: textGrey, fontSize: 11),
+                  style: TextStyle(color: textGrey, fontSize: 11),
                 ),
               ],
             ),
@@ -1071,7 +812,7 @@ class _InstructorAddLearningMaterialScreenState
           IconButton(
             onPressed: _isSaving ? null : _removeSelectedFile,
 
-            icon: const Icon(Icons.close_rounded, color: textGrey),
+            icon: Icon(Icons.close_rounded, color: textGrey),
           ),
         ],
       ),
@@ -1092,6 +833,7 @@ class _InstructorAddLearningMaterialScreenState
         const SizedBox(height: 8),
 
         DropdownButtonFormField<String>(
+          isExpanded: true,
           initialValue: _linkType,
 
           items: const [
@@ -1170,160 +912,30 @@ class _InstructorAddLearningMaterialScreenState
   // VISIBILITY STATUS
   // ============================================================
 
-  Widget _buildStatusSection() {
-    return RadioGroup<String>(
-      groupValue: _status,
-      onChanged: (newValue) {
-        if (_isSaving || newValue == null) {
-          return;
-        }
-        setState(() {
-          _status = newValue;
-        });
-      },
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-
-        children: [
-          const Text(
-            'Visibility',
-
-            style: TextStyle(
-              color: textDark,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          _statusCard(
-            value: 'published',
-
-            title: 'Publish Now',
-
-            subtitle:
-                'Students enrolled in the course can access this material.',
-
-            icon: Icons.visibility_rounded,
-
-            color: green,
-          ),
-
-          const SizedBox(height: 9),
-
-          _statusCard(
-            value: 'draft',
-
-            title: 'Save as Draft',
-
-            subtitle: 'Only you can access the material until it is published.',
-
-            icon: Icons.edit_note_rounded,
-
-            color: const Color(0xFFFF9418),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statusCard({
-    required String value,
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-  }) {
-    final bool selected = _status == value;
-
-    return InkWell(
-      onTap: _isSaving
-          ? null
-          : () {
-              setState(() {
-                _status = value;
-              });
-            },
-
-      borderRadius: BorderRadius.circular(15),
-
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-
-        width: double.infinity,
-
-        padding: const EdgeInsets.all(14),
-
-        decoration: BoxDecoration(
-          color: Colors.white,
-
-          borderRadius: BorderRadius.circular(15),
-
-          border: Border.all(
-            color: selected ? color : borderColor,
-
-            width: selected ? 1.7 : 1,
-          ),
+  Widget _buildStatusSection() => RadioGroup<String>(
+    groupValue: _status,
+    onChanged: (v) {
+      if (!_isSaving && v != null) setState(() => _status = v);
+    },
+    child: Column(
+      children: [
+        RadioListTile<String>(
+          contentPadding: EdgeInsets.zero,
+          value: 'published',
+          enabled: !_isSaving,
+          title: const Text('Publish now'),
+          subtitle: const Text('Available to enrolled students.'),
         ),
-
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.10),
-
-                borderRadius: BorderRadius.circular(12),
-              ),
-
-              child: Icon(icon, color: color, size: 21),
-            ),
-
-            const SizedBox(width: 12),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-
-                children: [
-                  Text(
-                    title,
-
-                    style: const TextStyle(
-                      color: textDark,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-
-                  const SizedBox(height: 3),
-
-                  Text(
-                    subtitle,
-
-                    style: const TextStyle(
-                      color: textGrey,
-                      fontSize: 10.5,
-                      height: 1.4,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            Radio<String>(
-              value: value,
-              activeColor: color,
-              enabled: !_isSaving,
-            ),
-          ],
+        RadioListTile<String>(
+          contentPadding: EdgeInsets.zero,
+          value: 'draft',
+          enabled: !_isSaving,
+          title: const Text('Save as draft'),
+          subtitle: const Text('Keep private until you publish.'),
         ),
-      ),
-    );
-  }
+      ],
+    ),
+  );
 
   // ============================================================
   // LABEL
@@ -1335,7 +947,7 @@ class _InstructorAddLearningMaterialScreenState
         Text(
           title,
 
-          style: const TextStyle(
+          style: TextStyle(
             color: textDark,
             fontSize: 12.5,
             fontWeight: FontWeight.w700,
@@ -1345,11 +957,7 @@ class _InstructorAddLearningMaterialScreenState
         if (optional) ...[
           const SizedBox(width: 5),
 
-          const Text(
-            '(optional)',
-
-            style: TextStyle(color: textGrey, fontSize: 10.5),
-          ),
+          Text('(optional)', style: TextStyle(color: textGrey, fontSize: 10.5)),
         ],
       ],
     );
@@ -1372,38 +980,38 @@ class _InstructorAddLearningMaterialScreenState
 
       filled: true,
 
-      fillColor: Colors.white,
+      fillColor: Theme.of(context).colorScheme.surface,
 
       contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 16),
 
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
 
-        borderSide: const BorderSide(color: borderColor),
+        borderSide: BorderSide(color: borderColor),
       ),
 
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
 
-        borderSide: const BorderSide(color: borderColor),
+        borderSide: BorderSide(color: borderColor),
       ),
 
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
 
-        borderSide: const BorderSide(color: primaryTeal, width: 1.6),
+        borderSide: BorderSide(color: primaryTeal, width: 1.6),
       ),
 
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
 
-        borderSide: const BorderSide(color: red),
+        borderSide: BorderSide(color: red),
       ),
 
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(15),
 
-        borderSide: const BorderSide(color: red, width: 1.5),
+        borderSide: BorderSide(color: red, width: 1.5),
       ),
     );
   }

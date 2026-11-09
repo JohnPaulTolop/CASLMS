@@ -365,7 +365,7 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
                             Text(
                               '${_categories[_category]} · ${rows.length} shown',
                               style: const TextStyle(
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: AdminUi.ink,
                               ),
                             ),

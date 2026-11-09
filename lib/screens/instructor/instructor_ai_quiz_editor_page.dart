@@ -1,8 +1,10 @@
+import '../../core/app_colors.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import 'instructor_ui.dart';
+import 'instructor_task_widgets.dart';
 
 class InstructorAiQuizEditorScreen extends StatefulWidget {
   const InstructorAiQuizEditorScreen({
@@ -10,11 +12,15 @@ class InstructorAiQuizEditorScreen extends StatefulWidget {
     required this.assessmentId,
     required this.courseId,
     required this.moduleId,
+    this.firestore,
+    this.auth,
   });
 
   final String assessmentId;
   final String courseId;
   final String moduleId;
+  final FirebaseFirestore? firestore;
+  final FirebaseAuth? auth;
 
   @override
   State<InstructorAiQuizEditorScreen> createState() =>
@@ -23,18 +29,19 @@ class InstructorAiQuizEditorScreen extends StatefulWidget {
 
 class _InstructorAiQuizEditorScreenState
     extends State<InstructorAiQuizEditorScreen> {
-  static const Color primaryTeal = Color(0xFF00897B);
-  static const Color background = Color(0xFFF7F9FC);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
-  static const Color borderColor = Color(0xFFE6EAF0);
-  static const Color red = Color(0xFFFF4B4B);
-  static const Color green = Color(0xFF26A65B);
-  static const Color purple = Color(0xFF7B4DFF);
+  Color get primaryTeal => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
+  Color get red => AppColors.resolve(context, AppColors.error);
+  Color get green => AppColors.resolve(context, AppColors.green);
+  Color get purple => AppColors.resolve(context, AppColors.purple);
 
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late final FirebaseFirestore _firestore =
+      widget.firestore ?? FirebaseFirestore.instance;
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  late final FirebaseAuth _auth = widget.auth ?? FirebaseAuth.instance;
 
   final TextEditingController _titleController = TextEditingController();
 
@@ -385,7 +392,7 @@ class _InstructorAiQuizEditorScreenState
               onPressed: () {
                 Navigator.pop(dialogContext, true);
               },
-              child: const Text('Delete', style: TextStyle(color: red)),
+              child: Text('Delete', style: TextStyle(color: red)),
             ),
           ],
         );
@@ -603,57 +610,26 @@ class _InstructorAiQuizEditorScreenState
 
   @override
   Widget build(BuildContext context) {
-    return instructorScaffold(
-      context: context,
-      backgroundColor: background,
-      appBar: AppBar(
-        backgroundColor: background,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: textDark,
-            size: 20,
-          ),
-          onPressed: _isSaving
-              ? null
-              : () {
-                  Navigator.pop(context);
-                },
-        ),
-        title: const Text(
-          'Review AI Quiz',
-          style: TextStyle(
-            color: textDark,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: _isSaving ? null : _saveDraft,
-            icon: _isSaving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: primaryTeal,
-                    ),
-                  )
-                : const Icon(Icons.save_outlined, size: 18),
-            label: Text(_isSaving ? 'Saving' : 'Save Draft'),
-            style: TextButton.styleFrom(foregroundColor: primaryTeal),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
+    return InstructorTaskScaffold(
+      loading: _isLoading,
+      title: 'Review quiz',
+      subtitle: 'Edit quiz details, questions, answers, and points.',
+      busy: _isSaving,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: primaryTeal))
+          ? Center(child: CircularProgressIndicator(color: primaryTeal))
           : _errorMessage != null
           ? _buildErrorState()
           : _buildEditor(),
+      footer: _isLoading || _errorMessage != null
+          ? null
+          : InstructorTaskActions(
+              children: [
+                FilledButton(
+                  onPressed: _isSaving ? null : _saveDraft,
+                  child: Text(_isSaving ? 'Saving quiz…' : 'Save quiz draft'),
+                ),
+              ],
+            ),
     );
   }
 
@@ -664,15 +640,12 @@ class _InstructorAiQuizEditorScreenState
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline_rounded, color: red, size: 52),
+            Icon(Icons.error_outline_rounded, color: red, size: 52),
             const SizedBox(height: 14),
             Text(
               _errorMessage ?? 'Unable to load AI quiz.',
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: textDark,
-                fontWeight: FontWeight.w700,
-              ),
+              style: TextStyle(color: textDark, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
@@ -704,11 +677,11 @@ class _InstructorAiQuizEditorScreenState
 
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+        padding: InstructorTaskScaffold.paddingOf(context),
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 850),
+            constraints: const BoxConstraints(maxWidth: 1080),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -716,21 +689,22 @@ class _InstructorAiQuizEditorScreenState
                 const SizedBox(height: 20),
                 _buildQuizSettingsCard(),
                 const SizedBox(height: 22),
-                Row(
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  spacing: 12,
+                  runSpacing: 8,
                   children: [
-                    const Expanded(
-                      child: Text(
-                        'Questions',
-                        style: TextStyle(
-                          color: textDark,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
+                    Text(
+                      'Questions',
+                      style: TextStyle(
+                        color: textDark,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     Text(
                       '${_questions.length} questions • $totalPoints points',
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: textGrey,
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -749,33 +723,8 @@ class _InstructorAiQuizEditorScreenState
                   icon: const Icon(Icons.add_rounded),
                   label: const Text('Add Question'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: primaryTeal,
-                    side: const BorderSide(color: primaryTeal),
-                  ),
-                ),
-                const SizedBox(height: 28),
-                SizedBox(
-                  width: double.infinity,
-                  height: 54,
-                  child: FilledButton.icon(
-                    onPressed: _isSaving ? null : _saveDraft,
-                    icon: _isSaving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.save_rounded),
-                    label: Text(
-                      _isSaving ? 'Saving Draft...' : 'Save Quiz Draft',
-                    ),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: primaryTeal,
-                      foregroundColor: Colors.white,
-                    ),
+                    foregroundColor: AppColors.resolve(context, AppColors.link),
+                    side: BorderSide(color: primaryTeal),
                   ),
                 ),
               ],
@@ -795,7 +744,7 @@ class _InstructorAiQuizEditorScreenState
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: purple.withValues(alpha: 0.18)),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.auto_awesome_rounded, color: purple),
@@ -823,19 +772,19 @@ class _InstructorAiQuizEditorScreenState
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Quiz Details',
             style: TextStyle(
               color: textDark,
               fontSize: 16,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 16),
@@ -861,6 +810,7 @@ class _InstructorAiQuizEditorScreenState
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             initialValue: _difficulty,
             decoration: const InputDecoration(
               labelText: 'Difficulty',
@@ -895,7 +845,7 @@ class _InstructorAiQuizEditorScreenState
               ),
               child: Text(
                 _formatDueDate(_dueAt),
-                style: const TextStyle(color: textDark),
+                style: TextStyle(color: textDark),
               ),
             ),
           ),
@@ -922,164 +872,156 @@ class _InstructorAiQuizEditorScreenState
   }
 
   Widget _buildQuestionCard(int index, _EditableQuizQuestion question) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: primaryTeal.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Text(
-                  'Q${index + 1}',
-                  style: const TextStyle(
-                    color: primaryTeal,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 11,
+    return RadioGroup<int>(
+      groupValue: question.correctAnswerIndex,
+      onChanged: (value) {
+        if (_isSaving || value == null) return;
+        setState(() => question.correctAnswerIndex = value);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: borderColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: primaryTeal.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Text(
+                    'Q${index + 1}',
+                    style: TextStyle(
+                      color: primaryTeal,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: 'Delete question',
-                onPressed: _isSaving
-                    ? null
-                    : () {
-                        _deleteQuestion(index);
-                      },
-                icon: const Icon(Icons.delete_outline_rounded, color: red),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: question.questionController,
-            enabled: !_isSaving,
-            minLines: 2,
-            maxLines: 5,
-            decoration: const InputDecoration(
-              labelText: 'Question',
-              alignLabelWithHint: true,
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Delete question',
+                  onPressed: _isSaving
+                      ? null
+                      : () {
+                          _deleteQuestion(index);
+                        },
+                  icon: Icon(Icons.delete_outline_rounded, color: red),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Answer choices',
-            style: TextStyle(
-              color: textDark,
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          RadioGroup<int>(
-            groupValue: question.correctAnswerIndex,
-            onChanged: (value) {
-              if (_isSaving || value == null) {
-                return;
-              }
-              setState(() {
-                question.correctAnswerIndex = value;
-              });
-            },
-            child: Column(
-              children: List.generate(4, (int optionIndex) {
-                final String letter = String.fromCharCode(65 + optionIndex);
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 9),
-                  child: Row(
-                    children: [
-                      Radio<int>(
-                        value: optionIndex,
-                        activeColor: green,
-                        enabled: !_isSaving,
-                      ),
-                      SizedBox(
-                        width: 26,
-                        child: Text(
-                          letter,
-                          style: const TextStyle(
-                            color: textGrey,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: TextField(
-                          controller: question.optionControllers[optionIndex],
-                          enabled: !_isSaving,
-                          decoration: InputDecoration(
-                            hintText: 'Choice $letter',
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-            ),
-          ),
-          const SizedBox(height: 6),
-          TextField(
-            controller: question.explanationController,
-            enabled: !_isSaving,
-            minLines: 1,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Explanation (optional)',
-              prefixIcon: Icon(Icons.lightbulb_outline_rounded),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: 170,
-            child: TextField(
-              controller: question.pointsController,
+            const SizedBox(height: 8),
+            TextField(
+              controller: question.questionController,
               enabled: !_isSaving,
-              keyboardType: TextInputType.number,
-              onChanged: (_) {
-                setState(() {});
-              },
+              minLines: 2,
+              maxLines: 5,
               decoration: const InputDecoration(
-                labelText: 'Points',
-                prefixIcon: Icon(Icons.stars_outlined),
+                labelText: 'Question',
+                alignLabelWithHint: true,
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: green, size: 17),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Text(
-                  'Correct answer: '
-                  '${String.fromCharCode(65 + question.correctAnswerIndex)}',
-                  style: const TextStyle(
-                    color: green,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w700,
-                  ),
+            const SizedBox(height: 14),
+            Text(
+              'Answer choices',
+              style: TextStyle(
+                color: textDark,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...List.generate(4, (int optionIndex) {
+              final String letter = String.fromCharCode(65 + optionIndex);
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 9),
+                child: Row(
+                  children: [
+                    Radio<int>(
+                      value: optionIndex,
+                      enabled: !_isSaving,
+                      activeColor: green,
+                    ),
+                    SizedBox(
+                      width: 26,
+                      child: Text(
+                        letter,
+                        style: TextStyle(
+                          color: textGrey,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: TextField(
+                        controller: question.optionControllers[optionIndex],
+                        enabled: !_isSaving,
+                        decoration: InputDecoration(hintText: 'Choice $letter'),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 6),
+            TextField(
+              controller: question.explanationController,
+              enabled: !_isSaving,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Explanation (optional)',
+                prefixIcon: Icon(Icons.lightbulb_outline_rounded),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: 170,
+              child: TextField(
+                controller: question.pointsController,
+                enabled: !_isSaving,
+                keyboardType: TextInputType.number,
+                onChanged: (_) {
+                  setState(() {});
+                },
+                decoration: const InputDecoration(
+                  labelText: 'Points',
+                  prefixIcon: Icon(Icons.stars_outlined),
                 ),
               ),
-            ],
-          ),
-        ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.check_circle_rounded, color: green, size: 17),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    'Correct answer: '
+                    '${String.fromCharCode(65 + question.correctAnswerIndex)}',
+                    style: TextStyle(
+                      color: green,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

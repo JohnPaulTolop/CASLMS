@@ -3,6 +3,7 @@ import 'package:caslms/screens/student/posted_grades_page.dart';
 import 'package:caslms/services/semester_grades_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:caslms/core/app_theme.dart';
 
 class _GradesApi implements GradebookApi {
   final List<String> actions = [];
@@ -51,9 +52,19 @@ void main() {
     'a posted subject contains no grade on initial load; credentials are required and cleared',
     (tester) async {
       final api = _GradesApi();
-      await tester.pumpWidget(MaterialApp(home: PostedGradesScreen(api: api)));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: PostedGradesScreen(api: api),
+        ),
+      );
       await tester.pumpAndSettle();
       expect(api.actions, ['posted']);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('reveal-own-course')),
+        200,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Grade: [ Hidden ]'), findsOneWidget);
       expect(find.textContaining('1.75'), findsNothing);
       expect(find.byKey(const ValueKey('reveal-own-course')), findsOneWidget);
@@ -108,7 +119,15 @@ void main() {
       await tester.tap(find.text('Verify & Reveal'));
       await tester.pumpAndSettle();
       expect(find.textContaining('1.75'), findsOneWidget);
+      await tester.drag(find.byType(ListView), const Offset(0, 1000));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Refresh and hide grades'), findsOneWidget);
       await tester.tap(find.byTooltip('Refresh and hide grades'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('reveal-own-course')),
+        200,
+      );
       await tester.pumpAndSettle();
       expect(find.textContaining('1.75'), findsNothing);
       expect(find.text('Grade: [ Hidden ]'), findsOneWidget);
@@ -116,7 +135,7 @@ void main() {
   );
 
   testWidgets(
-    'mobile More navigation exposes both grade destinations without overflow',
+    'mobile More navigation exposes the Results hub without overflow',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(390, 844));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -132,14 +151,13 @@ void main() {
           ),
         ),
       );
-      await tester.tap(find.text('More'));
+      await tester.tap(find.byTooltip('More'));
       await tester.pumpAndSettle();
-      expect(find.text('Activities & Scores'), findsOneWidget);
-      expect(find.text('Posted Grades'), findsOneWidget);
-      await tester.ensureVisible(find.text('Posted Grades'));
-      await tester.tap(find.text('Posted Grades'));
+      expect(find.text('Results'), findsOneWidget);
+      await tester.ensureVisible(find.text('Results'));
+      await tester.tap(find.text('Results'));
       await tester.pumpAndSettle();
-      expect(selected, 8);
+      expect(selected, 3);
       expect(tester.takeException(), isNull);
     },
   );

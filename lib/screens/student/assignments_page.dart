@@ -1,3 +1,5 @@
+import '../../core/app_colors.dart';
+
 import 'package:flutter/material.dart';
 
 class StudentAssignmentsScreen extends StatefulWidget {
@@ -12,13 +14,13 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
   // ============================================================
   // CASLMS DESIGN SYSTEM
   // ============================================================
-  static const Color primaryBlue = Color(0xFF1769FF);
-  static const Color background = Color(0xFFF7F9FC);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
+  static const Color primaryBlue = AppColors.primaryBlue;
+  static const Color background = AppColors.background;
+  static const Color textDark = AppColors.darkText;
+  static const Color textGrey = AppColors.secondaryText;
 
-  static const Color orange = Color(0xFFFF9418);
-  static const Color green = Color(0xFF26A65B);
+  static const Color orange = AppColors.amber;
+  static const Color green = AppColors.green;
 
   int _selectedTab = 0; // 0: To Do, 1: Submitted, 2: Completed
 
@@ -37,7 +39,7 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
             'My Tasks',
             style: TextStyle(
               fontSize: 18,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
               color: textDark,
             ),
           ),
@@ -119,22 +121,13 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
         decoration: BoxDecoration(
           color: isSelected ? Colors.white : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : [],
         ),
         alignment: Alignment.center,
         child: Text(
           title,
           style: TextStyle(
             color: isSelected ? textDark : textGrey,
-            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
             fontSize: 13,
           ),
         ),
@@ -207,66 +200,87 @@ class _StudentAssignmentsScreenState extends State<StudentAssignmentsScreen> {
     required Color badgeColor,
     required IconData icon,
   }) {
+    final details = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 16,
+            color: textDark,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: textGrey,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+    final badge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: badgeColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        badgeText,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: badgeColor,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+    final iconTile = Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: primaryBlue.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(icon, color: primaryBlue, size: 24),
+    );
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E6ED)),
+        border: Border.all(color: AppColors.inputBorder),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: primaryBlue.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: primaryBlue, size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 460) {
+            return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    color: textDark,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    color: textGrey,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                Row(children: [iconTile, const Spacer(), badge]),
+                const SizedBox(height: 14),
+                details,
               ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: badgeColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              badgeText,
-              style: TextStyle(
-                color: badgeColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
+            );
+          }
+          return Row(
+            children: [
+              iconTile,
+              const SizedBox(width: 16),
+              Expanded(child: details),
+              const SizedBox(width: 12),
+              badge,
+            ],
+          );
+        },
       ),
     );
   }

@@ -22,6 +22,8 @@ interface CourseNotification {
   action: string;
   activityType?: string;
   actorId?: string;
+  sectionIds?: unknown;
+  sectionId?: string;
 }
 
 interface GradeNotification {
@@ -114,7 +116,26 @@ async function getActorName(
     fallback;
 }
 
-async function getActiveStudentIds(courseId: string): Promise<string[]> {
+function audienceAllows(sectionIds: unknown, sectionId: string): boolean {
+  if (sectionIds === undefined) return sectionId.length > 0;
+  const hasDuplicate = Array.isArray(sectionIds) &&
+    new Set(sectionIds).size !== sectionIds.length;
+  const hasInvalidId = Array.isArray(sectionIds) && sectionIds.some(
+    (id) => typeof id !== "string" || !id || id.includes("/"),
+  );
+  if (!Array.isArray(sectionIds) || sectionIds.length === 0 ||
+      sectionIds.length > 50 || hasDuplicate || hasInvalidId ||
+      (sectionIds.includes("*") && sectionIds.length !== 1)) {
+    return false;
+  }
+  return sectionIds.includes("*") || sectionIds.includes(sectionId);
+}
+
+async function getActiveStudentIds(
+  courseId: string,
+  sectionIds: unknown,
+  singleSectionId = "",
+): Promise<string[]> {
   const database = getFirestore();
   const snapshot = await database
     .collection("enrollments")
@@ -122,7 +143,9 @@ async function getActiveStudentIds(courseId: string): Promise<string[]> {
     .get();
   const ids = snapshot.docs
     .map((document) => dataMap(document.data()))
-    .filter((enrollment) => normalized(enrollment?.status) === "active")
+    .filter((enrollment) => normalized(enrollment?.status) === "active" &&
+      audienceAllows(sectionIds, text(enrollment?.sectionId)) &&
+      (!singleSectionId || text(enrollment?.sectionId) === singleSectionId))
     .map((enrollment) => text(enrollment?.studentId))
     .filter((studentId) => studentId.length > 0);
 
@@ -132,7 +155,11 @@ async function getActiveStudentIds(courseId: string): Promise<string[]> {
 async function notifyCourseStudents(
   input: CourseNotification,
 ): Promise<void> {
-  const studentIds = await getActiveStudentIds(input.courseId);
+  const studentIds = await getActiveStudentIds(
+    input.courseId,
+    input.sectionIds,
+    input.sectionId,
+  );
 
   if (studentIds.length === 0) {
     return;
@@ -281,6 +308,7 @@ export const notifyPublishedModule = onDocumentWritten(
       itemTitle: `New module: ${title}`,
       action: `published the module "${title}"`,
       actorId: text(after.createdBy),
+      sectionIds: after.sectionIds,
     });
   },
 );
@@ -313,6 +341,7 @@ export const notifyPublishedResource = onDocumentWritten(
       action: `added the resource "${title}"`,
       activityType: text(after.resourceType),
       actorId: text(after.createdBy),
+      sectionIds: after.sectionIds,
     });
   },
 );
@@ -345,6 +374,8 @@ export const notifyPublishedAssessment = onDocumentWritten(
       action: `published the ${assessmentType.toLowerCase()} "${title}"`,
       activityType: normalized(after.assessmentType),
       actorId: text(after.createdBy),
+      sectionIds: after.sectionIds,
+      sectionId: text(after.sectionId),
     });
   },
 );

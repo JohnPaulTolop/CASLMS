@@ -1,3 +1,4 @@
+import 'notification_service.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -697,6 +698,9 @@ class ChatService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      batch.set(_firestore.collection('notifications').doc('message_${messageReference.id}_$cleanReceiverId'),
+        NotificationService.messageNotice(courseId:cleanCourseId,conversationId:conversationId,
+          messageId:messageReference.id,receiverId:cleanReceiverId,actorId:user.uid));
       await batch.commit();
     } on ChatServiceException {
       rethrow;
@@ -859,6 +863,9 @@ class ChatService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
+      batch.set(_firestore.collection('notifications').doc('message_${messageReference.id}_$cleanReceiverId'),
+        NotificationService.messageNotice(courseId:cleanCourseId,conversationId:conversationId,
+          messageId:messageReference.id,receiverId:cleanReceiverId,actorId:user.uid));
       await batch.commit();
     } on sb.StorageException catch (error) {
       throw ChatServiceException(

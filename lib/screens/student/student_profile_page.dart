@@ -1,3 +1,11 @@
+import '../shared/page_loading_state.dart';
+import '../../core/app_colors.dart';
+import '../../core/theme_notifier.dart';
+import '../shared/workspace_shell.dart';
+import '../shared/workspace_widgets.dart';
+import 'student_profile_editor.dart';
+import '../../services/activity_log_service.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -17,14 +25,13 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   // CASLMS DESIGN SYSTEM
   // ============================================================
 
-  static const Color primaryBlue = Color(0xFF1769FF);
-  static const Color background = Color(0xFFF7F9FC);
-  static const Color darkText = Color(0xFF10182F);
-  static const Color greyText = Color(0xFF68738A);
-  static const Color borderColor = Color(0xFFE6EAF0);
-  static const Color green = Color(0xFF26A65B);
-  static const Color orange = Color(0xFFFF9418);
-  static const Color red = Color(0xFFFF4B4B);
+  Color get primaryBlue => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get darkText => AppColors.resolve(context, AppColors.darkText);
+  Color get greyText => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
+  Color get orange => AppColors.resolve(context, AppColors.amber);
+  Color get red => AppColors.resolve(context, AppColors.error);
 
   // ============================================================
   // FIREBASE
@@ -63,6 +70,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   // ============================================================
 
   Future<void> _loadProfile() async {
+    if (_isSaving || _isUploadingPhoto || _isRequestingPasswordReset) return;
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -153,7 +161,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
   String get _name {
     final String value =
-        (_profile?['name'] ?? _auth.currentUser?.displayName ?? '')
+        (_profile?['displayName'] ??
+                _profile?['name'] ??
+                _auth.currentUser?.displayName ??
+                '')
             .toString()
             .trim();
 
@@ -182,15 +193,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     final String value = (_profile?['email'] ?? '').toString().trim();
 
     return value.isEmpty ? 'Not set' : value;
-  }
-
-  String get _status {
-    final String value = (_profile?['status'] ?? 'active')
-        .toString()
-        .trim()
-        .toLowerCase();
-
-    return value.isEmpty ? 'active' : value;
   }
 
   String get _photoUrl {
@@ -265,7 +267,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         return AlertDialog(
           title: const Text(
             'Remove Profile Picture',
-            style: TextStyle(fontWeight: FontWeight.w800),
+            style: TextStyle(fontWeight: FontWeight.w700),
           ),
           content: const Text('Your initials will be shown instead.'),
           actions: [
@@ -281,7 +283,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: red,
-                foregroundColor: Colors.white,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
               child: const Text('Remove'),
             ),
@@ -357,289 +359,8 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   }
 
   // ============================================================
-  // EDIT PERSONAL INFORMATION
-  //
-  // Campus ID, role, status and hidden Firebase auth email are
-  // intentionally not editable from the student profile.
-  // ============================================================
-
-  Future<void> _showEditProfileDialog() async {
-    if (_profile == null || _isSaving) {
-      return;
-    }
-
-    String newName = _name;
-    String newEmail = (_profile?['email'] ?? '').toString();
-
-    String newDepartment = (_profile?['department'] ?? '').toString();
-
-    String newCourse = (_profile?['course'] ?? '').toString();
-
-    final Map<String, String>? result = await showDialog<Map<String, String>>(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: const Text(
-            'Personal Information',
-            style: TextStyle(color: darkText, fontWeight: FontWeight.w800),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  initialValue: newName,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Full Name',
-                    prefixIcon: Icon(Icons.person_outline_rounded),
-                  ),
-                  onChanged: (String value) {
-                    newName = value;
-                  },
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  initialValue: newEmail,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Contact Email',
-                    prefixIcon: Icon(Icons.email_outlined),
-                  ),
-                  onChanged: (String value) {
-                    newEmail = value;
-                  },
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  initialValue: newDepartment,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Department',
-                    prefixIcon: Icon(Icons.apartment_rounded),
-                  ),
-                  onChanged: (String value) {
-                    newDepartment = value;
-                  },
-                ),
-                const SizedBox(height: 14),
-                TextFormField(
-                  initialValue: newCourse,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Course / Program',
-                    prefixIcon: Icon(Icons.school_outlined),
-                  ),
-                  onChanged: (String value) {
-                    newCourse = value;
-                  },
-                ),
-                const SizedBox(height: 14),
-                InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Student ID',
-                    prefixIcon: Icon(Icons.badge_outlined),
-                    helperText:
-                        'Student ID cannot be changed from the profile.',
-                  ),
-                  child: Text(
-                    _studentId,
-                    style: const TextStyle(
-                      color: darkText,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                FocusScope.of(dialogContext).unfocus();
-                Navigator.of(dialogContext).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                FocusScope.of(dialogContext).unfocus();
-
-                Navigator.of(dialogContext).pop({
-                  'name': newName,
-                  'email': newEmail,
-                  'department': newDepartment,
-                  'course': newCourse,
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: primaryBlue,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Save Changes'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (!mounted || result == null) {
-      return;
-    }
-
-    final String cleanName = (result['name'] ?? '').trim();
-
-    final String cleanEmail = (result['email'] ?? '').trim();
-
-    final String cleanDepartment = (result['department'] ?? '').trim();
-
-    final String cleanCourse = (result['course'] ?? '').trim();
-
-    if (cleanName.isEmpty) {
-      _showError('Full name cannot be empty.');
-      return;
-    }
-
-    if (cleanEmail.isNotEmpty &&
-        (!cleanEmail.contains('@') || !cleanEmail.contains('.'))) {
-      _showError('Enter a valid contact email address.');
-      return;
-    }
-
-    final User? user = _auth.currentUser;
-
-    if (user == null) {
-      _showError('You are no longer logged in.');
-      return;
-    }
-
-    setState(() {
-      _isSaving = true;
-    });
-
-    try {
-      await _firestore.collection('users').doc(user.uid).update({
-        'name': cleanName,
-        'email': cleanEmail,
-        'department': cleanDepartment,
-        'course': cleanCourse,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-
-      try {
-        await user.updateDisplayName(cleanName);
-      } catch (_) {
-        // Firestore remains the source of truth.
-      }
-
-      if (!mounted) {
-        return;
-      }
-
-      // Important:
-      // Do not immediately call _loadProfile() while the dialog
-      // route is still being removed from Flutter's widget tree.
-      setState(() {
-        _profile = {
-          ...?_profile,
-          'name': cleanName,
-          'email': cleanEmail,
-          'department': cleanDepartment,
-          'course': cleanCourse,
-        };
-        _isSaving = false;
-      });
-
-      _showMessage('Profile updated successfully.');
-    } on FirebaseException catch (e) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _isSaving = false;
-      });
-
-      _showError(e.message ?? 'Unable to update your profile.');
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _isSaving = false;
-      });
-
-      _showError('Unable to update your profile.');
-    }
-  }
-
-  // ============================================================
-  // ACCOUNT DETAILS
-  // ============================================================
-
-  Future<void> _showAccountDetails() async {
-    if (_profile == null) {
-      return;
-    }
-
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      builder: (BuildContext sheetContext) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 4, 22, 28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Account Details',
-                  style: TextStyle(
-                    color: darkText,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                _buildDetailRow(Icons.badge_outlined, 'Student ID', _studentId),
-                _buildDetailRow(Icons.email_outlined, 'Contact Email', _email),
-                _buildDetailRow(
-                  Icons.school_outlined,
-                  'Course / Program',
-                  _course,
-                ),
-                _buildDetailRow(
-                  Icons.apartment_rounded,
-                  'Department',
-                  _department,
-                ),
-                _buildDetailRow(
-                  Icons.person_outline_rounded,
-                  'Role',
-                  'Student',
-                ),
-                _buildDetailRow(
-                  Icons.verified_user_outlined,
-                  'Account Status',
-                  _capitalize(_status),
-                  valueColor: _status == 'active' ? green : red,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // ============================================================
   // PASSWORD RESET
+  // Uses the registered, verified email rather than an unsaved form value.
   // ============================================================
 
   Future<void> _requestPasswordReset() async {
@@ -665,7 +386,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Row(
+          title: Row(
             children: [
               Icon(Icons.lock_reset_rounded, color: primaryBlue),
               SizedBox(width: 10),
@@ -674,7 +395,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   'Reset Password',
                   style: TextStyle(
                     color: darkText,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -684,7 +405,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'CASLMS will send a secure password reset link to your registered email:',
                 style: TextStyle(color: greyText, height: 1.45),
               ),
@@ -698,16 +419,12 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.email_outlined,
-                      color: primaryBlue,
-                      size: 20,
-                    ),
+                    Icon(Icons.email_outlined, color: primaryBlue, size: 20),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         registeredEmail,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: darkText,
                           fontWeight: FontWeight.w700,
                         ),
@@ -717,7 +434,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'The link will work on both web and mobile. Check your spam folder if the email does not appear.',
                 style: TextStyle(color: greyText, fontSize: 12, height: 1.4),
               ),
@@ -736,7 +453,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryBlue,
-                foregroundColor: Colors.white,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
               child: const Text('Send Reset Link'),
             ),
@@ -793,11 +510,11 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Text(
+          title: Text(
             'Log Out',
-            style: TextStyle(color: darkText, fontWeight: FontWeight.w800),
+            style: TextStyle(color: darkText, fontWeight: FontWeight.w700),
           ),
-          content: const Text(
+          content: Text(
             'Are you sure you want to log out of your CASLMS account?',
             style: TextStyle(color: greyText, height: 1.45),
           ),
@@ -814,7 +531,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: red,
-                foregroundColor: Colors.white,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
               child: const Text('Log Out'),
             ),
@@ -828,7 +545,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
     }
 
     try {
-      await _auth.signOut();
+      await ActivityLogService(auth: _auth).signOut();
 
       if (!mounted) {
         return;
@@ -850,41 +567,15 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) return const PageLoadingState();
     return Scaffold(
       backgroundColor: background,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        backgroundColor: background,
-        elevation: 0,
-        centerTitle: true,
-        title: const Text(
-          'My Profile',
-          style: TextStyle(
-            color: darkText,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        actions: [
-          IconButton(
-            onPressed: _isLoading ? null : _loadProfile,
-            tooltip: 'Refresh Profile',
-            icon: const Icon(Icons.refresh_rounded, color: darkText),
-          ),
-          IconButton(
-            onPressed: _isLoading ? null : _showAccountDetails,
-            tooltip: 'Account Details',
-            icon: const Icon(Icons.settings_outlined, color: darkText),
-          ),
-          const SizedBox(width: 5),
-        ],
-      ),
       body: SafeArea(
         top: false,
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
+            constraints: const BoxConstraints(maxWidth: 1450),
             child: _buildBody(),
           ),
         ),
@@ -894,7 +585,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: primaryBlue));
+      return Center(child: CircularProgressIndicator(color: primaryBlue));
     }
 
     if (_errorMessage != null) {
@@ -912,14 +603,38 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(24, 18, 24, 40),
+        padding: EdgeInsets.fromLTRB(
+          workspaceInset(MediaQuery.sizeOf(context).width),
+          0,
+          workspaceInset(MediaQuery.sizeOf(context).width),
+          40,
+        ),
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: WorkspaceHeading(
+                showEyebrow: false,
+                title: 'My profile',
+                subtitle: 'Manage your student identity, account details, and preferences.',
+                eyebrow: 'YOUR ACCOUNT',
+                actions: [
+                  IconButton(
+                    onPressed: _isLoading ? null : _loadProfile,
+                    tooltip: 'Refresh profile',
+                    icon: Icon(Icons.refresh_rounded, color: darkText),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
             _buildProfileHeader(),
             const SizedBox(height: 30),
             _buildStats(),
             const SizedBox(height: 28),
             _buildAccountMenu(),
+            const SizedBox(height: 18),
+            _buildThemePreference(),
             const SizedBox(height: 22),
             _buildLogoutCard(),
           ],
@@ -950,7 +665,9 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               color: primaryBlue,
               shape: const CircleBorder(),
               child: InkWell(
-                onTap: _isUploadingPhoto ? null : _changeProfilePicture,
+                onTap: _isUploadingPhoto || _isSaving
+                    ? null
+                    : _changeProfilePicture,
                 customBorder: const CircleBorder(),
                 child: SizedBox(
                   width: 34,
@@ -975,7 +692,9 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         ),
         const SizedBox(height: 8),
         TextButton.icon(
-          onPressed: _isUploadingPhoto ? null : _changeProfilePicture,
+          onPressed: _isUploadingPhoto || _isSaving
+              ? null
+              : _changeProfilePicture,
           icon: const Icon(Icons.photo_camera_outlined, size: 17),
           label: Text(
             _photoUrl.isEmpty
@@ -983,14 +702,21 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                 : 'Change Profile Picture',
           ),
         ),
+        if (_photoUrl.isNotEmpty)
+          TextButton(
+            onPressed: _isUploadingPhoto || _isSaving
+                ? null
+                : _removeProfilePicture,
+            child: const Text('Remove photo'),
+          ),
         const SizedBox(height: 4),
         Text(
           _name,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             color: darkText,
             fontSize: 24,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
             letterSpacing: -0.5,
           ),
         ),
@@ -998,7 +724,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         Text(
           _course,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             color: greyText,
             fontSize: 14,
             fontWeight: FontWeight.w500,
@@ -1008,7 +734,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         Text(
           _department,
           textAlign: TextAlign.center,
-          style: const TextStyle(
+          style: TextStyle(
             color: greyText,
             fontSize: 12,
             fontWeight: FontWeight.w500,
@@ -1021,7 +747,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
             color: primaryBlue.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: const Text(
+          child: Text(
             'Samar State University',
             style: TextStyle(
               color: primaryBlue,
@@ -1059,10 +785,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
       backgroundColor: primaryBlue.withValues(alpha: 0.10),
       child: Text(
         _initials,
-        style: const TextStyle(
+        style: TextStyle(
           color: primaryBlue,
           fontSize: 28,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -1100,60 +826,49 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
   // ACCOUNT MENU
   // ============================================================
 
-  Widget _buildAccountMenu() {
-    return Container(
-      decoration: _cardDecoration(),
-      child: Column(
-        children: [
-          _buildMenuTile(
-            icon: Icons.account_circle_outlined,
-            title: 'Personal Information',
-            subtitle: 'Update your name, email, course, and department',
-            onTap: _showEditProfileDialog,
-          ),
-          _buildDivider(),
-          _buildMenuTile(
-            icon: Icons.photo_camera_outlined,
-            title: _photoUrl.isEmpty
-                ? 'Upload Profile Picture'
-                : 'Change Profile Picture',
-            subtitle: 'JPG, JPEG, PNG, or WEBP up to 5 MB',
-            onTap: _changeProfilePicture,
-          ),
-          if (_photoUrl.isNotEmpty) ...[
-            _buildDivider(),
-            _buildMenuTile(
-              icon: Icons.delete_outline_rounded,
-              title: 'Remove Profile Picture',
-              subtitle: 'Show your initials instead',
-              onTap: _removeProfilePicture,
+  Widget _buildAccountMenu() => StudentProfileEditor(
+    profile: _profile!,
+    photoBusy: _isUploadingPhoto,
+    resetBusy: _isRequestingPasswordReset,
+    onSaved: (profile) {
+      if (mounted) setState(() => _profile = profile);
+    },
+    onBusyChanged: (busy) {
+      if (mounted) setState(() => _isSaving = busy);
+    },
+    onResetPassword: _requestPasswordReset,
+  );
+
+  Widget _buildThemePreference() {
+    final notifier = ThemeNotifier();
+    return AnimatedBuilder(
+      animation: notifier,
+      builder: (context, _) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Container(
+          decoration: _cardDecoration(),
+          child: SwitchListTile.adaptive(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 6,
             ),
-          ],
-          _buildDivider(),
-          _buildMenuTile(
-            icon: Icons.badge_outlined,
-            title: 'Account Details',
-            subtitle: 'Student ID, role, and account status',
-            onTap: _showAccountDetails,
+            secondary: Icon(
+              isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+              color: primaryBlue,
+            ),
+            title: const Text('Dark mode'),
+            subtitle: Text(
+              isDark
+                  ? 'Using the dark student workspace'
+                  : 'Using the light student workspace',
+            ),
+            value: isDark,
+            onChanged: (enabled) {
+              notifier.setThemeMode(enabled ? ThemeMode.dark : ThemeMode.light);
+            },
           ),
-          _buildDivider(),
-          _buildMenuTile(
-            icon: Icons.lock_reset_rounded,
-            title: _isRequestingPasswordReset
-                ? 'Sending Reset Link...'
-                : 'Reset Password',
-            subtitle: 'Send a secure reset link to your registered email',
-            onTap: _requestPasswordReset,
-          ),
-          _buildDivider(),
-          _buildMenuTile(
-            icon: Icons.refresh_rounded,
-            title: 'Refresh Profile',
-            subtitle: 'Reload your latest Firebase account data',
-            onTap: _loadProfile,
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1168,9 +883,9 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
             color: red.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Icon(Icons.logout_rounded, color: red, size: 20),
+          child: Icon(Icons.logout_rounded, color: red, size: 20),
         ),
-        title: const Text(
+        title: Text(
           'Log Out',
           style: TextStyle(
             color: red,
@@ -1178,7 +893,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
             fontSize: 15,
           ),
         ),
-        subtitle: const Text(
+        subtitle: Text(
           'Sign out of this student account',
           style: TextStyle(color: greyText, fontSize: 12),
         ),
@@ -1220,17 +935,17 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               color: darkText,
               fontSize: 14,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               color: greyText,
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -1238,99 +953,6 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildMenuTile({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      leading: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: primaryBlue.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Icon(icon, color: primaryBlue, size: 20),
-      ),
-      title: Text(
-        title,
-        style: const TextStyle(
-          color: darkText,
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      subtitle: Text(
-        subtitle,
-        style: const TextStyle(
-          color: greyText,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      trailing: const Icon(
-        Icons.chevron_right_rounded,
-        color: Color(0xFF9BA4B4),
-        size: 20,
-      ),
-      onTap: onTap,
-    );
-  }
-
-  Widget _buildDetailRow(
-    IconData icon,
-    String label,
-    String value, {
-    Color? valueColor,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 9),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: primaryBlue),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: greyText,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: TextStyle(
-                    color: valueColor ?? darkText,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDivider() {
-    return const Divider(
-      height: 1,
-      thickness: 1,
-      color: Color(0xFFF0F2F5),
-      indent: 68,
-      endIndent: 20,
     );
   }
 
@@ -1344,23 +966,19 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline_rounded, color: red, size: 50),
+            Icon(Icons.error_outline_rounded, color: red, size: 50),
             const SizedBox(height: 14),
             Text(
               text,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: greyText,
-                fontSize: 13,
-                height: 1.45,
-              ),
+              style: TextStyle(color: greyText, fontSize: 13, height: 1.45),
             ),
             const SizedBox(height: 18),
             ElevatedButton.icon(
               onPressed: _loadProfile,
               style: ElevatedButton.styleFrom(
                 backgroundColor: primaryBlue,
-                foregroundColor: Colors.white,
+                foregroundColor: Theme.of(context).colorScheme.onPrimary,
               ),
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Try Again'),
@@ -1373,25 +991,10 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
 
   BoxDecoration _cardDecoration() {
     return BoxDecoration(
-      color: Colors.white,
+      color: AppColors.resolve(context, Colors.white),
       borderRadius: BorderRadius.circular(18),
       border: Border.all(color: borderColor, width: 1.5),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.025),
-          blurRadius: 12,
-          offset: const Offset(0, 5),
-        ),
-      ],
     );
-  }
-
-  String _capitalize(String value) {
-    if (value.isEmpty) {
-      return value;
-    }
-
-    return '${value[0].toUpperCase()}${value.substring(1)}';
   }
 
   void _showMessage(String message) {

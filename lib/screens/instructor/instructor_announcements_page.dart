@@ -1,3 +1,5 @@
+import '../../core/app_colors.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -19,11 +21,11 @@ class _InstructorAnnouncementsScreenState
   // DESIGN SYSTEM
   // ============================================================
 
-  static const Color primaryTeal = Color(0xFF00897B);
-  static const Color background = Color(0xFFF7F9FC);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
-  static const Color orange = Color(0xFFFF9418);
+  Color get primaryTeal => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get orange => AppColors.resolve(context, AppColors.amber);
 
   // ============================================================
   // SERVICE
@@ -148,6 +150,7 @@ class _InstructorAnnouncementsScreenState
   @override
   Widget build(BuildContext context) {
     return instructorScaffold(
+      loading: _isLoading,
       context: context,
       backgroundColor: background,
 
@@ -160,7 +163,7 @@ class _InstructorAnnouncementsScreenState
         elevation: 0,
         title: const Text(
           'Announcements',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
         ),
         actions: [
           IconButton(
@@ -215,26 +218,33 @@ class _InstructorAnnouncementsScreenState
                         color: Color(0xFFA0A8B7),
                         fontSize: 13,
                       ),
-                      prefixIcon: const Icon(
+                      prefixIcon: Icon(
                         Icons.search_rounded,
                         color: primaryTeal,
                       ),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: Theme.of(context).colorScheme.surface,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(color: Color(0xFFE3E7EE)),
+                        borderSide: BorderSide(
+                          color: AppColors.resolve(
+                            context,
+                            AppColors.inputBorder,
+                          ),
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(color: Color(0xFFE3E7EE)),
+                        borderSide: BorderSide(
+                          color: AppColors.resolve(
+                            context,
+                            AppColors.inputBorder,
+                          ),
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(
-                          color: primaryTeal,
-                          width: 1.5,
-                        ),
+                        borderSide: BorderSide(color: primaryTeal, width: 1.5),
                       ),
                     ),
                   ),
@@ -259,7 +269,7 @@ class _InstructorAnnouncementsScreenState
     // ------------------------------------------------------------
 
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: primaryTeal));
+      return Center(child: CircularProgressIndicator(color: primaryTeal));
     }
 
     // ------------------------------------------------------------
@@ -282,10 +292,7 @@ class _InstructorAnnouncementsScreenState
               Text(
                 _errorMessage!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: textGrey,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: TextStyle(color: textGrey, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 12),
               TextButton.icon(
@@ -304,7 +311,7 @@ class _InstructorAnnouncementsScreenState
     // ------------------------------------------------------------
 
     if (_announcements.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -315,7 +322,7 @@ class _InstructorAnnouncementsScreenState
               style: TextStyle(
                 color: textDark,
                 fontSize: 17,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
             SizedBox(height: 5),
@@ -334,7 +341,7 @@ class _InstructorAnnouncementsScreenState
     // ------------------------------------------------------------
 
     if (_filteredAnnouncements.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'No matching announcements.',
           style: TextStyle(color: textGrey, fontWeight: FontWeight.w600),
@@ -398,21 +405,14 @@ class _InstructorAnnouncementsScreenState
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isUrgent
               ? orange.withValues(alpha: 0.40)
-              : const Color(0xFFE6EAF0),
+              : AppColors.resolve(context, AppColors.inputBorder),
           width: 1.5,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -438,7 +438,7 @@ class _InstructorAnnouncementsScreenState
                           color: orange.withValues(alpha: 0.10),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
@@ -452,7 +452,7 @@ class _InstructorAnnouncementsScreenState
                               style: TextStyle(
                                 color: orange,
                                 fontSize: 10,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ],
@@ -462,10 +462,10 @@ class _InstructorAnnouncementsScreenState
                     ],
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: textDark,
                         fontSize: 17,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
@@ -477,25 +477,12 @@ class _InstructorAnnouncementsScreenState
               // ==================================================
               PopupMenuButton<String>(
                 onSelected: (value) {
-                  if (value == 'edit') {
-                    _showEditAnnouncementModal(announcement);
-                  }
                   if (value == 'delete') {
                     _confirmDelete(id, title);
                   }
                 },
                 itemBuilder: (context) {
                   return const [
-                    PopupMenuItem<String>(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit_outlined, color: primaryTeal),
-                          SizedBox(width: 8),
-                          Text('Edit'),
-                        ],
-                      ),
-                    ),
                     PopupMenuItem<String>(
                       value: 'delete',
                       child: Row(
@@ -519,7 +506,7 @@ class _InstructorAnnouncementsScreenState
 
           Text(
             targetText,
-            style: const TextStyle(
+            style: TextStyle(
               color: primaryTeal,
               fontSize: 12,
               fontWeight: FontWeight.w700,
@@ -536,11 +523,7 @@ class _InstructorAnnouncementsScreenState
           // ======================================================
           Text(
             message,
-            style: const TextStyle(
-              color: textDark,
-              fontSize: 13.5,
-              height: 1.55,
-            ),
+            style: TextStyle(color: textDark, fontSize: 13.5, height: 1.55),
           ),
 
           const SizedBox(height: 16),
@@ -550,16 +533,16 @@ class _InstructorAnnouncementsScreenState
           // ======================================================
           Row(
             children: [
-              const Icon(Icons.access_time_rounded, size: 14, color: textGrey),
+              Icon(Icons.access_time_rounded, size: 14, color: textGrey),
               const SizedBox(width: 5),
               Text(
                 createdAt == null ? 'Recently posted' : _formatDate(createdAt),
-                style: const TextStyle(color: textGrey, fontSize: 11),
+                style: TextStyle(color: textGrey, fontSize: 11),
               ),
               const Spacer(),
-              const Icon(Icons.public_rounded, color: textGrey, size: 14),
+              Icon(Icons.public_rounded, color: textGrey, size: 14),
               const SizedBox(width: 4),
-              const Text(
+              Text(
                 'Published',
                 style: TextStyle(color: textGrey, fontSize: 11),
               ),
@@ -568,126 +551,6 @@ class _InstructorAnnouncementsScreenState
         ],
       ),
     );
-  }
-
-  Future<void> _showEditAnnouncementModal(
-    Map<String, dynamic> announcement,
-  ) async {
-    final titleController = TextEditingController(
-      text: (announcement['title'] ?? '').toString(),
-    );
-    final messageController = TextEditingController(
-      text: (announcement['message'] ?? '').toString(),
-    );
-    bool urgent =
-        announcement['isUrgent'] == true ||
-        (announcement['priority'] ?? '').toString() == 'urgent';
-    bool saving = false;
-    final id = (announcement['id'] ?? '').toString();
-
-    final saved = await showDialog<bool>(
-      context: context,
-      barrierDismissible: !saving,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Edit announcement'),
-          content: SizedBox(
-            width: 520,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: titleController,
-                    enabled: !saving,
-                    maxLength: 150,
-                    decoration: _inputDecoration(label: 'Title'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: messageController,
-                    enabled: !saving,
-                    minLines: 4,
-                    maxLines: 8,
-                    maxLength: 5000,
-                    decoration: _inputDecoration(label: 'Message'),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: urgent,
-                    activeThumbColor: orange,
-                    title: const Text('High priority'),
-                    onChanged: saving
-                        ? null
-                        : (value) => setDialogState(() => urgent = value),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: saving
-                  ? null
-                  : () => Navigator.of(dialogContext).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton.icon(
-              onPressed: saving
-                  ? null
-                  : () async {
-                      setDialogState(() => saving = true);
-                      try {
-                        await _announcementService.updateAnnouncement(
-                          announcementId: id,
-                          title: titleController.text,
-                          message: messageController.text,
-                          isUrgent: urgent,
-                        );
-                        if (dialogContext.mounted) {
-                          Navigator.of(dialogContext).pop(true);
-                        }
-                      } on AnnouncementServiceException catch (error) {
-                        if (!dialogContext.mounted) return;
-                        setDialogState(() => saving = false);
-                        ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(
-                            content: Text(error.message),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      }
-                    },
-              icon: saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.save_outlined),
-              label: Text(saving ? 'Saving...' : 'Save changes'),
-            ),
-          ],
-        ),
-      ),
-    );
-    titleController.dispose();
-    messageController.dispose();
-    if (saved == true && mounted) {
-      await _loadData();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Announcement updated.'),
-            backgroundColor: primaryTeal,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
   }
 
   // ============================================================
@@ -737,8 +600,8 @@ class _InstructorAnnouncementsScreenState
                   bottom: MediaQuery.of(modalContext).viewInsets.bottom + 24,
                 ),
 
-                decoration: const BoxDecoration(
-                  color: Colors.white,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
                 ),
 
@@ -756,13 +619,13 @@ class _InstructorAnnouncementsScreenState
 
                       Row(
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Text(
                               'New Announcement',
                               style: TextStyle(
                                 color: textDark,
                                 fontSize: 19,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
@@ -784,7 +647,7 @@ class _InstructorAnnouncementsScreenState
                       // ==========================================
                       // SEND TO
                       // ==========================================
-                      const Text(
+                      Text(
                         'Send To',
                         style: TextStyle(
                           color: textDark,
@@ -887,12 +750,18 @@ class _InstructorAnnouncementsScreenState
                         decoration: BoxDecoration(
                           color: isUrgent
                               ? orange.withValues(alpha: 0.06)
-                              : const Color(0xFFF8FAFD),
+                              : AppColors.resolve(
+                                  context,
+                                  AppColors.background,
+                                ),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: isUrgent
                                 ? orange.withValues(alpha: 0.35)
-                                : const Color(0xFFE1E5EC),
+                                : AppColors.resolve(
+                                    context,
+                                    AppColors.inputBorder,
+                                  ),
                           ),
                         ),
                         child: SwitchListTile(
@@ -902,7 +771,7 @@ class _InstructorAnnouncementsScreenState
 
                           activeThumbColor: orange,
 
-                          title: const Text(
+                          title: Text(
                             'Urgent announcement',
                             style: TextStyle(
                               color: textDark,
@@ -911,7 +780,7 @@ class _InstructorAnnouncementsScreenState
                             ),
                           ),
 
-                          subtitle: const Text(
+                          subtitle: Text(
                             'Highlight this announcement for students.',
                             style: TextStyle(color: textGrey, fontSize: 11),
                           ),
@@ -1090,7 +959,7 @@ class _InstructorAnnouncementsScreenState
                             isPosting ? 'Posting...' : 'Post Announcement',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
 
@@ -1128,7 +997,7 @@ class _InstructorAnnouncementsScreenState
 
     if (posted == true) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Announcement posted successfully.'),
           backgroundColor: primaryTeal,
           behavior: SnackBarBehavior.floating,
@@ -1217,18 +1086,22 @@ class _InstructorAnnouncementsScreenState
     return InputDecoration(
       labelText: label,
       filled: true,
-      fillColor: const Color(0xFFF8FAFD),
+      fillColor: AppColors.resolve(context, AppColors.background),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(13),
-        borderSide: const BorderSide(color: Color(0xFFE1E5EC)),
+        borderSide: BorderSide(
+          color: AppColors.resolve(context, AppColors.inputBorder),
+        ),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(13),
-        borderSide: const BorderSide(color: Color(0xFFE1E5EC)),
+        borderSide: BorderSide(
+          color: AppColors.resolve(context, AppColors.inputBorder),
+        ),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(13),
-        borderSide: const BorderSide(color: primaryTeal, width: 1.5),
+        borderSide: BorderSide(color: primaryTeal, width: 1.5),
       ),
     );
   }

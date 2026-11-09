@@ -69,7 +69,7 @@ class InstructorCourseService {
   }
 
   // ============================================================
-  // GENERATE RANDOM INTERNAL SECTION IDENTIFIER PART
+  // GENERATE RANDOM CLASS CODE PART
   // ============================================================
 
   String _generateRandomPart({int length = 5}) {
@@ -81,7 +81,7 @@ class InstructorCourseService {
   }
 
   // ============================================================
-  // CHECK INTERNAL SECTION IDENTIFIER
+  // CHECK CLASS CODE
   // ============================================================
 
   Future<bool> _classCodeExists(String classCode) async {
@@ -95,7 +95,7 @@ class InstructorCourseService {
   }
 
   // ============================================================
-  // GENERATE UNIQUE INTERNAL SECTION IDENTIFIER
+  // GENERATE UNIQUE CLASS CODE
   //
   // Example:
   //
@@ -108,7 +108,7 @@ class InstructorCourseService {
 
     if (prefix.isEmpty) {
       throw InstructorCourseServiceException(
-        'Course code is required before generating its internal section identifier.',
+        'Course code is required before generating a class code.',
       );
     }
 
@@ -123,7 +123,7 @@ class InstructorCourseService {
     }
 
     throw InstructorCourseServiceException(
-      'Unable to generate a unique section identifier. Please try again.',
+      'Unable to generate a unique class code. Please try again.',
     );
   }
 

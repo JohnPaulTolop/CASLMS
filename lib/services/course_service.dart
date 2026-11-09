@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'section_audience_service.dart';
+
 class CourseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -15,15 +17,12 @@ class CourseService {
   // GET ONE COURSE
   // ============================================================
 
-  Future<Map<String, dynamic>?> getCourseById(
-    String courseId,
-  ) async {
+  Future<Map<String, dynamic>?> getCourseById(String courseId) async {
     try {
-      final DocumentSnapshot<Map<String, dynamic>> document =
-          await _firestore
-              .collection('courses')
-              .doc(courseId)
-              .get();
+      final DocumentSnapshot<Map<String, dynamic>> document = await _firestore
+          .collection('courses')
+          .doc(courseId)
+          .get();
 
       if (!document.exists) {
         return null;
@@ -35,18 +34,11 @@ class CourseService {
         return null;
       }
 
-      return {
-        'id': document.id,
-        ...data,
-      };
+      return {'id': document.id, ...data};
     } on FirebaseException catch (e) {
-      throw CourseServiceException(
-        e.message ?? 'Unable to load course.',
-      );
+      throw CourseServiceException(e.message ?? 'Unable to load course.');
     } catch (e) {
-      throw CourseServiceException(
-        'Unable to load course.',
-      );
+      throw CourseServiceException('Unable to load course.');
     }
   }
 
@@ -59,23 +51,17 @@ class CourseService {
       final User? user = _auth.currentUser;
 
       if (user == null) {
-        throw CourseServiceException(
-          'No student is currently logged in.',
-        );
+        throw CourseServiceException('No student is currently logged in.');
       }
 
       // ----------------------------------------------------------
       // Find enrollment records for current student
       // ----------------------------------------------------------
 
-      final QuerySnapshot<Map<String, dynamic>>
-          enrollmentSnapshot =
+      final QuerySnapshot<Map<String, dynamic>> enrollmentSnapshot =
           await _firestore
               .collection('enrollments')
-              .where(
-                'studentId',
-                isEqualTo: user.uid,
-              )
+              .where('studentId', isEqualTo: user.uid)
               .get();
 
       final List<Map<String, dynamic>> courses = [];
@@ -85,23 +71,20 @@ class CourseService {
       // ----------------------------------------------------------
 
       for (final enrollmentDoc in enrollmentSnapshot.docs) {
-        final Map<String, dynamic> enrollment =
-            enrollmentDoc.data();
+        final Map<String, dynamic> enrollment = enrollmentDoc.data();
 
-        final String enrollmentStatus =
-            (enrollment['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String enrollmentStatus = (enrollment['status'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (enrollmentStatus != 'active') {
           continue;
         }
 
-        final String courseId =
-            (enrollment['courseId'] ?? '')
-                .toString()
-                .trim();
+        final String courseId = (enrollment['courseId'] ?? '')
+            .toString()
+            .trim();
 
         if (courseId.isEmpty) {
           continue;
@@ -111,29 +94,23 @@ class CourseService {
         // Get actual course
         // --------------------------------------------------------
 
-        final DocumentSnapshot<Map<String, dynamic>>
-            courseDocument =
-            await _firestore
-                .collection('courses')
-                .doc(courseId)
-                .get();
+        final DocumentSnapshot<Map<String, dynamic>> courseDocument =
+            await _firestore.collection('courses').doc(courseId).get();
 
         if (!courseDocument.exists) {
           continue;
         }
 
-        final Map<String, dynamic>? courseData =
-            courseDocument.data();
+        final Map<String, dynamic>? courseData = courseDocument.data();
 
         if (courseData == null) {
           continue;
         }
 
-        final String courseStatus =
-            (courseData['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String courseStatus = (courseData['status'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (courseStatus != 'active') {
           continue;
@@ -152,11 +129,9 @@ class CourseService {
       // ----------------------------------------------------------
 
       courses.sort((a, b) {
-        final String codeA =
-            (a['code'] ?? '').toString();
+        final String codeA = (a['code'] ?? '').toString();
 
-        final String codeB =
-            (b['code'] ?? '').toString();
+        final String codeB = (b['code'] ?? '').toString();
 
         return codeA.compareTo(codeB);
       });
@@ -166,13 +141,10 @@ class CourseService {
       rethrow;
     } on FirebaseException catch (e) {
       throw CourseServiceException(
-        e.message ??
-            'Unable to load student courses.',
+        e.message ?? 'Unable to load student courses.',
       );
     } catch (e) {
-      throw CourseServiceException(
-        'Unable to load student courses.',
-      );
+      throw CourseServiceException('Unable to load student courses.');
     }
   }
 
@@ -180,49 +152,33 @@ class CourseService {
   // GET CURRENT INSTRUCTOR'S COURSES
   // ============================================================
 
-  Future<List<Map<String, dynamic>>>
-      getInstructorCourses() async {
+  Future<List<Map<String, dynamic>>> getInstructorCourses() async {
     try {
       final User? user = _auth.currentUser;
 
       if (user == null) {
-        throw CourseServiceException(
-          'No instructor is currently logged in.',
-        );
+        throw CourseServiceException('No instructor is currently logged in.');
       }
 
-      final QuerySnapshot<Map<String, dynamic>> snapshot =
-          await _firestore
-              .collection('courses')
-              .where(
-                'instructorId',
-                isEqualTo: user.uid,
-              )
-              .get();
+      final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
+          .collection('courses')
+          .where('instructorId', isEqualTo: user.uid)
+          .get();
 
-      final List<Map<String, dynamic>> courses =
-          snapshot.docs
-              .map((document) {
-                return {
-                  'id': document.id,
-                  ...document.data(),
-                };
-              })
-              .where((course) {
-                return (course['status'] ?? '')
-                        .toString()
-                        .trim()
-                        .toLowerCase() ==
-                    'active';
-              })
-              .toList();
+      final List<Map<String, dynamic>> courses = snapshot.docs
+          .map((document) {
+            return {'id': document.id, ...document.data()};
+          })
+          .where((course) {
+            return (course['status'] ?? '').toString().trim().toLowerCase() ==
+                'active';
+          })
+          .toList();
 
       courses.sort((a, b) {
-        final String codeA =
-            (a['code'] ?? '').toString();
+        final String codeA = (a['code'] ?? '').toString();
 
-        final String codeB =
-            (b['code'] ?? '').toString();
+        final String codeB = (b['code'] ?? '').toString();
 
         return codeA.compareTo(codeB);
       });
@@ -232,13 +188,10 @@ class CourseService {
       rethrow;
     } on FirebaseException catch (e) {
       throw CourseServiceException(
-        e.message ??
-            'Unable to load instructor courses.',
+        e.message ?? 'Unable to load instructor courses.',
       );
     } catch (e) {
-      throw CourseServiceException(
-        'Unable to load instructor courses.',
-      );
+      throw CourseServiceException('Unable to load instructor courses.');
     }
   }
 
@@ -246,50 +199,43 @@ class CourseService {
   // GET PUBLISHED MODULES FOR STUDENT
   // ============================================================
 
-  Future<List<Map<String, dynamic>>> getCourseModules(
-    String courseId,
-  ) async {
+  Future<List<Map<String, dynamic>>> getCourseModules(String courseId) async {
     try {
       if (courseId.trim().isEmpty) {
         return [];
       }
 
-      final QuerySnapshot<Map<String, dynamic>> snapshot =
-          await _firestore
-              .collection('modules')
-              .where(
-                'courseId',
-                isEqualTo: courseId,
-              )
-              .get();
+      final uid = _auth.currentUser?.uid ?? '';
+      final enrollment = await SectionAudienceService(firestore: _firestore)
+          .requireActiveEnrollment(courseId: courseId.trim(), studentId: uid);
+      final sectionId = (enrollment['sectionId'] ?? '').toString().trim();
+      final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
+          .collection('modules')
+          .where('courseId', isEqualTo: courseId.trim())
+          .where('status', isEqualTo: 'published')
+          .where(
+            'sectionIds',
+            arrayContainsAny: <String>[
+              SectionAudienceService.allSections,
+              sectionId,
+            ],
+          )
+          .get();
 
-      final List<Map<String, dynamic>> modules =
-          snapshot.docs
-              .map((document) {
-                return {
-                  'id': document.id,
-                  ...document.data(),
-                };
-              })
-              .where((module) {
-                return (module['status'] ?? '')
-                        .toString()
-                        .trim()
-                        .toLowerCase() ==
-                    'published';
-              })
-              .toList();
+      final List<Map<String, dynamic>> modules = snapshot.docs
+          .map((document) {
+            return {'id': document.id, ...document.data()};
+          })
+          .where((module) {
+            return (module['status'] ?? '').toString().trim().toLowerCase() ==
+                'published';
+          })
+          .toList();
 
       modules.sort((a, b) {
-        final num orderA =
-            a['order'] is num
-                ? a['order'] as num
-                : 0;
+        final num orderA = a['order'] is num ? a['order'] as num : 0;
 
-        final num orderB =
-            b['order'] is num
-                ? b['order'] as num
-                : 0;
+        final num orderB = b['order'] is num ? b['order'] as num : 0;
 
         return orderA.compareTo(orderB);
       });
@@ -297,13 +243,10 @@ class CourseService {
       return modules;
     } on FirebaseException catch (e) {
       throw CourseServiceException(
-        e.message ??
-            'Unable to load course modules.',
+        e.message ?? 'Unable to load course modules.',
       );
     } catch (e) {
-      throw CourseServiceException(
-        'Unable to load course modules.',
-      );
+      throw CourseServiceException('Unable to load course modules.');
     }
   }
 
@@ -312,8 +255,7 @@ class CourseService {
   // Published + Draft
   // ============================================================
 
-  Future<List<Map<String, dynamic>>>
-      getInstructorCourseModules(
+  Future<List<Map<String, dynamic>>> getInstructorCourseModules(
     String courseId,
   ) async {
     try {
@@ -321,33 +263,19 @@ class CourseService {
         return [];
       }
 
-      final QuerySnapshot<Map<String, dynamic>> snapshot =
-          await _firestore
-              .collection('modules')
-              .where(
-                'courseId',
-                isEqualTo: courseId,
-              )
-              .get();
+      final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
+          .collection('modules')
+          .where('courseId', isEqualTo: courseId)
+          .get();
 
-      final List<Map<String, dynamic>> modules =
-          snapshot.docs.map((document) {
-        return {
-          'id': document.id,
-          ...document.data(),
-        };
+      final List<Map<String, dynamic>> modules = snapshot.docs.map((document) {
+        return {'id': document.id, ...document.data()};
       }).toList();
 
       modules.sort((a, b) {
-        final num orderA =
-            a['order'] is num
-                ? a['order'] as num
-                : 0;
+        final num orderA = a['order'] is num ? a['order'] as num : 0;
 
-        final num orderB =
-            b['order'] is num
-                ? b['order'] as num
-                : 0;
+        final num orderB = b['order'] is num ? b['order'] as num : 0;
 
         return orderA.compareTo(orderB);
       });
@@ -355,13 +283,10 @@ class CourseService {
       return modules;
     } on FirebaseException catch (e) {
       throw CourseServiceException(
-        e.message ??
-            'Unable to load course modules.',
+        e.message ?? 'Unable to load course modules.',
       );
     } catch (e) {
-      throw CourseServiceException(
-        'Unable to load course modules.',
-      );
+      throw CourseServiceException('Unable to load course modules.');
     }
   }
 
@@ -369,13 +294,8 @@ class CourseService {
   // COUNT PUBLISHED MODULES
   // ============================================================
 
-  Future<int> getCourseModuleCount(
-    String courseId,
-  ) async {
-    final List<Map<String, dynamic>> modules =
-        await getCourseModules(
-      courseId,
-    );
+  Future<int> getCourseModuleCount(String courseId) async {
+    final List<Map<String, dynamic>> modules = await getCourseModules(courseId);
 
     return modules.length;
   }
@@ -384,61 +304,47 @@ class CourseService {
   // GET STUDENTS ENROLLED IN COURSE
   // ============================================================
 
-  Future<List<Map<String, dynamic>>> getCourseStudents(
-    String courseId,
-  ) async {
+  Future<List<Map<String, dynamic>>> getCourseStudents(String courseId) async {
     try {
       if (courseId.trim().isEmpty) {
         return [];
       }
 
-      final QuerySnapshot<Map<String, dynamic>> snapshot =
-          await _firestore
-              .collection('enrollments')
-              .where(
-                'courseId',
-                isEqualTo: courseId,
-              )
-              .get();
+      final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
+          .collection('enrollments')
+          .where('courseId', isEqualTo: courseId)
+          .get();
 
       final List<Map<String, dynamic>> students = [];
 
       for (final document in snapshot.docs) {
-        final Map<String, dynamic> enrollment =
-            document.data();
+        final Map<String, dynamic> enrollment = document.data();
 
-        final String status =
-            (enrollment['status'] ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
+        final String status = (enrollment['status'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
 
         if (status != 'active') {
           continue;
         }
 
-        final String studentId =
-            (enrollment['studentId'] ?? '')
-                .toString()
-                .trim();
+        final String studentId = (enrollment['studentId'] ?? '')
+            .toString()
+            .trim();
 
         if (studentId.isEmpty) {
           continue;
         }
 
-        final DocumentSnapshot<Map<String, dynamic>>
-            studentDocument =
-            await _firestore
-                .collection('users')
-                .doc(studentId)
-                .get();
+        final DocumentSnapshot<Map<String, dynamic>> studentDocument =
+            await _firestore.collection('users').doc(studentId).get();
 
         if (!studentDocument.exists) {
           continue;
         }
 
-        final Map<String, dynamic>? studentData =
-            studentDocument.data();
+        final Map<String, dynamic>? studentData = studentDocument.data();
 
         if (studentData == null) {
           continue;
@@ -452,11 +358,9 @@ class CourseService {
       }
 
       students.sort((a, b) {
-        final String nameA =
-            (a['name'] ?? '').toString();
+        final String nameA = (a['name'] ?? '').toString();
 
-        final String nameB =
-            (b['name'] ?? '').toString();
+        final String nameB = (b['name'] ?? '').toString();
 
         return nameA.compareTo(nameB);
       });
@@ -464,13 +368,10 @@ class CourseService {
       return students;
     } on FirebaseException catch (e) {
       throw CourseServiceException(
-        e.message ??
-            'Unable to load enrolled students.',
+        e.message ?? 'Unable to load enrolled students.',
       );
     } catch (e) {
-      throw CourseServiceException(
-        'Unable to load enrolled students.',
-      );
+      throw CourseServiceException('Unable to load enrolled students.');
     }
   }
 }

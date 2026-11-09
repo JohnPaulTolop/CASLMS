@@ -2,9 +2,9 @@ import { AiError, route } from "./engine.ts";
 import type { Event, Health, Input, Provider, Task } from "./engine.ts";
 
 export const topicLimitMessage =
-  "I can only assist with topics related to the Learning Management System (LMS). Do you have a question about your courses, grades, or account?";
+  "I'm limited to CAS LMS and schoolwork. Please ask a question about your classes, assignments, lessons, or using the LMS.";
 export const clarifyTopicMessage =
-  "I can help with CASLMS, course-related academics, and education technology. Which course, assignment, or LMS task is this for?";
+  "I can help with CAS LMS and schoolwork. Which subject, assignment, or LMS task is this question for?";
 
 export function isChat(input: Input): boolean {
   return ["teaching_chat", "study_chat", "records_summary"].includes(

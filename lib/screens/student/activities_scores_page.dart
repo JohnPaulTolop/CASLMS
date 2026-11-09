@@ -1,3 +1,7 @@
+import '../../core/app_colors.dart';
+import '../shared/workspace_widgets.dart';
+import '../shared/workspace_shell.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../models/gradebook_models.dart';
@@ -71,32 +75,35 @@ class _ActivitiesScoresScreenState extends State<ActivitiesScoresScreen> {
         .where((row) => row.status.toLowerCase() == 'graded')
         .length;
     return Scaffold(
-      backgroundColor: gradeBackground,
-      appBar: AppBar(
-        title: const Text(
-          'Activities & Scores',
-          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-        ),
-        automaticallyImplyLeading: false,
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.transparent,
-        actions: [
-          RoundGradeAction(
-            icon: Icons.refresh_rounded,
-            label: 'Refresh activities',
-            accent: gradeBlue,
-            onTap: _loading ? null : _load,
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
+      backgroundColor: AppColors.resolve(context, gradeBackground),
       body: LayoutBuilder(
         builder: (context, constraints) => RefreshIndicator(
           onRefresh: _load,
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.all(constraints.maxWidth < 600 ? 16 : 24),
+            padding: EdgeInsets.fromLTRB(
+              workspaceInset(constraints.maxWidth),
+              0,
+              workspaceInset(constraints.maxWidth),
+              32,
+            ),
             children: [
+              WorkspaceHeading(
+                showEyebrow: false,
+                inlineActions: true,
+                title: 'Activities & scores',
+                subtitle: 'Find your submissions, check scores, and see what is waiting for feedback.',
+                eyebrow: 'YOUR WORK',
+                actions: [
+                  RoundGradeAction(
+                    icon: Icons.refresh_rounded,
+                    label: 'Refresh activities',
+                    accent: gradeBlue,
+                    onTap: _loading ? null : _load,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
               const GradeEntrance(
                 child: GradeHero(
                   title: 'Your work. Your progress.',
@@ -112,19 +119,19 @@ class _ActivitiesScoresScreenState extends State<ActivitiesScoresScreen> {
                       label: 'Submitted',
                       value: '${_activities.length}',
                       icon: Icons.task_alt,
-                      color: gradeBlue,
+                      color: AppColors.resolve(context, gradeBlue),
                     ),
                     (
                       label: 'Graded',
                       value: '$graded',
                       icon: Icons.verified_outlined,
-                      color: gradeTeal,
+                      color: AppColors.resolve(context, gradeTeal),
                     ),
                     (
                       label: 'Awaiting review',
                       value: '${_activities.length - graded}',
                       icon: Icons.schedule_rounded,
-                      color: const Color(0xFFB76A00),
+                      color: AppColors.resolve(context, AppColors.amber),
                     ),
                   ],
                 ),
@@ -134,11 +141,11 @@ class _ActivitiesScoresScreenState extends State<ActivitiesScoresScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Find an activity',
                       style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: gradeInk,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.resolve(context, gradeInk),
                         fontSize: 16,
                       ),
                     ),
@@ -179,7 +186,11 @@ class _ActivitiesScoresScreenState extends State<ActivitiesScoresScreen> {
                           onChanged: (value) =>
                               setState(() => _subject = value),
                         );
-                        return size.maxWidth < 600
+                        return size.maxWidth <
+                                600 *
+                                    (MediaQuery.textScalerOf(context)
+                                            .scale(14) /
+                                        14)
                             ? Column(
                                 children: [
                                   search,
@@ -221,10 +232,16 @@ class _ActivitiesScoresScreenState extends State<ActivitiesScoresScreen> {
                                   ),
                                   onSelected: (_) =>
                                       setState(() => _type = entry.key),
-                                  selectedColor: gradeBlue.withValues(
-                                    alpha: .12,
+                                  selectedColor: AppColors.resolve(
+                                    context,
+                                    gradeBlue,
+                                  ).withValues(alpha: .12),
+                                  side: BorderSide(
+                                    color: AppColors.resolve(
+                                      context,
+                                      gradeBorder,
+                                    ),
                                   ),
-                                  side: const BorderSide(color: gradeBorder),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(30),
                                   ),
@@ -238,13 +255,13 @@ class _ActivitiesScoresScreenState extends State<ActivitiesScoresScreen> {
               const SizedBox(height: 24),
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'Submission history',
                       style: TextStyle(
                         fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: gradeInk,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.resolve(context, gradeInk),
                       ),
                     ),
                   ),
@@ -254,12 +271,7 @@ class _ActivitiesScoresScreenState extends State<ActivitiesScoresScreen> {
               const SizedBox(height: 14),
               if (_loading)
                 const GradeSurface(
-                  child: Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: CircularProgressIndicator(),
-                    ),
-                  ),
+                  child: WorkspaceLoadingState(label: 'Loading activities…'),
                 )
               else if (_error != null)
                 GradeStateMessage(
@@ -273,7 +285,8 @@ class _ActivitiesScoresScreenState extends State<ActivitiesScoresScreen> {
                   title: 'No matching submissions',
                   message: 'Try another subject or activity type, or change your search.',
                 )
-              else if (constraints.maxWidth < 800)
+              else if (constraints.maxWidth <
+                  800 * (MediaQuery.textScalerOf(context).scale(14) / 14))
                 ...visible.map(
                   (row) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -290,8 +303,10 @@ class _ActivitiesScoresScreenState extends State<ActivitiesScoresScreen> {
                     rowsPerPage: visible.length < 10 ? visible.length : 10,
                     showEmptyRows: false,
                     columnSpacing: 24,
-                    dataRowMinHeight: 72,
-                    dataRowMaxHeight: 88,
+                    dataRowMinHeight:
+                        72 * (MediaQuery.textScalerOf(context).scale(14) / 14),
+                    dataRowMaxHeight:
+                        88 * (MediaQuery.textScalerOf(context).scale(14) / 14),
                     columns: const [
                       DataColumn(label: Text('Activity')),
                       DataColumn(label: Text('Subject')),
@@ -304,12 +319,12 @@ class _ActivitiesScoresScreenState extends State<ActivitiesScoresScreen> {
                     source: _ActivityRows(visible),
                   ),
                 ),
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: Text(
                   'Scores show raw points. A dash means a score is pending; a graded zero is shown as 0. Reported quiz scores require instructor review.',
                   style: TextStyle(
-                    color: gradeMuted,
+                    color: AppColors.resolve(context, gradeMuted),
                     fontSize: 12,
                     height: 1.6,
                   ),
@@ -334,11 +349,9 @@ Widget _status(ActivityScore row) => Wrap(
   children: [
     GradeBadge(
       row.status,
-      color: row.status.toLowerCase() == 'graded'
-          ? gradeTeal
-          : const Color(0xFFB76A00),
+      color: row.status.toLowerCase() == 'graded' ? gradeTeal : AppColors.amber,
     ),
-    if (row.late) const GradeBadge('Late', color: Color(0xFFC54444)),
+    if (row.late) GradeBadge('Late', color: AppColors.error),
   ],
 );
 
@@ -354,8 +367,14 @@ class _ActivityCard extends StatelessWidget {
         Row(
           children: [
             CircleAvatar(
-              backgroundColor: gradeBlue.withValues(alpha: .09),
-              child: Icon(gradeTypeIcon(row.type), color: gradeBlue),
+              backgroundColor: AppColors.resolve(
+                context,
+                gradeBlue,
+              ).withValues(alpha: .09),
+              child: Icon(
+                gradeTypeIcon(row.type),
+                color: AppColors.resolve(context, gradeBlue),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -364,15 +383,18 @@ class _ActivityCard extends StatelessWidget {
                 children: [
                   Text(
                     row.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      color: gradeInk,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.resolve(context, gradeInk),
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     row.subject,
-                    style: const TextStyle(fontSize: 12, color: gradeMuted),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.resolve(context, gradeMuted),
+                    ),
                   ),
                 ],
               ),
@@ -382,19 +404,22 @@ class _ActivityCard extends StatelessWidget {
         const SizedBox(height: 14),
         Text(
           '${row.type.replaceAll('_', ' ').toUpperCase()}  /  ${_date(row)}',
-          style: const TextStyle(fontSize: 11, color: gradeMuted),
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.resolve(context, gradeMuted),
+          ),
         ),
         const SizedBox(height: 10),
         _status(row),
-        const Divider(height: 28, color: gradeBorder),
+        Divider(height: 28, color: AppColors.resolve(context, gradeBorder)),
         Row(
           children: [
             Expanded(
               child: Text(
                 '${gradeNumber(row.pointsEarned)} / ${gradeNumber(row.totalPoints)} points',
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w700,
-                  color: gradeInk,
+                  color: AppColors.resolve(context, gradeInk),
                 ),
               ),
             ),
@@ -402,20 +427,23 @@ class _ActivityCard extends StatelessWidget {
               row.percentage == null
                   ? 'Pending'
                   : '${gradeNumber(row.percentage)}%',
-              style: const TextStyle(
-                color: gradeBlue,
+              style: TextStyle(
+                color: AppColors.resolve(context, gradeBlue),
                 fontSize: 20,
-                fontWeight: FontWeight.w800,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ],
         ),
         if (row.needsInstructorReview)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 10),
             child: Text(
               'Instructor review needed',
-              style: TextStyle(color: gradeMuted, fontSize: 12),
+              style: TextStyle(
+                color: AppColors.resolve(context, gradeMuted),
+                fontSize: 12,
+              ),
             ),
           ),
       ],
@@ -447,7 +475,7 @@ class _ActivityRows extends DataTableSource {
                 ),
                 Text(
                   row.type == 'unit_test' ? 'Unit Test' : row.type,
-                  style: const TextStyle(color: gradeMuted, fontSize: 11),
+                  style: TextStyle(fontSize: 11),
                 ),
               ],
             ),
@@ -478,10 +506,7 @@ class _ActivityRows extends DataTableSource {
             children: [
               _status(row),
               if (row.needsInstructorReview)
-                const Text(
-                  'Review needed',
-                  style: TextStyle(fontSize: 11, color: gradeMuted),
-                ),
+                Text('Review needed', style: TextStyle(fontSize: 11)),
             ],
           ),
         ),

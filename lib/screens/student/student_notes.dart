@@ -332,37 +332,58 @@ class _StudentNotesDashboardSectionState
                   itemBuilder: (context, index) {
                     final note = notes[index];
                     final highlight = note.id == _newestId;
-                    return TweenAnimationBuilder<double>(
-                      key: ValueKey(note.id),
-                      tween: Tween(begin: reduceMotion ? 1 : .96, end: 1),
+                    return AnimatedSwitcher(
                       duration: reduceMotion
                           ? Duration.zero
-                          : const Duration(milliseconds: 330),
-                      curve: Curves.easeOutBack,
-                      builder: (context, scale, child) => Transform.scale(
-                        scale: scale,
-                        child: Opacity(
-                          opacity: reduceMotion ? 1 : scale.clamp(0, 1),
+                          : const Duration(milliseconds: 220),
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position:
+                              Tween(
+                                begin: const Offset(.04, 0),
+                                end: Offset.zero,
+                              ).animate(
+                                CurvedAnimation(
+                                  parent: animation,
+                                  curve: Curves.easeOutCubic,
+                                ),
+                              ),
                           child: child,
                         ),
                       ),
-                      child: _DashboardNoteCard(
-                        note: note,
-                        highlighted: highlight,
-                        onOpen: () => showPersonalNoteDetails(
-                          context,
-                          note: note,
-                          service: _service,
+                      child: TweenAnimationBuilder<double>(
+                        key: ValueKey(note.id),
+                        tween: Tween(begin: reduceMotion ? 1 : .96, end: 1),
+                        duration: reduceMotion
+                            ? Duration.zero
+                            : const Duration(milliseconds: 330),
+                        curve: Curves.easeOutBack,
+                        builder: (context, scale, child) => Transform.scale(
+                          scale: scale,
+                          child: Opacity(
+                            opacity: reduceMotion ? 1 : scale.clamp(0, 1),
+                            child: child,
+                          ),
                         ),
-                        onEdit: () => showPersonalNoteEditor(
-                          context,
-                          service: _service,
+                        child: _DashboardNoteCard(
                           note: note,
-                        ),
-                        onDelete: () => confirmPersonalNoteDelete(
-                          context,
-                          note: note,
-                          service: _service,
+                          highlighted: highlight,
+                          onOpen: () => showPersonalNoteDetails(
+                            context,
+                            note: note,
+                            service: _service,
+                          ),
+                          onEdit: () => showPersonalNoteEditor(
+                            context,
+                            service: _service,
+                            note: note,
+                          ),
+                          onDelete: () => confirmPersonalNoteDelete(
+                            context,
+                            note: note,
+                            service: _service,
+                          ),
                         ),
                       ),
                     );
@@ -392,20 +413,27 @@ class _StudentNotesDashboardSectionState
         ),
         if (notes.length > 1) ...[
           const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(
-              notes.length,
-              (index) => AnimatedContainer(
-                duration: reduceMotion
-                    ? Duration.zero
-                    : const Duration(milliseconds: 180),
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                width: index == _index ? 20 : 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  color: index == _index ? _notesBlue : const Color(0xFFCBD6EA),
-                  borderRadius: BorderRadius.circular(8),
+          Center(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  notes.length,
+                  (index) => AnimatedContainer(
+                    duration: reduceMotion
+                        ? Duration.zero
+                        : const Duration(milliseconds: 180),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: index == _index ? 20 : 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: index == _index
+                          ? _notesBlue
+                          : const Color(0xFFCBD6EA),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
                 ),
               ),
             ),

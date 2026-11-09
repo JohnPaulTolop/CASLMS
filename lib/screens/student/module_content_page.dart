@@ -1,3 +1,5 @@
+import '../../core/app_colors.dart';
+
 import 'package:flutter/material.dart';
 
 class ModuleContentScreen extends StatefulWidget {
@@ -18,14 +20,14 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
   // ============================================================
   // CASLMS DESIGN SYSTEM
   // ============================================================
-  static const Color primaryBlue = Color(0xFF1769FF);
-  static const Color background = Color(0xFFF7F9FC);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
-  
-  static const Color orange = Color(0xFFFF9418);
-  static const Color green = Color(0xFF26A65B);
-  static const Color purple = Color(0xFF7B4DFF);
+  static const Color primaryBlue = AppColors.primaryBlue;
+  static const Color background = AppColors.background;
+  static const Color textDark = AppColors.darkText;
+  static const Color textGrey = AppColors.secondaryText;
+
+  static const Color orange = AppColors.amber;
+  static const Color green = AppColors.green;
+  static const Color purple = AppColors.purple;
 
   int _selectedTabIndex = 0;
 
@@ -67,7 +69,10 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
                   flex: 6,
                   child: SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 40),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 40,
+                      vertical: 40,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -76,51 +81,77 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: const [
-                              Icon(Icons.arrow_back_rounded, color: textDark, size: 22),
+                              Icon(
+                                Icons.arrow_back_rounded,
+                                color: textDark,
+                                size: 22,
+                              ),
                               SizedBox(width: 8),
                               Text(
                                 'Back to Modules',
-                                style: TextStyle(fontWeight: FontWeight.w700, color: textDark, fontSize: 15),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color: textDark,
+                                  fontSize: 15,
+                                ),
                               ),
                             ],
                           ),
                         ),
                         const SizedBox(height: 32),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: primaryBlue.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
                             widget.moduleName.toUpperCase(),
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: primaryBlue, letterSpacing: 1),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: primaryBlue,
+                              letterSpacing: 1,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
                         Text(
                           widget.title,
-                          style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: textDark, letterSpacing: -1, height: 1.1),
+                          style: const TextStyle(
+                            fontSize: 34,
+                            fontWeight: FontWeight.w700,
+                            color: textDark,
+                            letterSpacing: -1,
+                            height: 1.1,
+                          ),
                         ),
                         const SizedBox(height: 12),
                         Text(
                           '12 mins video • 1st Semester, AY 2026-2027',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: textGrey),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: textGrey,
+                          ),
                         ),
                         const SizedBox(height: 32),
-                        
+
                         _buildVideoPlayer(),
-                        
+
                         const SizedBox(height: 40),
                         _buildAboutSection(),
                       ],
                     ),
                   ),
                 ),
-                
+
                 // Divider
-                Container(width: 1, color: const Color(0xFFE2E6ED)),
-                
+                Container(width: 1, color: AppColors.inputBorder),
+
                 // RIGHT COLUMN: AI Assistant & Resources (Always visible)
                 Expanded(
                   flex: 4,
@@ -129,18 +160,31 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
                     height: double.infinity,
                     child: SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
-                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 40),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 40,
+                        vertical: 40,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Study Tools', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: textDark)),
+                          const Text(
+                            'Study Tools',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: textDark,
+                            ),
+                          ),
                           const SizedBox(height: 24),
                           _buildAIAssistantSection(),
-                          
+
                           const SizedBox(height: 40),
-                          const Divider(height: 1, color: Color(0xFFE2E6ED)),
+                          const Divider(
+                            height: 1,
+                            color: AppColors.inputBorder,
+                          ),
                           const SizedBox(height: 40),
-                          
+
                           _buildResourcesSection(),
                         ],
                       ),
@@ -160,7 +204,7 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
   // ============================================================
   Widget _buildMobileLayout() {
     return Scaffold(
-      backgroundColor: Colors.white, 
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
           // Blue background layer locked to the top half
@@ -185,11 +229,19 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
                           children: [
                             GestureDetector(
                               onTap: () => Navigator.pop(context),
-                              child: const Icon(Icons.arrow_back_rounded, color: Colors.white, size: 26),
+                              child: const Icon(
+                                Icons.arrow_back_rounded,
+                                color: Colors.white,
+                                size: 26,
+                              ),
                             ),
                             GestureDetector(
                               onTap: () {},
-                              child: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 26),
+                              child: const Icon(
+                                Icons.more_vert_rounded,
+                                color: Colors.white,
+                                size: 26,
+                              ),
                             ),
                           ],
                         ),
@@ -200,25 +252,46 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              width: 1,
+                            ),
                           ),
-                          child: const Icon(Icons.play_circle_outline_rounded, color: Colors.white, size: 36),
+                          child: const Icon(
+                            Icons.play_circle_outline_rounded,
+                            color: Colors.white,
+                            size: 36,
+                          ),
                         ),
                         const SizedBox(height: 20),
                         Text(
                           widget.moduleName,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           widget.title,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.5, height: 1.2),
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                            letterSpacing: -0.5,
+                            height: 1.2,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           '12 mins video • 1st Semester, AY 2026-2027',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.8)),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white.withValues(alpha: 0.8),
+                          ),
                         ),
                       ],
                     ),
@@ -228,10 +301,10 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
                   Container(
                     width: double.infinity,
                     constraints: BoxConstraints(
-                      minHeight: MediaQuery.of(context).size.height * 0.7, 
+                      minHeight: MediaQuery.of(context).size.height * 0.7,
                     ),
                     decoration: const BoxDecoration(
-                      color: Colors.white, 
+                      color: Colors.white,
                       borderRadius: BorderRadius.only(
                         topLeft: Radius.circular(30),
                         topRight: Radius.circular(30),
@@ -250,21 +323,21 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
                             ],
                           ),
                         ),
-                        
+
                         Padding(
                           padding: const EdgeInsets.fromLTRB(20, 8, 20, 65),
-                          child: _selectedTabIndex == 0 
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildVideoPlayer(),
-                                  const SizedBox(height: 24),
-                                  _buildAboutSection(),
-                                  const SizedBox(height: 32),
-                                  _buildResourcesSection(),
-                                ],
-                              ) 
-                            : _buildAIAssistantSection(),
+                          child: _selectedTabIndex == 0
+                              ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildVideoPlayer(),
+                                    const SizedBox(height: 24),
+                                    _buildAboutSection(),
+                                    const SizedBox(height: 32),
+                                    _buildResourcesSection(),
+                                  ],
+                                )
+                              : _buildAIAssistantSection(),
                         ),
                       ],
                     ),
@@ -290,7 +363,7 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFEAF2FF) : Colors.transparent,
+          color: isSelected ? AppColors.blueTint : Colors.transparent,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -313,15 +386,11 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
         decoration: BoxDecoration(
           color: Colors.black,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 15,
-              offset: const Offset(0, 5),
-            ),
-          ],
+
           image: const DecorationImage(
-            image: NetworkImage('https://images.unsplash.com/photo-1617042375876-a13e36732a04?auto=format&fit=crop&q=80&w=800'),
+            image: NetworkImage(
+              'https://images.unsplash.com/photo-1617042375876-a13e36732a04?auto=format&fit=crop&q=80&w=800',
+            ),
             fit: BoxFit.cover,
             opacity: 0.6,
           ),
@@ -333,7 +402,11 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
               color: Colors.white.withValues(alpha: 0.25),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 42),
+            child: const Icon(
+              Icons.play_arrow_rounded,
+              color: Colors.white,
+              size: 42,
+            ),
           ),
         ),
       ),
@@ -346,12 +419,21 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
       children: [
         const Text(
           'About this module',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: textDark),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: textDark,
+          ),
         ),
         const SizedBox(height: 12),
         const Text(
           'In this lesson, we will explore the fundamental building blocks of programming. You will learn the difference between various architectures and how to compose them into a complex system structure.',
-          style: TextStyle(fontSize: 14, color: textGrey, height: 1.6, fontWeight: FontWeight.w500),
+          style: TextStyle(
+            fontSize: 14,
+            color: textGrey,
+            height: 1.6,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ],
     );
@@ -363,7 +445,11 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
       children: [
         const Text(
           'Attached Resources',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: textDark),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: textDark,
+          ),
         ),
         const SizedBox(height: 16),
         _buildActionTile(
@@ -385,7 +471,7 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFFF3E8FF), 
+            color: const Color(0xFFF3E8FF),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Row(
@@ -399,12 +485,21 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
                   children: [
                     const Text(
                       'AI-Assisted Learning',
-                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: purple),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: purple,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Summaries and reviewers are generated by AI based on this module\'s specific materials. Always verify with your instructor\'s original content.',
-                      style: TextStyle(fontSize: 12, color: purple.withValues(alpha: 0.8), height: 1.5, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: purple.withValues(alpha: 0.8),
+                        height: 1.5,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
@@ -450,7 +545,11 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
                   const SizedBox(height: 20),
                   Text(
                     'Generating summary from transcript...',
-                    style: TextStyle(color: textGrey, fontSize: 14, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: textGrey,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -464,14 +563,7 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFFE2E6ED)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.02),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+              border: Border.all(color: AppColors.inputBorder),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -479,17 +571,37 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('✨ AI Summary', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: textDark)),
-                    Icon(Icons.copy_rounded, size: 20, color: textGrey.withValues(alpha: 0.6)),
+                    const Text(
+                      '✨ AI Summary',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: textDark,
+                      ),
+                    ),
+                    Icon(
+                      Icons.copy_rounded,
+                      size: 20,
+                      color: textGrey.withValues(alpha: 0.6),
+                    ),
                   ],
                 ),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 16.0),
-                  child: Divider(height: 1, thickness: 1, color: Color(0xFFE2E6ED)),
+                  child: Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: AppColors.inputBorder,
+                  ),
                 ),
                 Text(
                   _generatedSummary!,
-                  style: const TextStyle(fontSize: 14, color: textDark, height: 1.6, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: textDark,
+                    height: 1.6,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
@@ -514,7 +626,7 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E6ED)),
+          border: Border.all(color: AppColors.inputBorder),
         ),
         child: Row(
           children: [
@@ -533,17 +645,29 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: textDark),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: textDark,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     subtitle,
-                    style: const TextStyle(color: textGrey, fontSize: 12, fontWeight: FontWeight.w500),
+                    style: const TextStyle(
+                      color: textGrey,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: Color(0xFF9AA3B3), size: 24),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Color(0xFF9AA3B3),
+              size: 24,
+            ),
           ],
         ),
       ),
@@ -553,9 +677,9 @@ class _ModuleContentScreenState extends State<ModuleContentScreen> {
   // --- Fake API Call for Demo ---
   Future<void> _simulateAIGeneration() async {
     setState(() => _isGeneratingSummary = true);
-    
+
     await Future.delayed(const Duration(seconds: 2));
-    
+
     if (!mounted) return;
     setState(() {
       _isGeneratingSummary = false;

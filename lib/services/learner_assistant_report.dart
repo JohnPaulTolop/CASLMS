@@ -75,9 +75,7 @@ class LearnerAssistantReport {
           'Unverified record',
         ].contains(status);
       }
-      if (approved) {
-        return status == 'Approved / complied';
-      }
+      if (approved) return status == 'Approved / complied';
       if (pending) {
         return status == 'Submitted — awaiting grade' ||
             status == 'Awaiting instructor verification';
@@ -161,9 +159,7 @@ String assistantRequirementStatus(
         ? 'Approved / complied'
         : 'Awaiting instructor verification';
   }
-  if (status == 'in_progress') {
-    return 'In progress';
-  }
+  if (status == 'in_progress') return 'In progress';
   if (['graded', 'completed', 'submitted'].contains(status) &&
       result['score'] is num &&
       (status == 'graded' || source == 'quiz')) {

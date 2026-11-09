@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'section_audience_service.dart';
+
 class NotificationService {
   NotificationService({FirebaseFirestore? firestore, FirebaseAuth? auth})
     : _firestore = firestore ?? FirebaseFirestore.instance,
@@ -10,8 +12,65 @@ class NotificationService {
   final FirebaseAuth _auth;
 
   String? get currentUserId => _auth.currentUser?.uid;
+  static Map<String, dynamic> submissionReceivedNotice({
+    required String submissionId,
+    required String courseId,
+    required String studentId,
+    required String instructorId,
+    bool legacy = false,
+  }) => {
+    'userId': instructorId,
+    'type': 'submission',
+    'sourceType': legacy ? 'submissionReceived' : 'assessmentReceived',
+    'sourceId': submissionId,
+    'actorId': studentId,
+    'title': 'New assessment submission',
+    'message': 'A student submitted work. Open this notification to review it.',
+    'courseId': courseId,
+    'isRead': false,
+    'readAt': null,
+    'createdAt': FieldValue.serverTimestamp(),
+  };
+  static Map<String, dynamic> enrollmentNotice({
+    required String courseId,
+    required String studentId,
+    required String actorId,
+  }) => {
+    'userId': studentId,
+    'type': 'course_enrollment',
+    'sourceType': 'enrollment',
+    'sourceId': '${courseId}_$studentId',
+    'actorId': actorId,
+    'title': 'Course enrollment confirmed',
+    'message': 'Open your enrolled course.',
+    'courseId': courseId,
+    'isRead': false,
+    'readAt': null,
+    'createdAt': FieldValue.serverTimestamp(),
+  };
+  static Map<String, dynamic> messageNotice({
+    required String courseId,
+    required String conversationId,
+    required String messageId,
+    required String receiverId,
+    required String actorId,
+  }) => {
+    'userId': receiverId,
+    'type': 'message',
+    'sourceType': 'conversation',
+    'sourceId': conversationId,
+    'messageId': messageId,
+    'actorId': actorId,
+    'title': 'New message',
+    'message': 'Open your conversation to read the message.',
+    'courseId': courseId,
+    'isRead': false,
+    'readAt': null,
+    'createdAt': FieldValue.serverTimestamp(),
+  };
 
   static const _collections = {
+    'course': 'courses',
     'module': 'modules',
     'moduleResource': 'moduleResources',
     'assessment': 'assessments',
@@ -197,7 +256,8 @@ class NotificationService {
           'Submission course does not match its activity.',
         );
       }
-    } else if (source['status'] != 'published') {
+    } else if (source['status'] !=
+        (sourceType == 'course' ? 'active' : 'published')) {
       // Draft activities must not notify students.
       return;
     }
@@ -208,7 +268,9 @@ class NotificationService {
       );
     }
 
-    final courseId = _text(item['courseId']);
+    final courseId = sourceType == 'course'
+        ? sourceId
+        : _text(item['courseId']);
 
     // Only students in the published AI quiz's section
     // should receive its assessment notification.
@@ -271,8 +333,17 @@ class NotificationService {
           throw NotificationServiceException('Submission student is missing.');
         }
 
-        // A grade belongs only to this submission's student.
-        recipients[studentId] = id;
+        final enrollment = await _firestore
+            .collection('enrollments')
+            .doc('${id}_$studentId')
+            .get();
+        final enrollmentData = enrollment.data();
+        final sectionId = _text(enrollmentData?['sectionId']);
+        if (enrollmentData?['status'] == 'active' &&
+            _notificationAudienceAllows(item, sectionId)) {
+          // A grade belongs only to this submission's authorized student.
+          recipients[studentId] = id;
+        }
       } else {
         final enrollments = await _firestore
             .collection('enrollments')
@@ -286,8 +357,12 @@ class NotificationService {
           if (data['status'] == 'active' &&
               studentId.isNotEmpty &&
               enrollment.id == '${id}_$studentId' &&
-              (!isSectionScopedAiQuiz ||
-                  _text(data['sectionId']) == targetSectionId)) {
+              _notificationAudienceAllows(item, _text(data['sectionId'])) &&
+              (_text(item['sectionId']).isEmpty ||
+                  (_text(data['sectionId']).isEmpty
+                          ? _text(course['classCode'])
+                          : _text(data['sectionId'])) ==
+                      _text(item['sectionId']))) {
             recipients.putIfAbsent(studentId, () => id);
           }
         }
@@ -391,6 +466,20 @@ class NotificationService {
           'createdAt': FieldValue.serverTimestamp(),
         });
       });
+    }
+  }
+
+  bool _notificationAudienceAllows(
+    Map<String, dynamic> item,
+    String sectionId,
+  ) {
+    try {
+      return SectionAudienceService.allows(
+        SectionAudienceService.stored(item),
+        sectionId,
+      );
+    } on FormatException {
+      return false;
     }
   }
 

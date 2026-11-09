@@ -1,3 +1,5 @@
+import '../../core/app_colors.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../services/course_invitation_service.dart';
@@ -163,11 +165,14 @@ class _InviteStudentDialogState extends State<InviteStudentDialog> {
                           ),
                         ),
                       const SizedBox(height: 12),
-                      const Text(
+                      Text(
                         'Enrollment becomes active when the student accepts. Students in another section must be transferred instead.',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Color(0xFF68738A),
+                          color: AppColors.resolve(
+                            context,
+                            AppColors.secondaryText,
+                          ),
                         ),
                       ),
                     ],

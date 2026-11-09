@@ -1,13 +1,19 @@
+import 'dart:async';
+
+import 'activity_log_service.dart';
+
 import 'dart:developer' as developer;
 
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../config/supabase_config.dart';
 import 'notification_service.dart';
+import 'section_audience_service.dart';
 
 class LearningMaterialService {
   LearningMaterialService({
@@ -26,6 +32,9 @@ class LearningMaterialService {
   final fb.FirebaseAuth _auth;
   final sb.SupabaseClient _supabase;
   final NotificationService _notificationService;
+  late final SectionAudienceService _sectionAudience = SectionAudienceService(
+    firestore: _firestore,
+  );
 
   static const String collectionName = 'moduleResources';
 
@@ -41,6 +50,34 @@ class LearningMaterialService {
     }
 
     return user;
+  }
+
+  Future<Map<String, dynamic>> _invokeProtectedMaterialAction(
+    String action,
+    Map<String, dynamic> body,
+  ) async {
+    final user = _requireAuthenticatedUser();
+    final idToken = await user.getIdToken();
+    final appCheck = await FirebaseAppCheck.instance.getToken(true);
+    if (idToken == null || appCheck == null || appCheck.isEmpty) {
+      throw LearningMaterialException('Unable to verify this device.');
+    }
+    final response = await _supabase.functions.invoke(
+      'assessment-submission',
+      headers: <String, String>{
+        'Authorization': 'Bearer $idToken',
+        'X-Firebase-AppCheck': appCheck,
+      },
+      body: <String, dynamic>{'action': action, ...body},
+    );
+    final data = response.data;
+    if (data is! Map || data['success'] != true) {
+      final message = data is Map ? (data['error'] ?? '').toString() : '';
+      throw LearningMaterialException(
+        message.isEmpty ? 'Unable to authorize the file operation.' : message,
+      );
+    }
+    return Map<String, dynamic>.from(data);
   }
 
   // ============================================================
@@ -168,7 +205,7 @@ class LearningMaterialService {
   // VERIFY STUDENT ENROLLMENT
   // ============================================================
 
-  Future<void> _requireEnrollment({
+  Future<Map<String, dynamic>> _requireEnrollment({
     required String courseId,
     required String studentId,
   }) async {
@@ -192,6 +229,29 @@ class LearningMaterialService {
       throw LearningMaterialException(
         'Your enrollment in this course is not active.',
       );
+    }
+    return {...document.data()!, 'id': document.id};
+  }
+
+  Future<List<String>> _requireChildAudience({
+    required String courseId,
+    required Map<String, dynamic> module,
+    required List<String> sectionIds,
+  }) async {
+    final course = await _requireOwnedCourse(courseId);
+    try {
+      final audience = await _sectionAudience.requireActiveCourseSections(
+        courseId: courseId,
+        course: course,
+        sectionIds: sectionIds,
+      );
+      SectionAudienceService.assertChild(
+        parent: SectionAudienceService.stored(module),
+        child: audience,
+      );
+      return audience;
+    } on FormatException catch (error) {
+      throw LearningMaterialException(error.message);
     }
   }
 
@@ -461,16 +521,25 @@ class LearningMaterialService {
     String description = '',
     required String fileName,
     required Uint8List fileBytes,
+    required List<String> sectionIds,
     String status = 'published',
   }) async {
     final Map<String, dynamic> instructor = await _requireInstructor();
 
-    await _requireOwnedModule(courseId: courseId, moduleId: moduleId);
+    final module = await _requireOwnedModule(
+      courseId: courseId,
+      moduleId: moduleId,
+    );
 
     final String cleanCourseId = courseId.trim();
     final String cleanModuleId = moduleId.trim();
     final String cleanTitle = title.trim();
     final String cleanFileName = fileName.trim();
+    final audience = await _requireChildAudience(
+      courseId: cleanCourseId,
+      module: module,
+      sectionIds: sectionIds,
+    );
 
     if (cleanTitle.isEmpty) {
       throw LearningMaterialException('Learning material title is required.');
@@ -536,10 +605,25 @@ class LearningMaterialService {
       // SUPABASE UPLOAD
       // --------------------------------------------------------
 
-      await bucket.uploadBinary(
+      final uploadAuthorization = await _invokeProtectedMaterialAction(
+        'prepare_material_upload',
+        <String, dynamic>{
+          'courseId': cleanCourseId,
+          'moduleId': cleanModuleId,
+          'resourceId': resourceId,
+          'storagePath': storagePath,
+          'sectionIds': audience,
+        },
+      );
+      final uploadToken = (uploadAuthorization['token'] ?? '').toString();
+      if (uploadToken.isEmpty) {
+        throw LearningMaterialException('The secure upload token is missing.');
+      }
+      await bucket.uploadBinaryToSignedUrl(
         storagePath,
+        uploadToken,
         fileBytes,
-        fileOptions: sb.FileOptions(
+        sb.FileOptions(
           contentType: mimeType,
           cacheControl: '3600',
           upsert: false,
@@ -549,11 +633,6 @@ class LearningMaterialService {
       uploadedToSupabase = true;
 
       // --------------------------------------------------------
-      // PUBLIC STORAGE URL
-      // --------------------------------------------------------
-
-      final String fileUrl = bucket.getPublicUrl(storagePath);
-
       final String resourceType = resourceTypeFromFileName(cleanFileName);
 
       // --------------------------------------------------------
@@ -581,9 +660,12 @@ class LearningMaterialService {
 
         'storagePath': storagePath,
 
+        'sectionIds': audience,
+
         'fileName': cleanFileName,
 
-        'fileUrl': fileUrl,
+        // Protected files are opened through a short-lived authorized URL.
+        'fileUrl': null,
 
         'externalUrl': null,
 
@@ -604,6 +686,12 @@ class LearningMaterialService {
       };
 
       await resourceReference.set(data);
+      unawaited(
+        ActivityLogService(
+          auth: _auth,
+          firestore: _firestore,
+        ).source('material_uploaded', resourceId),
+      );
 
       if (normalizedStatus == 'published') {
         await _createPublishedNotificationsBestEffort(resourceId);
@@ -617,7 +705,15 @@ class LearningMaterialService {
 
       if (uploadedToSupabase) {
         try {
-          await bucket.remove([storagePath]);
+          await _invokeProtectedMaterialAction(
+            'delete_material_file',
+            <String, dynamic>{
+              'courseId': cleanCourseId,
+              'moduleId': cleanModuleId,
+              'resourceId': resourceId,
+              'storagePath': storagePath,
+            },
+          );
         } catch (_) {}
       }
 
@@ -639,12 +735,21 @@ class LearningMaterialService {
     required String title,
     String description = '',
     required String url,
+    required List<String> sectionIds,
     String resourceType = 'link',
     String status = 'published',
   }) async {
     final Map<String, dynamic> instructor = await _requireInstructor();
 
-    await _requireOwnedModule(courseId: courseId, moduleId: moduleId);
+    final module = await _requireOwnedModule(
+      courseId: courseId,
+      moduleId: moduleId,
+    );
+    final audience = await _requireChildAudience(
+      courseId: courseId.trim(),
+      module: module,
+      sectionIds: sectionIds,
+    );
 
     final String cleanTitle = title.trim();
     final String cleanUrl = url.trim();
@@ -684,6 +789,8 @@ class LearningMaterialService {
       'courseId': courseId.trim(),
 
       'moduleId': moduleId.trim(),
+
+      'sectionIds': audience,
 
       'createdBy': instructor['uid'].toString(),
 
@@ -753,6 +860,19 @@ class LearningMaterialService {
     return {...document.data()!, 'id': document.id, 'resourceId': document.id};
   }
 
+  Future<Uri> createAuthorizedDownloadUri(String resourceId) async {
+    final data = await _invokeProtectedMaterialAction(
+      'open_material_file',
+      <String, dynamic>{'resourceId': resourceId.trim()},
+    );
+    final url = (data['url'] ?? '').toString();
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.scheme != 'https') {
+      throw LearningMaterialException('Unable to open this protected file.');
+    }
+    return uri;
+  }
+
   // ============================================================
   // GET MODULE MATERIALS
   // ============================================================
@@ -776,6 +896,7 @@ class LearningMaterialService {
     // PERMISSION CHECK
     // ----------------------------------------------------------
 
+    String? studentSectionId;
     if (role == 'instructor') {
       await _requireOwnedModule(
         courseId: cleanCourseId,
@@ -791,7 +912,11 @@ class LearningMaterialService {
         throw LearningMaterialException('Your student account is not active.');
       }
 
-      await _requireEnrollment(courseId: cleanCourseId, studentId: userId);
+      final enrollment = await _requireEnrollment(
+        courseId: cleanCourseId,
+        studentId: userId,
+      );
+      studentSectionId = (enrollment['sectionId'] ?? '').toString().trim();
 
       // Students never receive draft materials.
       publishedOnly = true;
@@ -805,10 +930,19 @@ class LearningMaterialService {
     // FIRESTORE QUERY
     // ----------------------------------------------------------
 
-    final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
+    Query<Map<String, dynamic>> query = _firestore
         .collection(collectionName)
-        .where('moduleId', isEqualTo: cleanModuleId)
-        .get();
+        .where('moduleId', isEqualTo: cleanModuleId);
+    if (studentSectionId != null) {
+      query = query.where(
+        'sectionIds',
+        arrayContainsAny: <String>[
+          SectionAudienceService.allSections,
+          studentSectionId,
+        ],
+      );
+    }
+    final QuerySnapshot<Map<String, dynamic>> snapshot = await query.get();
 
     final List<Map<String, dynamic>> materials = [];
 
@@ -1114,11 +1248,15 @@ class LearningMaterialService {
 
     if (deliveryType == 'uploaded_file' && storagePath.isNotEmpty) {
       try {
-        final bucket = _supabase.storage.from(
-          SupabaseConfig.learningMaterialsBucket,
+        await _invokeProtectedMaterialAction(
+          'delete_material_file',
+          <String, dynamic>{
+            'courseId': (material['courseId'] ?? '').toString(),
+            'moduleId': (material['moduleId'] ?? '').toString(),
+            'resourceId': cleanId,
+            'storagePath': storagePath,
+          },
         );
-
-        await bucket.remove([storagePath]);
       } catch (e) {
         throw LearningMaterialException(
           'Unable to remove file from Supabase Storage: $e',

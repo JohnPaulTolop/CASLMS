@@ -1,7 +1,10 @@
+import 'dart:async';
+
+import 'activity_log_service.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
-import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 
 import '../config/academic_catalog.dart';
@@ -70,8 +73,10 @@ class CampusAuthService {
       throw CampusAuthException('Enter a valid campus ID number.');
     }
 
-    if (cleanDepartment.isEmpty) {
-      throw CampusAuthException('Department is required.');
+    if (cleanDepartment != AcademicCatalog.department) {
+      throw CampusAuthException(
+        'Registration is for College of Arts and Sciences (CAS).',
+      );
     }
 
     if (cleanCourse.isEmpty) {
@@ -215,7 +220,7 @@ class CampusAuthService {
     try {
       final document = await _firestore.collection('users').doc(user.uid).get();
 
-      final Map<String, dynamic>? profile = document.data();
+      Map<String, dynamic>? profile = document.data();
 
       if (!document.exists || profile == null) {
         await _auth.signOut();
@@ -232,6 +237,8 @@ class CampusAuthService {
 
         throw CampusAuthException('Campus ID does not match this account.');
       }
+
+      profile = await _synchronizeVerifiedEmail(profile);
 
       final String role = (profile['role'] ?? '')
           .toString()
@@ -294,6 +301,13 @@ class CampusAuthService {
         throw CampusAuthException('Your CASLMS account is currently inactive.');
       }
 
+      unawaited(
+        ActivityLogService(
+          auth: _auth,
+          firestore: _firestore,
+        ).session('login', profile: profile),
+      );
+
       // Updating login time should not prevent a valid
       // user from entering if this optional write fails.
       try {
@@ -350,50 +364,12 @@ class CampusAuthService {
           'Too many login attempts. Please try again later.',
         );
       }
-      if (error.status == 401 || error.status == 403) {
-        if (kDebugMode) {
-          debugPrint(
-            '[CampusAuth] campus-login rejected local App Check verification '
-            '(HTTP ${error.status}).',
-          );
-          throw CampusAuthException(
-            'Local app verification failed. Register this browser\'s '
-            'Firebase App Check debug token, then refresh and try again.',
-          );
-        }
-        throw CampusAuthException(
-          'CASLMS could not verify this application. Refresh and try again.',
-        );
-      }
-      if (kDebugMode) {
-        debugPrint(
-          '[CampusAuth] campus-login failed with HTTP ${error.status}: '
-          '${error.reasonPhrase}',
-        );
-      }
       throw CampusAuthException(
         'Unable to sign in right now. Please try again.',
       );
     } on FirebaseAuthException catch (error) {
       throw CampusAuthException(_firebaseMessage(error));
-    } on FirebaseException catch (error) {
-      if (kDebugMode) {
-        debugPrint(
-          '[CampusAuth] Firebase application verification failed '
-          '(${error.plugin}/${error.code}).',
-        );
-        throw CampusAuthException(
-          'Local app verification failed. Register this browser\'s '
-          'Firebase App Check debug token, then refresh and try again.',
-        );
-      }
-      throw CampusAuthException(
-        'CASLMS could not verify this application. Refresh and try again.',
-      );
-    } catch (error) {
-      if (kDebugMode) {
-        debugPrint('[CampusAuth] Unexpected local sign-in failure: $error');
-      }
+    } catch (_) {
       throw CampusAuthException(
         'Unable to sign in right now. Please try again.',
       );
@@ -419,6 +395,8 @@ class CampusAuthService {
   }
 
   Stream<Map<String, dynamic>?> watchProfile(String userId) {
+    // A live read must not renew Auth tokens or perform profile writes.
+    // Synchronization is explicit after verification and during sign-in.
     return _firestore.collection('users').doc(userId).snapshots().map((
       document,
     ) {
@@ -447,7 +425,6 @@ class CampusAuthService {
         (profile['email'] == email && profile['authEmail'] == email)) {
       return profile;
     }
-
     await _registrationRequest({'action': 'sync_verified_email'});
     return {
       ...profile,
@@ -457,12 +434,11 @@ class CampusAuthService {
     };
   }
 
+  /// Called after a verification link, on profile reload or the next login.
+  /// It recovers an interrupted email update without changing the campus ID.
   Future<void> checkVerifiedProfileEmail() async {
     final user = _auth.currentUser;
-    if (user == null) {
-      throw CampusAuthException('Please sign in again.');
-    }
-
+    if (user == null) throw CampusAuthException('Please sign in again.');
     await user.reload();
     await _auth.currentUser?.getIdToken(true);
     final profile = await getCurrentProfile();
@@ -473,7 +449,7 @@ class CampusAuthService {
   }
 
   Future<void> signOut() async {
-    await _auth.signOut();
+    await ActivityLogService(auth: _auth, firestore: _firestore).signOut();
   }
 
   Future<void> _registrationRequest(Map<String, dynamic> body) async {

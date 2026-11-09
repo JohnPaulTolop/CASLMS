@@ -6,6 +6,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/app_theme.dart';
+import 'core/theme_notifier.dart';
 import 'config/supabase_config.dart';
 import 'firebase_options.dart';
 import 'screens/auth_page.dart';
@@ -14,6 +16,7 @@ import 'screens/session_gate.dart';
 const bool _caslmsLocalIntegration = bool.fromEnvironment(
   'CASLMS_LOCAL_INTEGRATION',
 );
+const bool _isUiRedesignMode = bool.fromEnvironment('CASLMS_UI_REDESIGN_MODE');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -106,20 +109,11 @@ Future<void> _activateFirebaseAppCheck() async {
 
   if (kIsWeb) {
     if (kDebugMode) {
-      const debugToken = String.fromEnvironment(
-        'FIREBASE_APPCHECK_DEBUG_TOKEN',
-      );
-
-      await FirebaseAppCheck.instance.activate(
-        providerWeb: WebDebugProvider(
-          debugToken: debugToken.isEmpty ? null : debugToken,
-        ),
-      );
+      await FirebaseAppCheck.instance.activate(providerWeb: WebDebugProvider());
 
       debugPrint(
         'Firebase App Check activated with the web debug provider. '
-        'Register the configured debug token (or the token from the browser '
-        'console when no token is configured) in Firebase '
+        'Register the debug token from the browser console in Firebase '
         'Console > App Check > Manage debug tokens.',
       );
 
@@ -191,71 +185,52 @@ Future<void> _activateFirebaseAppCheck() async {
 class CASLMSApp extends StatelessWidget {
   const CASLMSApp({super.key});
 
+  static final ThemeNotifier _themeNotifier = ThemeNotifier();
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'SSU CAS E-Learning',
-      debugShowCheckedModeBanner: false,
+    return AnimatedBuilder(
+      animation: _themeNotifier,
+      builder: (context, _) => MaterialApp(
+        title: 'SSU CAS E-Learning',
+        debugShowCheckedModeBanner: false,
 
-      // ========================================================
-      // GLOBAL THEME
-      // ========================================================
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: Colors.grey[50],
-        fontFamily: 'Roboto',
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blueAccent,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.blueAccent,
-            side: const BorderSide(color: Colors.blueAccent, width: 2),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.grey[300]!),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.grey[300]!),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Colors.blueAccent, width: 2),
-          ),
-        ),
+        // ========================================================
+        // GLOBAL THEME
+        // ========================================================
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: _themeNotifier.themeMode,
+
+        // ========================================================
+        // ROUTING
+        // ========================================================
+        initialRoute:
+            WidgetsBinding.instance.platformDispatcher.defaultRouteName,
+        onGenerateRoute: (settings) {
+          final uri = Uri.tryParse(settings.name ?? '');
+          if (uri?.path == '/notification') {
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (_) =>
+                  SessionGate(notificationId: uri!.queryParameters['id']),
+            );
+          }
+          return null;
+        },
+        routes: {
+          // SessionGate decides whether to display the landing,
+          // student, instructor, or administrator interface.
+          // In UI redesign mode, bypass authentication and go directly to dashboard.
+          '/': (context) => SessionGate(isUiRedesignMode: _isUiRedesignMode),
+
+          // Login and registration.
+          '/auth': (context) => const AuthScreen(),
+
+          // Legacy URLs must pass the same account/verification gate.
+          '/student_dashboard': (context) => const SessionGate(),
+        },
       ),
-
-      // ========================================================
-      // ROUTING
-      // ========================================================
-      initialRoute: '/',
-      routes: {
-        // SessionGate decides whether to display the landing,
-        // student, instructor, or administrator interface.
-        '/': (context) => const SessionGate(),
-
-        // Login and registration.
-        '/auth': (context) => const AuthScreen(),
-
-        // Legacy URLs must pass the same account/verification gate.
-        '/student_dashboard': (context) => const SessionGate(),
-      },
     );
   }
 }

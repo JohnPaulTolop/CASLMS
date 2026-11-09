@@ -314,13 +314,13 @@ async function submitApplication(
   }
 
   if (
-    department.length === 0 ||
+    department !== "College of Arts and Sciences (CAS)" ||
     course.length === 0
   ) {
     return response(
       {
         error:
-          "Department and position are required.",
+          "Registration requires College of Arts and Sciences (CAS) and a position.",
       },
       400,
     );
@@ -541,6 +541,17 @@ async function submitApplication(
       },
     );
 
+    const noticeAdmins = await firestore.collection("users").where("role","==","admin").get();
+    // Registration already uses a batch; split delivery only if the admin audience exceeds its remaining capacity.
+    if (noticeAdmins.size > 450) throw new Error("Administrator notification audience is too large.");
+    for (const recipient of noticeAdmins.docs) {
+      if (recipient.data().status !== "active") continue;
+      batch.set(firestore.collection("notifications").doc(`instructorApplication_${decoded.uid}_${recipient.id}`), {
+        userId:recipient.id,type:"instructor_approval",sourceType:"instructorApplication",sourceId:decoded.uid,
+        actorId:decoded.uid,title:"Instructor approval requested",message:"A new instructor registration is awaiting approval.",
+        isRead:false,readAt:null,createdAt:FieldValue.serverTimestamp(),
+      });
+    }
     await batch.commit();
   } catch (error) {
     await supabase.storage
@@ -906,6 +917,12 @@ async function reviewApplication(
     },
   );
 
+  batch.set(firestore.collection("notifications").doc(`instructorStatus_${applicantId}_${decision}`), {
+    userId:applicantId,type:"instructor_status",sourceType:"instructorStatus",sourceId:applicantId,
+    actorId:admin.decoded.uid,title:approved ? "Instructor application approved" : "Instructor application denied",
+    message:approved ? "Your instructor account is active." : "Your application was not approved. Check your email for details.",
+    isRead:false,readAt:null,createdAt:FieldValue.serverTimestamp(),
+  });
   await batch.commit();
 
   if (approved) {

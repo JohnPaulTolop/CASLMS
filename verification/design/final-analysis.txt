@@ -1,0 +1,14 @@
+Analyzing 2 items...                                            
+10 issues found. (ran in 52.4s)
+
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\instructor\instructor_add_learning_material_page.dart:1297:15 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\instructor\instructor_add_learning_material_page.dart:1300:15 - deprecated_member_use
+   info - 'groupValue' is deprecated and shouldn't be used. Use a RadioGroup ancestor to manage group value instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\instructor\instructor_ai_quiz_editor_page.dart:1000:21 - deprecated_member_use
+   info - 'onChanged' is deprecated and shouldn't be used. Use RadioGroup to handle value change instead. This feature was deprecated after v3.32.0-0.0.pre. Try replacing the use of the deprecated member with the replacement - lib\screens\instructor\instructor_ai_quiz_editor_page.dart:1002:21 - deprecated_member_use
+   info - Use an initializing formal to assign a parameter to a field. Try using an initialing formal ('this.correctAnswerIndex') to initialize the field - lib\screens\instructor\instructor_ai_quiz_editor_page.dart:1105:8 - prefer_initializing_formals
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\services\learner_assistant_report.dart:70:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\services\learner_assistant_report.dart:79:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\services\learner_assistant_report.dart:96:7 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\services\learner_assistant_report.dart:141:5 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\services\learner_assistant_report.dart:162:5 - curly_braces_in_flow_control_structures
+

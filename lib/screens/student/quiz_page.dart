@@ -18,7 +18,8 @@ String getWelcomeMessage(String name) {
 }''',
   );
 
-  String _outputResult = 'Tap "Run Code" to test your solution against test cases.';
+  String _outputResult =
+      'Tap "Run Code" to test your solution against test cases.';
   bool _isRunning = false;
 
   void _runCode() {
@@ -71,20 +72,41 @@ String getWelcomeMessage(String name) {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.blueAccent.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: const Text('Coding Challenge', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                            child: const Text(
+                              'Coding Challenge',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.blueAccent,
+                              ),
+                            ),
                           ),
-                          const Text('100 Points', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                          const Text(
+                            '100 Points',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              color: Colors.grey,
+                            ),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 12),
                       const Text(
                         'Write a function that accepts a name string and returns a customized greeting message.',
-                        style: TextStyle(fontSize: 14, color: Colors.black87, height: 1.4),
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.black87,
+                          height: 1.4,
+                        ),
                       ),
                     ],
                   ),
@@ -106,23 +128,56 @@ String getWelcomeMessage(String name) {
                       children: [
                         // IDE Top Bar
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFF1E293B),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(15),
+                            ),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Row(
                                 children: [
-                                  Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle)),
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.redAccent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
                                   const SizedBox(width: 6),
-                                  Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.orangeAccent, shape: BoxShape.circle)),
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.orangeAccent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
                                   const SizedBox(width: 6),
-                                  Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle)),
+                                  Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.greenAccent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
                                   const SizedBox(width: 12),
-                                  const Text('solution.dart', style: TextStyle(color: Colors.white70, fontSize: 12, fontFamily: 'monospace')),
+                                  const Text(
+                                    'solution.dart',
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12,
+                                      fontFamily: 'monospace',
+                                    ),
+                                  ),
                                 ],
                               ),
                               TextButton.icon(
@@ -130,17 +185,30 @@ String getWelcomeMessage(String name) {
                                 style: TextButton.styleFrom(
                                   backgroundColor: Colors.blueAccent,
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 4,
+                                  ),
                                   minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
                                 ),
-                                icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                                label: const Text('Run', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                icon: const Icon(
+                                  Icons.play_arrow_rounded,
+                                  size: 16,
+                                ),
+                                label: const Text(
+                                  'Run',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
                         ),
-                        
+
                         // Text Area for Code Editing
                         Expanded(
                           child: Padding(
@@ -148,7 +216,11 @@ String getWelcomeMessage(String name) {
                             child: TextField(
                               controller: _codeController,
                               maxLines: null,
-                              style: const TextStyle(color: Colors.greenAccent, fontFamily: 'monospace', fontSize: 13),
+                              style: const TextStyle(
+                                color: Colors.greenAccent,
+                                fontFamily: 'monospace',
+                                fontSize: 13,
+                              ),
                               decoration: const InputDecoration(
                                 border: InputBorder.none,
                                 isDense: true,
@@ -174,14 +246,25 @@ String getWelcomeMessage(String name) {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Console Output:', style: TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold)),
+                        const Text(
+                          'Console Output:',
+                          style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 6),
                         Expanded(
                           child: SingleChildScrollView(
                             child: Text(
                               _outputResult,
                               style: TextStyle(
-                                color: _outputResult.contains('✅') ? Colors.greenAccent : (_outputResult.contains('❌') ? Colors.redAccent : Colors.white70),
+                                color: _outputResult.contains('✅')
+                                    ? Colors.greenAccent
+                                    : (_outputResult.contains('❌')
+                                          ? Colors.redAccent
+                                          : Colors.white70),
                                 fontFamily: 'monospace',
                                 fontSize: 12,
                               ),
@@ -192,7 +275,7 @@ String getWelcomeMessage(String name) {
                     ),
                   ),
                 ),
-                
+
                 // --- Submit Button Bottom Bar ---
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -200,17 +283,30 @@ String getWelcomeMessage(String name) {
                   child: ElevatedButton(
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Quiz solution submitted successfully!')),
+                        const SnackBar(
+                          content: Text(
+                            'Quiz solution submitted successfully!',
+                          ),
+                        ),
                       );
                       Navigator.pop(context);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blueAccent,
                       minimumSize: const Size(double.infinity, 50),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       elevation: 0,
                     ),
-                    child: const Text('Submit Final Solution', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+                    child: const Text(
+                      'Submit Final Solution',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
                 ),
               ],

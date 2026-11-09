@@ -1,14 +1,19 @@
 import 'ai_router_service.dart';
+import 'assistant_attachment_service.dart';
 
 /// Study mode sends conversation text only, never a scoped student report.
 class SchoolChatService {
+  SchoolChatService({AiRouterService? router})
+    : _router = router ?? AiRouterService();
+  final AiRouterService _router;
   Future<String> ask({
     required String question,
     required List<Map<String, String>> history,
+    List<AssistantAttachment> attachments = const [],
     void Function(String text)? onDelta,
   }) async {
     final clean = question.trim();
-    if (clean.isEmpty || clean.length > 1500) {
+    if (clean.isEmpty || clean.length > 1500 || attachments.length > 3) {
       throw const AiRouterException(
         'Enter a schoolwork or LMS question of up to 1,500 characters.',
       );
@@ -31,11 +36,15 @@ class SchoolChatService {
       });
     }
     if (recent.isNotEmpty && recent.last['role'] == 'user') recent.removeLast();
-    return AiRouterService().complete(
+    return _router.complete(
       task: 'study_chat',
       messages: [
         ...recent,
-        {'role': 'user', 'content': clean},
+        {
+          'role': 'user',
+          'content':
+              clean + AssistantAttachmentService.contextFor(clean, attachments),
+        },
       ],
       onDelta: onDelta,
     );

@@ -1,3 +1,6 @@
+import '../shared/notification_inbox.dart';
+import '../shared/notification_destination_page.dart';
+
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -5,22 +8,20 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../shared/learner_assistant_page.dart';
-import '../shared/notification_destination_page.dart';
-import '../shared/role_navigation_bar.dart';
+import '../shared/authenticated_workspace.dart';
+import '../shared/workspace_shell.dart';
+import '../shared/calendar_page.dart';
 import 'student_messages_page.dart';
-import 'student_notes_page.dart';
 
 import 'modules_page.dart';
-import 'progress_page.dart';
+import 'student_results_page.dart';
 import 'student_assignments_page.dart';
 import 'student_dashboard_page.dart';
 import 'student_profile_page.dart';
-import 'activities_scores_page.dart';
-import 'posted_grades_page.dart';
+import 'student_notes_page.dart';
 
 class StudentMainScreen extends StatefulWidget {
   const StudentMainScreen({super.key, this.notificationId});
-
   final String? notificationId;
 
   @override
@@ -35,7 +36,7 @@ class _StudentMainScreenState extends State<StudentMainScreen>
     value: 1,
   );
   int _selectedIndex = 0;
-  int _destinationIndex = 0;
+  final _resultsSelection = ValueNotifier<int>(0);
   bool _destinationVisible = true;
   final _notificationKey = GlobalKey();
   late final Widget? _notificationDestination = widget.notificationId == null
@@ -46,8 +47,8 @@ class _StudentMainScreenState extends State<StudentMainScreen>
           onTab: (index) {
             if (mounted) {
               setState(() {
-                _selectedIndex = index;
-                _destinationIndex = index;
+                _selectedIndex = index == 7 || index == 8 ? 3 : index;
+                _openedTabs.add(index);
               });
             }
           },
@@ -69,12 +70,14 @@ class _StudentMainScreenState extends State<StudentMainScreen>
       StudentDashboardScreen(onNavigateToTab: _onItemTapped),
       const ModulesScreen(),
       const StudentAssignmentsScreen(),
-      const ProgressScreen(),
+      StudentResultsScreen(selection: _resultsSelection),
       const StudentProfileScreen(),
       const StudentMessagesScreen(),
       const LearnerAssistantScreen(role: 'student'),
-      const ActivitiesScoresScreen(),
-      const PostedGradesScreen(),
+      const SizedBox.shrink(),
+      const SizedBox.shrink(),
+      const NotificationInboxScreen(),
+      const CalendarScreen(role: 'student'),
       const StudentNotesScreen(),
     ];
 
@@ -84,16 +87,21 @@ class _StudentMainScreenState extends State<StudentMainScreen>
   @override
   void dispose() {
     _notificationSubscription?.cancel();
+    _resultsSelection.dispose();
     _tabAnimation.dispose();
     super.dispose();
   }
 
   void _onItemTapped(int index) {
+    if (index == 7 || index == 8) {
+      _resultsSelection.value = index == 7 ? 1 : 2;
+      index = 3;
+    }
     if (!mounted ||
         index < 0 ||
         index >= _pages.length ||
-        (index == _selectedIndex &&
-            !(_destinationVisible && widget.notificationId != null))) {
+        index == _selectedIndex &&
+            !(_destinationVisible && widget.notificationId != null)) {
       return;
     }
 
@@ -141,9 +149,6 @@ class _StudentMainScreenState extends State<StudentMainScreen>
 
               if (data['isRead'] == true) continue;
 
-              final type = data['type'];
-              if (type != 'grade' && type != 'feedback') continue;
-
               final title = (data['title'] ?? 'New notification').toString();
               final message = (data['message'] ?? '').toString();
 
@@ -156,6 +161,11 @@ class _StudentMainScreenState extends State<StudentMainScreen>
                       '$title\n$message',
                       maxLines: 4,
                       overflow: TextOverflow.ellipsis,
+                    ),
+                    action: SnackBarAction(
+                      label: 'Open',
+                      onPressed: () =>
+                          NotificationNavigation.open(context, document.id),
                     ),
                     duration: const Duration(seconds: 6),
                     behavior: SnackBarBehavior.floating,
@@ -172,41 +182,30 @@ class _StudentMainScreenState extends State<StudentMainScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F9FC),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1200),
-          child: FadeTransition(
-            opacity: CurvedAnimation(
-              parent: _tabAnimation,
-              curve: Curves.easeOutCubic,
-            ),
-            child: IndexedStack(
-              index: _selectedIndex,
-              children: List.generate(
-                _pages.length,
-                (index) =>
-                    index < 5 ||
-                        _openedTabs.contains(index) ||
-                        (_destinationVisible &&
-                            _notificationDestination != null &&
-                            index == _destinationIndex)
-                    ? (_destinationVisible &&
-                              _notificationDestination != null &&
-                              index == _destinationIndex
-                          ? _notificationDestination
-                          : _pages[index])
-                    : const SizedBox.shrink(),
-              ),
-            ),
-          ),
+    return AuthenticatedWorkspace(
+      destinations: studentDestinations,
+      selectedIndex: _selectedIndex,
+      onSelected: _onItemTapped,
+      inboxIndex: 9,
+      child: FadeTransition(
+        opacity: CurvedAnimation(
+          parent: _tabAnimation,
+          curve: Curves.easeOutCubic,
         ),
-      ),
-      bottomNavigationBar: RoleNavigationBar(
-        selectedIndex: _selectedIndex,
-        onSelected: _onItemTapped,
-        instructor: false,
+        child: IndexedStack(
+          index: _destinationVisible && _notificationDestination != null
+              ? _pages.length
+              : _selectedIndex,
+          children: [
+            for (var index = 0; index < _pages.length; index++)
+              if (index == 0 || _openedTabs.contains(index))
+                _pages[index]
+              else
+                const SizedBox.shrink(),
+            // Keep the destination in one slot when its sidebar selection changes.
+            if (_notificationDestination != null) _notificationDestination,
+          ],
+        ),
       ),
     );
   }

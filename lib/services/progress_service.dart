@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'section_audience_service.dart';
+
 typedef ProgressRow = Map<String, dynamic>;
 
 class ProgressService {
@@ -96,6 +98,13 @@ class ProgressService {
           .collection('assessments')
           .where('courseId', isEqualTo: courseId)
           .where('status', whereIn: const ['published', 'closed'])
+          .where(
+            'sectionIds',
+            arrayContainsAny: <String>[
+              SectionAudienceService.allSections,
+              sectionId,
+            ],
+          )
           .where('sectionId', isEqualTo: scope),
     );
 
@@ -151,7 +160,15 @@ class ProgressService {
         _rows(
           _firestore
               .collection('modules')
-              .where('courseId', isEqualTo: courseId),
+              .where('courseId', isEqualTo: courseId)
+              .where('status', isEqualTo: 'published')
+              .where(
+                'sectionIds',
+                arrayContainsAny: <String>[
+                  SectionAudienceService.allSections,
+                  sectionsByCourse[courseId] ?? '',
+                ],
+              ),
         ),
       );
       streams.add(

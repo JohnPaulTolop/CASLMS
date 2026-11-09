@@ -1,3 +1,6 @@
+import '../shared/page_loading_state.dart';
+import '../../core/app_colors.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -5,23 +8,20 @@ class AdminAIGatewayScreen extends StatefulWidget {
   const AdminAIGatewayScreen({super.key});
 
   @override
-  State<AdminAIGatewayScreen> createState() =>
-      _AdminAIGatewayScreenState();
+  State<AdminAIGatewayScreen> createState() => _AdminAIGatewayScreenState();
 }
 
-class _AdminAIGatewayScreenState
-    extends State<AdminAIGatewayScreen> {
+class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
   static const Color adminTheme = Colors.deepPurple;
-  static const Color background = Color(0xFFF8F9FA);
-  static const Color textDark = Color(0xFF10182F);
-  static const Color textGrey = Color(0xFF68738A);
-  static const Color borderColor = Color(0xFFE6EAF0);
-  static const Color green = Color(0xFF26A65B);
-  static const Color orange = Color(0xFFFF9418);
-  static const Color red = Color(0xFFFF4B4B);
+  static const Color background = AppColors.background;
+  static const Color textDark = AppColors.darkText;
+  static const Color textGrey = AppColors.secondaryText;
+  static const Color borderColor = AppColors.inputBorder;
+  static const Color green = AppColors.green;
+  static const Color orange = AppColors.amber;
+  static const Color red = AppColors.error;
 
-  final FirebaseFirestore _firestore =
-      FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   bool _isLoading = true;
   String? _errorMessage;
@@ -50,8 +50,9 @@ class _AdminAIGatewayScreenState
     }
 
     try {
-      final resourceSnapshot =
-          await _firestore.collection('moduleResources').get();
+      final resourceSnapshot = await _firestore
+          .collection('moduleResources')
+          .get();
 
       int eligible = 0;
       int ready = 0;
@@ -76,22 +77,19 @@ class _AdminAIGatewayScreenState
 
         if (status == 'ready') {
           ready++;
-        } else if (status == 'pending' ||
-            status == 'processing') {
+        } else if (status == 'pending' || status == 'processing') {
           pending++;
         } else if (status == 'failed') {
           failed++;
         }
 
-        final model =
-            (data['aiModel'] ?? '').toString().trim();
+        final model = (data['aiModel'] ?? '').toString().trim();
 
         if (model.isNotEmpty) {
           models.add(model);
         }
 
-        final creatorId =
-            (data['createdBy'] ?? '').toString().trim();
+        final creatorId = (data['createdBy'] ?? '').toString().trim();
 
         if (creatorId.isNotEmpty) {
           creatorIds.add(creatorId);
@@ -101,8 +99,7 @@ class _AdminAIGatewayScreenState
           activities.add({
             ...data,
             'resourceId': document.id,
-            'activityTimestamp':
-                data['aiProcessedAt'] ?? data['updatedAt'],
+            'activityTimestamp': data['aiProcessedAt'] ?? data['updatedAt'],
           });
         }
       }
@@ -110,13 +107,14 @@ class _AdminAIGatewayScreenState
       final Map<String, String> creatorNames = {};
 
       for (final creatorId in creatorIds) {
-        final userDocument =
-            await _firestore.collection('users').doc(creatorId).get();
+        final userDocument = await _firestore
+            .collection('users')
+            .doc(creatorId)
+            .get();
 
         if (userDocument.exists && userDocument.data() != null) {
           creatorNames[creatorId] =
-              (userDocument.data()?['name'] ?? 'Instructor')
-                  .toString();
+              (userDocument.data()?['name'] ?? 'Instructor').toString();
         }
       }
 
@@ -132,13 +130,11 @@ class _AdminAIGatewayScreenState
       });
 
       final recent = activities.take(20).map((item) {
-        final creatorId =
-            (item['createdBy'] ?? '').toString();
+        final creatorId = (item['createdBy'] ?? '').toString();
 
         return <String, dynamic>{
           ...item,
-          'creatorName':
-              creatorNames[creatorId] ?? 'Instructor',
+          'creatorName': creatorNames[creatorId] ?? 'Instructor',
         };
       }).toList();
 
@@ -162,22 +158,21 @@ class _AdminAIGatewayScreenState
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e.message ?? 'Unable to load Firebase AI activity.';
+        _errorMessage = e.message ?? 'Unable to load Firebase AI activity.';
       });
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
         _isLoading = false;
-        _errorMessage =
-            e.toString().replaceFirst('Exception: ', '');
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) return const PageLoadingState();
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
@@ -189,10 +184,7 @@ class _AdminAIGatewayScreenState
           children: [
             Text(
               'AI Service Gateway',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
-              ),
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
             ),
             Text(
               'Firebase AI Logic Monitoring',
@@ -228,9 +220,7 @@ class _AdminAIGatewayScreenState
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: adminTheme),
-      );
+      return const Center(child: CircularProgressIndicator(color: adminTheme));
     }
 
     if (_errorMessage != null) {
@@ -240,19 +230,12 @@ class _AdminAIGatewayScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.error_outline_rounded,
-                color: red,
-                size: 50,
-              ),
+              const Icon(Icons.error_outline_rounded, color: red, size: 50),
               const SizedBox(height: 14),
               Text(
                 _errorMessage!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: textGrey,
-                  height: 1.45,
-                ),
+                style: const TextStyle(color: textGrey, height: 1.45),
               ),
               const SizedBox(height: 18),
               ElevatedButton.icon(
@@ -290,7 +273,7 @@ class _AdminAIGatewayScreenState
             style: TextStyle(
               color: textDark,
               fontSize: 17,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 12),
@@ -309,9 +292,7 @@ class _AdminAIGatewayScreenState
       decoration: BoxDecoration(
         color: adminTheme.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: adminTheme.withValues(alpha: 0.18),
-        ),
+        border: Border.all(color: adminTheme.withValues(alpha: 0.18)),
       ),
       child: const Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -321,11 +302,7 @@ class _AdminAIGatewayScreenState
           Expanded(
             child: Text(
               'CASLMS does not expose or edit Gemini API keys here. Firebase AI Logic configuration belongs in Firebase / Google Cloud, not inside the Flutter client.',
-              style: TextStyle(
-                color: textDark,
-                fontSize: 11.5,
-                height: 1.45,
-              ),
+              style: TextStyle(color: textDark, fontSize: 11.5, height: 1.45),
             ),
           ),
         ],
@@ -349,10 +326,7 @@ class _AdminAIGatewayScreenState
               color: adminTheme.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
-              Icons.auto_awesome_rounded,
-              color: adminTheme,
-            ),
+            child: const Icon(Icons.auto_awesome_rounded, color: adminTheme),
           ),
           const SizedBox(width: 13),
           Expanded(
@@ -373,7 +347,7 @@ class _AdminAIGatewayScreenState
                   style: const TextStyle(
                     color: textDark,
                     fontSize: 14,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
@@ -414,37 +388,19 @@ class _AdminAIGatewayScreenState
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: _metric(
-            'Pending',
-            _pending,
-            Icons.schedule_rounded,
-            orange,
-          ),
+          child: _metric('Pending', _pending, Icons.schedule_rounded, orange),
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: _metric(
-            'Failed',
-            _failed,
-            Icons.error_outline_rounded,
-            red,
-          ),
+          child: _metric('Failed', _failed, Icons.error_outline_rounded, red),
         ),
       ],
     );
   }
 
-  Widget _metric(
-    String label,
-    int value,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _metric(String label, int value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        vertical: 14,
-        horizontal: 8,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -459,7 +415,7 @@ class _AdminAIGatewayScreenState
             style: const TextStyle(
               color: textDark,
               fontSize: 18,
-              fontWeight: FontWeight.w800,
+              fontWeight: FontWeight.w700,
             ),
           ),
           Text(
@@ -484,15 +440,13 @@ class _AdminAIGatewayScreenState
     final Color color = status == 'ready'
         ? green
         : status == 'failed'
-            ? red
-            : orange;
+        ? red
+        : orange;
 
-    final fileName =
-        (item['fileName'] ?? item['title'] ?? 'Learning Material')
-            .toString();
+    final fileName = (item['fileName'] ?? item['title'] ?? 'Learning Material')
+        .toString();
 
-    final creatorName =
-        (item['creatorName'] ?? 'Instructor').toString();
+    final creatorName = (item['creatorName'] ?? 'Instructor').toString();
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -515,8 +469,8 @@ class _AdminAIGatewayScreenState
               status == 'ready'
                   ? Icons.auto_awesome_rounded
                   : status == 'failed'
-                      ? Icons.error_outline_rounded
-                      : Icons.schedule_rounded,
+                  ? Icons.error_outline_rounded
+                  : Icons.schedule_rounded,
               color: color,
               size: 19,
             ),
@@ -532,7 +486,7 @@ class _AdminAIGatewayScreenState
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: textDark,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     fontSize: 13,
                   ),
                 ),
@@ -549,10 +503,7 @@ class _AdminAIGatewayScreenState
                 const SizedBox(height: 3),
                 Text(
                   _formatTimestamp(item['activityTimestamp']),
-                  style: const TextStyle(
-                    color: textGrey,
-                    fontSize: 10,
-                  ),
+                  style: const TextStyle(color: textGrey, fontSize: 10),
                 ),
               ],
             ),
@@ -563,7 +514,7 @@ class _AdminAIGatewayScreenState
   }
 
   Widget _buildEmptyActivity() {
-    return  Container(
+    return Container(
       padding: EdgeInsets.all(28),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -571,11 +522,7 @@ class _AdminAIGatewayScreenState
       ),
       child: Column(
         children: [
-          Icon(
-            Icons.auto_awesome_outlined,
-            color: textGrey,
-            size: 32,
-          ),
+          Icon(Icons.auto_awesome_outlined, color: textGrey, size: 32),
           SizedBox(height: 9),
           Text(
             'No AI material activity has been recorded yet.',
@@ -598,8 +545,7 @@ class _AdminAIGatewayScreenState
 
     if (date == null) return 'No timestamp';
 
-    final difference =
-        DateTime.now().difference(date.toLocal());
+    final difference = DateTime.now().difference(date.toLocal());
 
     if (difference.inMinutes < 1) return 'Just now';
     if (difference.inMinutes < 60) {

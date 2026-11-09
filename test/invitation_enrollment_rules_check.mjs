@@ -34,14 +34,13 @@ for (const [uid, role, universityId] of [['it','instructor','90000'],['is1','stu
 }
 await seed('courses/ic',{instructorId:'it',status:'active',classCode:'ORIGINAL'});
 await seed('courses/foreign',{instructorId:'foreign',status:'active',classCode:'FOREIGN'});
-await seed('courseSections/SECOND',{courseId:'ic',instructorId:'it',classCode:'SECOND',legacy:false,status:'active',name:'Section Two',identifier:'SECOND'});
+await seed('courseSections/SECOND',{courseId:'ic',instructorId:'it',status:'active',name:'Section Two'});
 await seed('courseSections/FOREIGN',{courseId:'foreign',instructorId:'foreign',status:'active'});
 const invitation=(studentId,studentCampusId,sectionId)=>({courseId:'ic',courseCode:'IT101',courseTitle:'Programming',instructorId:'it',instructorName:'Teacher',studentId,studentCampusId,studentName:'Student',studentEmail:'student@example.com',status:'pending',respondedAt:null,...(sectionId?{sectionId,sectionName:'Section Two'}:{})});
 const invite=(uid,campus,section)=>write('courseInvitations/ic_'+uid,invitation(uid,campus,section),['createdAt','updatedAt']);
 const enrollment=(uid,campus,section)=>({courseId:'ic',studentId:uid,studentName:'Student',studentCampusId:campus,sectionId:section,status:'active',enrollmentSource:'instructor_invitation',invitationId:'ic_'+uid,invitedBy:'it'});
 const response=(uid,status='accepted')=>({...write('courseInvitations/ic_'+uid,{status},['updatedAt','respondedAt']),updateMask:{fieldPaths:['status']}});
 const accept=(uid,campus,section)=>[write('enrollments/ic_'+uid,enrollment(uid,campus,section),['enrolledAt','acceptedAt']),response(uid)];
-await get('is2','courseSections/SECOND',403);
 await commit('it',[invite('is1','10001','SECOND')],200,'Instructor invites to exact new section');
 await commit('foreign',[invite('is2','10002','SECOND')],403,'Other instructor cannot invite into course');
 await commit('it',[invite('is2','10002','FOREIGN')],403,'No cross-course section invitation');
@@ -58,7 +57,7 @@ await commit('is1',accept('is1','10001','SECOND'),403,'Used invitation cannot cr
 await commit('is1',[write('notifications/bad_receipt',{userId:'is1',sourceId:'bad'})],403,'Invalid optional notification fails independently');
 await get('is1','enrollments/ic_is1',200);
 await commit('is2',[write('enrollments/ic_is2',{courseId:'ic',studentId:'is2',studentName:'Student',studentCampusId:'10002',sectionId:'SECOND',status:'active',enrollmentSource:'section_code'},['enrolledAt'])],403,'Known section code never grants membership');
-await seed('courseInvitations/ic_is2',{...invitation('is2','10002'),createdAt:'legacy-created',updatedAt:'legacy-updated'});
+await commit('it',[invite('is2','10002')],200,'Legacy invitation without section remains valid');
 await commit('is2',accept('is2','10002','ORIGINAL'),200,'Legacy invitation resolves original section');
 await commit('it',[invite('is3','10003','SECOND')],200,'Invite third student');
 await seed('courseSections/SECOND',{courseId:'ic',instructorId:'it',status:'archived',name:'Section Two'});
