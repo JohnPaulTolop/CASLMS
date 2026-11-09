@@ -35,8 +35,11 @@ function health(): Health {
     async until(p) {
       return cooldown.get(p.id) ?? 0;
     },
-    async cool(p, ms) {
-      cooldown.set(p.id, Date.now() + ms);
+    async success() {},
+    async failure(p, observation) {
+      if (observation.cooldownMs) {
+        cooldown.set(p.id, Date.now() + observation.cooldownMs);
+      }
     },
   };
 }
@@ -345,6 +348,9 @@ Deno.test("record checks and answers retain Gemini-only routing", async () => {
     GROQ_API_KEY: "test",
     AI_GROQ_ENABLED: "true",
     GEMINI_API_KEY: "test",
+    AI_GROQ_CHAT_MODEL: "openai/gpt-oss-20b",
+    AI_GROQ_QUIZ_MODEL: "openai/gpt-oss-120b",
+    AI_GEMINI_MODEL: "test-gemini",
   };
   const available = providers((key) => config[key], "records_summary");
   assert.deepEqual(available.map((p) => p.id), ["gemini"]);

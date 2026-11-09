@@ -17,15 +17,26 @@ const nvidia: Provider = { id: "nvidia", model: "test/model", key: "test-key" },
   gemini: Provider = { id: "gemini", model: "test-gemini", key: "test-key" };
 function state() {
   const times = new Map<string, number>();
+  const observations: Array<{ provider: string; outcome: string }> = [];
   return {
     times,
+    observations,
     async until(p: Provider) {
       return times.get(p.id) || 0;
     },
-    async cool(p: Provider, ms: number) {
-      times.set(p.id, Date.now() + ms);
+    async success(p: Provider) {
+      observations.push({ provider: p.id, outcome: "success" });
     },
-  } satisfies Health & { times: Map<string, number> };
+    async failure(p: Provider, observation) {
+      observations.push({ provider: p.id, outcome: "failure" });
+      if (observation.cooldownMs) {
+        times.set(p.id, Date.now() + observation.cooldownMs);
+      }
+    },
+  } satisfies Health & {
+    times: Map<string, number>;
+    observations: Array<{ provider: string; outcome: string }>;
+  };
 }
 function stream(events: unknown[]) {
   return new Response(
@@ -53,10 +64,13 @@ const groq: Provider = {
   key: "test-key",
   thinking: "low",
 };
-Deno.test("Groq selects quiz/chat models and excludes private records and NVIDIA", () => {
+Deno.test("three configured providers are ordered while private records stay on Gemini", () => {
   const config: Record<string, string> = {
     GROQ_API_KEY: "test",
     GEMINI_API_KEY: "test",
+    AI_GROQ_CHAT_MODEL: "openai/gpt-oss-20b",
+    AI_GROQ_QUIZ_MODEL: "openai/gpt-oss-120b",
+    AI_GEMINI_MODEL: "test-gemini",
     AI_GROQ_ENABLED: "true",
     NVIDIA_API_KEY: "test",
     AI_NVIDIA_ENABLED: "true",
@@ -67,6 +81,7 @@ Deno.test("Groq selects quiz/chat models and excludes private records and NVIDIA
   assert.deepEqual(providers(env, "teaching_chat").map((p) => p.id), [
     "groq",
     "gemini",
+    "nvidia",
   ]);
   assert.equal(providers(env, "teaching_chat")[0].model, "openai/gpt-oss-20b");
   assert.equal(providers(env, "quiz")[0].model, "openai/gpt-oss-120b");
@@ -74,9 +89,41 @@ Deno.test("Groq selects quiz/chat models and excludes private records and NVIDIA
     "gemini",
   ]);
   config.AI_PRIMARY_PROVIDER = "gemini";
-  assert.deepEqual(providers(env, "quiz").map((p) => p.id), ["gemini", "groq"]);
+  assert.deepEqual(providers(env, "quiz").map((p) => p.id), [
+    "gemini",
+    "groq",
+    "nvidia",
+  ]);
   delete config.AI_GROQ_ENABLED;
   assert.ok(providers(env, "quiz").every((p) => p.id !== "groq"));
+});
+Deno.test("explicit primary, secondary and tertiary provider slots control priority", () => {
+  const config: Record<string, string> = {
+    GROQ_API_KEY: "test",
+    AI_GROQ_ENABLED: "true",
+    GEMINI_API_KEY: "test",
+    AI_GROQ_CHAT_MODEL: "openai/gpt-oss-20b",
+    AI_GROQ_QUIZ_MODEL: "openai/gpt-oss-120b",
+    AI_GEMINI_MODEL: "test-gemini",
+    NVIDIA_API_KEY: "test",
+    AI_NVIDIA_ENABLED: "true",
+    AI_NVIDIA_USAGE: "prototype",
+    AI_NVIDIA_MODEL: "test/model",
+    AI_PRIMARY_PROVIDER: "gemini",
+    AI_SECONDARY_PROVIDER: "nvidia",
+    AI_TERTIARY_PROVIDER: "groq",
+  };
+  const env = (key: string) => config[key];
+  assert.deepEqual(providers(env, "study_chat").map((p) => p.id), [
+    "gemini",
+    "nvidia",
+    "groq",
+  ]);
+  config.AI_GEMINI_ENABLED = "false";
+  assert.deepEqual(providers(env, "study_chat").map((p) => p.id), [
+    "nvidia",
+    "groq",
+  ]);
 });
 Deno.test("Groq streams through fixed endpoint with bounded output and hidden reasoning", async () => {
   const fetcher: typeof fetch = async (url, init) => {
@@ -148,7 +195,11 @@ const collect = async (
   health = state(),
 ) =>
   Array.fromAsync(
-    route(input, available, health, new AbortController().signal, fetcher),
+    route(input, available, health, new AbortController().signal, fetcher, {
+      first: 12000,
+      total: 35000,
+      backoff: 0,
+    }),
   );
 Deno.test("task, input, role, history and output budgets are enforced", () => {
   assert.equal(outputLimit(input), 600);
@@ -183,6 +234,7 @@ Deno.test("NVIDIA requires explicit enablement and usage setting; records stay o
     NVIDIA_API_KEY: "secret",
     AI_NVIDIA_MODEL: "test/model",
     GEMINI_API_KEY: "secret",
+    AI_GEMINI_MODEL: "test-gemini",
   };
   const env = (key: string) => config[key];
   assert.deepEqual(providers(env, "teaching_chat").map((p) => p.id), [
@@ -248,7 +300,15 @@ Deno.test("network failure before text falls back; cooled provider is skipped", 
   });
   assert.equal(calls, 2);
   const health = state();
-  await health.cool(nvidia, 60000);
+  await health.failure(nvidia, {
+    task: "teaching_chat",
+    code: "provider_quota",
+    latencyMs: 1,
+    approximateInputTokens: 1,
+    approximateOutputTokens: 0,
+    failover: false,
+    cooldownMs: 60000,
+  });
   calls = 0;
   await collect(
     async () => {
@@ -260,11 +320,23 @@ Deno.test("network failure before text falls back; cooled provider is skipped", 
   );
   assert.equal(calls, 1);
 });
-Deno.test("authentication, invalid requests and safety refusals never fall back", async () => {
+Deno.test("provider authentication failures fail over and establish a long cooldown", async () => {
+  for (const status of [401, 403]) {
+    const health = state();
+    let calls = 0;
+    const events = await collect(
+      async () => ++calls === 1 ? new Response("", { status }) : goodGemini(),
+      [nvidia, gemini],
+      health,
+    );
+    assert.equal(calls, 2);
+    assert.ok(health.times.get("nvidia")! > Date.now() + 21000000);
+    assert.equal((events.at(-1) as { provider: string }).provider, "gemini");
+  }
+});
+Deno.test("invalid requests and safety refusals never fall back", async () => {
   for (
     const response of [
-      new Response("", { status: 401 }),
-      new Response("", { status: 403 }),
       new Response("", { status: 400 }),
       stream([{
         choices: [{ delta: { refusal: "Cannot help" }, finish_reason: "stop" }],
@@ -348,6 +420,103 @@ Deno.test("both failed providers result in one bounded error", async () => {
       return new Response("", { status: 503 });
     }), (error) => (error as AiError).code === "providers_unavailable");
   assert.equal(calls, 2);
+});
+Deno.test("primary and secondary failures automatically use the tertiary provider", async () => {
+  let calls = 0;
+  const continuityInput: Input = {
+    task: "teaching_chat",
+    messages: [
+      { role: "user", content: "Explain normalization" },
+      { role: "assistant", content: "Which normal form?" },
+      { role: "user", content: "Explain the first three forms" },
+    ],
+  };
+  const events = await Array.fromAsync(route(
+    continuityInput,
+    [nvidia, groq, gemini],
+    state(),
+    new AbortController().signal,
+    async (_url, init) => {
+      calls++;
+      const payload = String(init?.body);
+      assert.ok(payload.includes("Explain normalization"));
+      assert.ok(payload.includes("Explain the first three forms"));
+      return calls < 3 ? new Response("", { status: 503 }) : goodGemini();
+    },
+    { first: 12000, total: 35000, backoff: 0 },
+  ));
+  assert.equal(calls, 3);
+  assert.equal((events.at(-1) as { provider: string }).provider, "gemini");
+});
+Deno.test("three unavailable providers return one controlled error", async () => {
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      collect(async () => {
+        calls++;
+        return new Response("", { status: 503 });
+      }, [nvidia, groq, gemini]),
+    (error) => (error as AiError).code === "providers_unavailable",
+  );
+  assert.equal(calls, 3);
+});
+Deno.test("a compatible tertiary provider can recover quiz and material requests", async () => {
+  const quiz = JSON.stringify({
+    title: "Quiz",
+    instructions: "Choose one",
+    questions: [{
+      question: "Which normal form removes partial dependencies?",
+      options: ["1NF", "2NF", "3NF", "BCNF"],
+      correctAnswerIndex: 1,
+      explanation: "2NF removes partial dependencies.",
+    }],
+  });
+  for (
+    const request of [
+      { ...input, task: "material_summary" as const },
+      { ...input, task: "quiz" as const, questionCount: 1 },
+    ]
+  ) {
+    let calls = 0;
+    const events = await Array.fromAsync(route(
+      request,
+      [nvidia, groq, gemini],
+      state(),
+      new AbortController().signal,
+      async () => {
+        calls++;
+        if (calls < 3) return new Response("", { status: 429 });
+        return stream([{
+          candidates: [{
+            content: {
+              parts: [{
+                text: request.task === "quiz" ? quiz : "Material summary",
+              }],
+            },
+            finishReason: "STOP",
+          }],
+        }]);
+      },
+      { first: 12000, total: 55000, backoff: 0 },
+    ));
+    assert.equal(calls, 3);
+    assert.equal((events.at(-1) as { provider: string }).provider, "gemini");
+  }
+});
+Deno.test("an expired cooldown makes the recovered primary eligible again", async () => {
+  const health = state();
+  health.times.set("nvidia", Date.now() - 1);
+  let calls = 0;
+  const events = await collect(
+    async () => {
+      calls++;
+      return goodNvidia();
+    },
+    [nvidia, gemini],
+    health,
+  );
+  assert.equal(calls, 1);
+  assert.equal((events.at(-1) as { provider: string }).provider, "nvidia");
 });
 Deno.test("quiz JSON is withheld until complete and validated against requested count", async () => {
   const quiz = {
@@ -445,17 +614,16 @@ Deno.test("a first-token deadline aborts a stalled primary and uses the backup",
   assert.equal(aborted, true);
   assert.equal(events.at(-1)?.type, "done");
 });
-Deno.test("authentication failures delivered inside an SSE stream do not fall back", async () => {
+Deno.test("authentication failures inside an SSE stream fail over before text", async () => {
   let calls = 0;
-  await assert.rejects(
-    () =>
-      collect(async () => {
-        calls++;
-        return stream([{ error: { code: 403, message: "private detail" } }]);
-      }),
-    (error) => (error as AiError).code === "provider_authentication_failed",
-  );
-  assert.equal(calls, 1);
+  const events = await collect(async () => {
+    calls++;
+    return calls === 1
+      ? stream([{ error: { code: 403, message: "private detail" } }])
+      : goodGemini();
+  });
+  assert.equal(calls, 2);
+  assert.equal((events.at(-1) as { provider: string }).provider, "gemini");
 });
 Deno.test("an EOF marker without a completion reason is not accepted as a completed answer", async () => {
   let calls = 0;
@@ -474,6 +642,7 @@ Deno.test("production NVIDIA calls require an explicitly configured service endp
   const config: Record<string, string> = {
     NVIDIA_API_KEY: "secret",
     GEMINI_API_KEY: "secret",
+    AI_GEMINI_MODEL: "test-gemini",
     AI_NVIDIA_MODEL: "instruct",
     AI_NVIDIA_ENABLED: "true",
     AI_NVIDIA_USAGE: "production",
@@ -507,14 +676,11 @@ Deno.test("a configured NIM endpoint is used without allowing insecure URLs or e
     ]
   ) {
     let calls = 0;
-    await assert.rejects(
-      () =>
-        collect(async () => {
-          calls++;
-          return goodGemini();
-        }, [{ ...nvidia, baseUrl }, gemini]),
-      (error) => (error as AiError).code === "invalid_model_configuration",
-    );
-    assert.equal(calls, 0);
+    const events = await collect(async () => {
+      calls++;
+      return goodGemini();
+    }, [{ ...nvidia, baseUrl }, gemini]);
+    assert.equal(calls, 1);
+    assert.equal((events.at(-1) as { provider: string }).provider, "gemini");
   }
 });

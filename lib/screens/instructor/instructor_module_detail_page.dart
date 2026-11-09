@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import '../../services/assessment_service.dart';
 import '../../services/course_section_service.dart';
 import '../../services/section_audience_service.dart';
+import '../../services/ai_router_service.dart';
 import '../../services/firebase_ai_service.dart';
 import '../../services/learning_material_service.dart';
 import '../../services/notification_service.dart';
@@ -1901,7 +1902,9 @@ class _InstructorModuleDetailScreenState
       'questions': questions,
       'questionCount': questions.length,
       'aiGenerated': true,
-      'aiModel': 'gemini-3.7-flash',
+      'aiModel': AiRouterService.enabled
+          ? 'ai-router'
+          : FirebaseAiService.configuredModelId,
       'aiDifficulty': draft.difficulty,
       'aiSourceResourceId': draft.sourceResourceId,
       'aiSourceFileName': draft.sourceFileName,

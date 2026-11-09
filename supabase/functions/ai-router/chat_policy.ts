@@ -1,5 +1,12 @@
 import { AiError, route } from "./engine.ts";
-import type { Event, Health, Input, Provider, Task } from "./engine.ts";
+import type {
+  Event,
+  Health,
+  Input,
+  Provider,
+  RouteTiming,
+  Task,
+} from "./engine.ts";
 
 export const topicLimitMessage =
   "I'm limited to CAS LMS and schoolwork. Please ask a question about your classes, assignments, lessons, or using the LMS.";
@@ -99,6 +106,7 @@ export async function* guardedRoute(
   health: Health,
   signal: AbortSignal,
   fetcher: typeof fetch = fetch,
+  timing?: RouteTiming,
 ): AsyncGenerator<Event> {
   const limitation = await checkChatTopic(
     input,
@@ -117,5 +125,5 @@ export async function* guardedRoute(
     };
     return;
   }
-  yield* route(input, available, health, signal, fetcher);
+  yield* route(input, available, health, signal, fetcher, timing);
 }

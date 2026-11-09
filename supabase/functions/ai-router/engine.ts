@@ -131,31 +131,54 @@ export type Provider = {
   thinking?: string;
   baseUrl?: string;
 };
+export type ProviderObservation = {
+  task: Task;
+  code?: string;
+  latencyMs: number;
+  approximateInputTokens: number;
+  approximateOutputTokens: number;
+  failover: boolean;
+  cooldownMs?: number;
+};
+export type RouteTiming = {
+  first?: number;
+  total?: number;
+  backoff?: number;
+};
 export interface Health {
   until(provider: Provider): Promise<number>;
-  cool(provider: Provider, milliseconds: number): Promise<void>;
+  success(
+    provider: Provider,
+    observation: ProviderObservation,
+  ): Promise<void>;
+  failure(
+    provider: Provider,
+    observation: ProviderObservation,
+  ): Promise<void>;
 }
 export function providers(
   env: (key: string) => string | undefined,
   task: Task,
 ): Provider[] {
-  const gemini = env("GEMINI_API_KEY")
+  const gemini = env("AI_GEMINI_ENABLED") !== "false" &&
+      env("GEMINI_API_KEY") && env("AI_GEMINI_MODEL")
     ? {
       id: "gemini" as const,
       key: env("GEMINI_API_KEY")!,
-      model: env("AI_GEMINI_MODEL") || "gemini-3.7-flash",
+      model: env("AI_GEMINI_MODEL")!,
       thinking: env("AI_GEMINI_THINKING_LEVEL") || "LOW",
     }
     : null;
   // External text providers never receive scoped student/admin record summaries.
+  const groqModel = task === "quiz"
+    ? env("AI_GROQ_QUIZ_MODEL")
+    : env("AI_GROQ_CHAT_MODEL");
   const groq: Provider | null = task !== "records_summary" &&
-      env("AI_GROQ_ENABLED") === "true" && env("GROQ_API_KEY")
+      env("AI_GROQ_ENABLED") === "true" && env("GROQ_API_KEY") && groqModel
     ? {
       id: "groq",
       key: env("GROQ_API_KEY")!,
-      model: task === "quiz"
-        ? env("AI_GROQ_QUIZ_MODEL") || "openai/gpt-oss-120b"
-        : env("AI_GROQ_CHAT_MODEL") || "openai/gpt-oss-20b",
+      model: groqModel,
       thinking: "low",
     }
     : null;
@@ -174,14 +197,31 @@ export function providers(
         baseUrl: env("AI_NVIDIA_BASE_URL"),
       }
       : null;
-  // A configured Groq route uses Gemini backup; NVIDIA trial settings cannot
-  // accidentally add a third provider to the public-campus route.
-  const ordered: (Provider | null)[] = groq
-    ? env("AI_PRIMARY_PROVIDER") === "gemini" ? [gemini, groq] : [groq, gemini]
-    : env("AI_PRIMARY_PROVIDER") === "gemini"
-    ? [gemini, nvidia]
-    : [nvidia, gemini];
-  return ordered.filter((value): value is Provider => value !== null);
+  const configured = new Map(
+    [groq, gemini, nvidia].filter((value): value is Provider => value !== null)
+      .map((value) => [value.id, value]),
+  );
+  const requested = [
+    env("AI_PRIMARY_PROVIDER"),
+    env("AI_SECONDARY_PROVIDER"),
+    env("AI_TERTIARY_PROVIDER"),
+  ].filter((value): value is Provider["id"] =>
+    value === "groq" || value === "gemini" || value === "nvidia"
+  );
+  // Preserve the original primary-provider setting while allowing all three
+  // independently configured providers to participate in bounded failover.
+  const legacyOrder: Provider["id"][] = groq
+    ? ["groq", "gemini", "nvidia"]
+    : ["nvidia", "gemini", "groq"];
+  const order: Provider["id"][] = [...requested, ...legacyOrder];
+  const selected: Provider[] = [];
+  for (const id of order) {
+    const provider = configured.get(id);
+    if (provider && !selected.some((value) => value.id === id)) {
+      selected.push(provider);
+    }
+  }
+  return selected;
 }
 export async function* sse(
   body: ReadableStream<Uint8Array>,
@@ -225,7 +265,7 @@ async function* attempt(
   input: Input,
   parent: AbortSignal,
   fetcher: typeof fetch,
-  timing?: { first: number; total: number },
+  timing?: RouteTiming,
 ): AsyncGenerator<Event> {
   const control = new AbortController();
   let timedOut = false, gotText = false;
@@ -266,12 +306,14 @@ async function* attempt(
             : provider.baseUrl || "https://integrate.api.nvidia.com/v1",
         );
       } catch {
-        throw new AiError("invalid_model_configuration", 503);
+        throw new AiError("invalid_model_configuration", 503, true, 21600);
       }
       if (
         base.protocol !== "https:" || base.username || base.password ||
         base.search || base.hash
-      ) throw new AiError("invalid_model_configuration", 503);
+      ) {
+        throw new AiError("invalid_model_configuration", 503, true, 21600);
+      }
       url = base.toString().replace(/\/$/, "") + "/chat/completions";
       payload = {
         model: provider.model,
@@ -297,7 +339,7 @@ async function* attempt(
       };
     } else {
       if (!/^[a-zA-Z0-9._-]+$/.test(provider.model)) {
-        throw new AiError("invalid_model_configuration", 503);
+        throw new AiError("invalid_model_configuration", 503, true, 21600);
       }
       url =
         `https://generativelanguage.googleapis.com/v1beta/models/${provider.model}:streamGenerateContent?alt=sse`;
@@ -346,7 +388,20 @@ async function* attempt(
       );
       await response.body?.cancel();
       if ([401, 403].includes(response.status)) {
-        throw new AiError("provider_authentication_failed", 502);
+        throw new AiError(
+          "provider_authentication_failed",
+          502,
+          true,
+          21600,
+        );
+      }
+      if (response.status === 404) {
+        throw new AiError(
+          "invalid_model_configuration",
+          502,
+          true,
+          21600,
+        );
       }
       const temporary = response.status === 429 || response.status === 408 ||
         response.status >= 500;
@@ -378,7 +433,12 @@ async function* attempt(
       if (part.error) {
         const code = Number(part.error.code || part.error.status_code);
         if ([401, 403].includes(code)) {
-          throw new AiError("provider_authentication_failed", 502);
+          throw new AiError(
+            "provider_authentication_failed",
+            502,
+            true,
+            21600,
+          );
         }
         throw new AiError(
           "provider_stream_error",
@@ -462,28 +522,77 @@ export async function* route(
   health: Health,
   signal: AbortSignal,
   fetcher: typeof fetch = fetch,
-  timing?: { first: number; total: number },
+  timing?: RouteTiming,
 ): AsyncGenerator<Event> {
   let visible = false;
-  for (const provider of available.slice(0, 2)) {
+  let attempted = 0;
+  const approximateInputTokens = Math.ceil(
+    (instructions[input.task].length +
+      input.messages.reduce((sum, value) => sum + value.content.length, 0)) /
+      4,
+  );
+  for (const [position, provider] of available.slice(0, 3).entries()) {
     if (signal.aborted) throw new AiError("cancelled", 499);
     if (await health.until(provider) > Date.now()) continue;
+    if (attempted > 0) {
+      const delay = Math.min(
+        1000,
+        (timing?.backoff ?? 150) * 2 ** Math.min(attempted - 1, 3),
+      );
+      if (delay > 0) {
+        await new Promise<void>((resolve, reject) => {
+          const finish = () => {
+            signal.removeEventListener("abort", cancel);
+            resolve();
+          };
+          const timer = setTimeout(finish, delay);
+          const cancel = () => {
+            clearTimeout(timer);
+            signal.removeEventListener("abort", cancel);
+            reject(new AiError("cancelled", 499));
+          };
+          signal.addEventListener("abort", cancel, { once: true });
+        });
+      }
+    }
+    const startedAt = Date.now();
+    let outputCharacters = 0;
     try {
       for await (
         const event of attempt(provider, input, signal, fetcher, timing)
       ) {
-        if (event.type === "delta") visible = true;
+        if (event.type === "delta") {
+          visible = true;
+          outputCharacters += event.text.length;
+        }
         yield event;
       }
+      await health.success(provider, {
+        task: input.task,
+        latencyMs: Date.now() - startedAt,
+        approximateInputTokens,
+        approximateOutputTokens: Math.ceil(outputCharacters / 4),
+        failover: position > 0,
+      }).catch(() => {});
       return;
     } catch (error) {
-      if (!(error instanceof AiError) || !error.retryable || signal.aborted) {
+      if (!(error instanceof AiError) || signal.aborted) {
         throw error;
       }
-      await health.cool(provider, error.retryAfter * 1000);
+      await health.failure(provider, {
+        task: input.task,
+        code: error.code,
+        latencyMs: Date.now() - startedAt,
+        approximateInputTokens,
+        approximateOutputTokens: Math.ceil(outputCharacters / 4),
+        failover: position > 0,
+        cooldownMs: error.retryable ? error.retryAfter * 1000 : 0,
+      }).catch(() => {});
+      if (!error.retryable) throw error;
       // Never splice responses after the first visible token.
       if (visible) throw new AiError("stream_interrupted", 503);
     }
+    attempted++;
   }
   throw new AiError("providers_unavailable", 503);
 }

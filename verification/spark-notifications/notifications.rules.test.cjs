@@ -36,6 +36,7 @@ beforeEach(async () => {
     const seed = {
       "users/t1": {role: "instructor", status: "active", name: "Teacher"},
       "users/t2": {role: "instructor", status: "active", name: "Other"},
+      "users/a1": {role: "admin", status: "active", name: "Administrator"},
       "users/s1": {role: "student", status: "active"},
       "users/s2": {role: "student", status: "active"},
       "courses/c1": {instructorId: "t1", status: "active"},
@@ -64,6 +65,19 @@ test("owner can deliver; another teacher, inactive enrollee and actor spoof fail
   await assertFails(create("t2", notice({actorId: "t2", sourceId: "different"})));
   await assertFails(create("t1", notice({userId: "s2"})));
   await assertFails(create("t1", notice({actorId: "t2", userId: "s2"})));
+});
+test("AI provider health is admin-readable and server-write-only", async () => {
+  await adminSet("aiProviderState/provider1", {
+    provider: "gemini", model: "configured-model", successCount: 1,
+    failureCount: 0, until: 0,
+  });
+  await assertSucceeds(getDoc(doc(db("a1"), "aiProviderState", "provider1")));
+  await assertSucceeds(getDocs(collection(db("a1"), "aiProviderState")));
+  await assertFails(getDoc(doc(db("t1"), "aiProviderState", "provider1")));
+  await assertFails(getDoc(doc(db("s1"), "aiProviderState", "provider1")));
+  await assertFails(setDoc(doc(db("a1"), "aiProviderState", "spoof"), {
+    provider: "groq", successCount: 999,
+  }));
 });
 test("draft, wrong course, source type and ID mismatch are rejected", async () => {
   await adminSet("modules/m1", {courseId: "c1", status: "draft"});

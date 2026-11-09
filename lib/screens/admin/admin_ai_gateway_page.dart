@@ -30,10 +30,15 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
   int _ready = 0;
   int _pending = 0;
   int _failed = 0;
+  int _routerSuccess = 0;
+  int _routerFailures = 0;
+  int _routerRateLimits = 0;
+  int _routerFailovers = 0;
 
-  String _model = 'gemini-3.7-flash';
+  String _model = 'No routed provider request recorded yet';
 
   List<Map<String, dynamic>> _activities = [];
+  List<Map<String, dynamic>> _providerStates = [];
 
   @override
   void initState() {
@@ -60,6 +65,24 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
       int failed = 0;
 
       final List<Map<String, dynamic>> activities = [];
+      final List<Map<String, dynamic>> providerStates = [];
+      try {
+        final providerSnapshot = await _firestore
+            .collection('aiProviderState')
+            .get();
+        providerStates.addAll(
+          providerSnapshot.docs.map(
+            (document) => <String, dynamic>{
+              ...document.data(),
+              'stateId': document.id,
+            },
+          ),
+        );
+      } on FirebaseException catch (error) {
+        // Keep the existing material monitor usable during a staged rollout;
+        // provider cards appear after the updated admin-read rule is deployed.
+        if (error.code != 'permission-denied') rethrow;
+      }
       final Set<String> creatorIds = {};
       final Set<String> models = {};
 
@@ -128,6 +151,20 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
 
         return bDate.compareTo(aDate);
       });
+      providerStates.sort((a, b) {
+        final aDate = _dateFrom(a['updatedAt']);
+        final bDate = _dateFrom(b['updatedAt']);
+        if (aDate == null && bDate == null) return 0;
+        if (aDate == null) return 1;
+        if (bDate == null) return -1;
+        return bDate.compareTo(aDate);
+      });
+
+      int total(String field) => providerStates.fold<int>(
+        0,
+        (runningTotal, item) =>
+            runningTotal + ((item[field] as num?)?.toInt() ?? 0),
+      );
 
       final recent = activities.take(20).map((item) {
         final creatorId = (item['createdBy'] ?? '').toString();
@@ -146,8 +183,17 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
         _pending = pending;
         _failed = failed;
         _activities = recent;
+        _providerStates = providerStates;
+        _routerSuccess = total('successCount');
+        _routerFailures = total('failureCount');
+        _routerRateLimits = total('rateLimitCount');
+        _routerFailovers = total('failoverCount');
 
-        if (models.isNotEmpty) {
+        if (providerStates.isNotEmpty) {
+          _model = providerStates
+              .map((item) => '${item['provider']}/${item['model']}')
+              .join('  •  ');
+        } else if (models.isNotEmpty) {
           _model = models.last;
         }
 
@@ -187,7 +233,7 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
               style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
             ),
             Text(
-              'Firebase AI Logic Monitoring',
+              'Multi-provider routing monitoring',
               style: TextStyle(
                 fontSize: 12,
                 color: textGrey,
@@ -266,6 +312,19 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
           const SizedBox(height: 18),
           _buildModelCard(),
           const SizedBox(height: 18),
+          _buildRouterMetrics(),
+          const SizedBox(height: 18),
+          _buildProviderHealth(),
+          const SizedBox(height: 28),
+          const Text(
+            'Learning Material AI Activity',
+            style: TextStyle(
+              color: textDark,
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
           _buildMetrics(),
           const SizedBox(height: 28),
           const Text(
@@ -301,7 +360,7 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
           SizedBox(width: 11),
           Expanded(
             child: Text(
-              'CASLMS does not expose or edit Gemini API keys here. Firebase AI Logic configuration belongs in Firebase / Google Cloud, not inside the Flutter client.',
+              'CASLMS never exposes or edits provider API keys here. AI credentials and routing configuration remain in Supabase Edge Function secrets, outside the Flutter client.',
               style: TextStyle(color: textDark, fontSize: 11.5, height: 1.45),
             ),
           ),
@@ -334,7 +393,7 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Detected Model',
+                  'Observed Provider Models',
                   style: TextStyle(
                     color: textGrey,
                     fontSize: 10.5,
@@ -354,12 +413,192 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
             ),
           ),
           const Text(
-            'Firebase AI Logic',
+            'Secure server routing',
             style: TextStyle(
               color: adminTheme,
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRouterMetrics() {
+    return Row(
+      children: [
+        Expanded(
+          child: _metric(
+            'AI Success',
+            _routerSuccess,
+            Icons.check_circle_outline_rounded,
+            green,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _metric(
+            'Failures',
+            _routerFailures,
+            Icons.error_outline_rounded,
+            red,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _metric(
+            'Rate Limits',
+            _routerRateLimits,
+            Icons.speed_rounded,
+            orange,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _metric(
+            'Failovers',
+            _routerFailovers,
+            Icons.alt_route_rounded,
+            Colors.blue,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProviderHealth() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Provider Health',
+          style: TextStyle(
+            color: textDark,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_providerStates.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: borderColor),
+            ),
+            child: const Text(
+              'No provider attempt has been recorded yet. Provider cards appear after the first routed AI request.',
+              style: TextStyle(color: textGrey, fontSize: 11.5, height: 1.4),
+            ),
+          )
+        else
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 900
+                  ? 3
+                  : constraints.maxWidth >= 580
+                  ? 2
+                  : 1;
+              final width =
+                  (constraints.maxWidth - (columns - 1) * 10) / columns;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: _providerStates
+                    .map(
+                      (provider) => SizedBox(
+                        width: width,
+                        child: _buildProviderCard(provider),
+                      ),
+                    )
+                    .toList(),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildProviderCard(Map<String, dynamic> item) {
+    final provider = (item['provider'] ?? 'provider').toString();
+    final model = (item['model'] ?? 'Not recorded').toString();
+    final successes = (item['successCount'] as num?)?.toInt() ?? 0;
+    final failures = (item['failureCount'] as num?)?.toInt() ?? 0;
+    final latencyTotal = (item['totalLatencyMs'] as num?)?.toInt() ?? 0;
+    final attempts = successes + failures;
+    final averageLatency = attempts == 0 ? 0 : latencyTotal ~/ attempts;
+    final until = (item['until'] as num?)?.toInt() ?? 0;
+    final cooling = until > DateTime.now().millisecondsSinceEpoch;
+    final lastOutcome = (item['lastOutcome'] ?? '').toString();
+    final unhealthy = !cooling && lastOutcome == 'failure';
+    final color = cooling || unhealthy ? orange : green;
+    final label = cooling
+        ? 'Cooling down'
+        : unhealthy
+        ? 'Needs attention'
+        : 'Healthy';
+    final inputTokens = (item['approximateInputTokens'] as num?)?.toInt() ?? 0;
+    final outputTokens =
+        (item['approximateOutputTokens'] as num?)?.toInt() ?? 0;
+    final cost = (item['estimatedCostUsd'] as num?)?.toDouble() ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _capitalize(provider),
+                  style: const TextStyle(
+                    color: textDark,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              Text(
+                label,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 9.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Text(
+            model,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: textGrey, fontSize: 10.5),
+          ),
+          const SizedBox(height: 11),
+          Text(
+            '$successes successful  •  $failures failed  •  ${averageLatency}ms average',
+            style: const TextStyle(color: textDark, fontSize: 10.5),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Approx. ${inputTokens + outputTokens} tokens  •  \$${cost.toStringAsFixed(4)} configured cost',
+            style: const TextStyle(color: textGrey, fontSize: 9.5),
           ),
         ],
       ),

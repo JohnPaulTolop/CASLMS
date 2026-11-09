@@ -86,8 +86,9 @@ project. One in-flight request per user is reserved transactionally, with a
 120-second lease for crash recovery. Each admitted logical request counts once,
 including failed requests. A permitted chat normally makes two upstream calls:
 one bounded topic classification, then answer generation. Each phase can attempt
-the configured backup, for up to four attempts total. Rejected questions stop
-after classification. Other tasks retain at most two upstream attempts.
+up to three configured providers, for up to six attempts total. Rejected
+questions stop after classification. Other tasks retain at most three upstream
+attempts. Every provider is attempted at most once per phase.
 A model's own provider quota can be lower than these app limits.
 
 Counters and cooldowns store no prompts, answers, passwords or API keys. Responses
@@ -105,7 +106,8 @@ https://supabase.com/dashboard/project/jymjlterjhznsxrwpjqz/functions/secrets
 | --- | --- |
 | `AI_ROUTER_ENABLED` | `true` after configuration |
 | `GEMINI_API_KEY` | Server Gemini Developer API key; not a Firebase ID token |
-| `AI_GEMINI_MODEL` | Model available to that key; default `gemini-3.7-flash` |
+| `AI_GEMINI_ENABLED` | Optional; set `false` to disable Gemini |
+| `AI_GEMINI_MODEL` | Required exact model ID available to that key |
 | `AI_GEMINI_THINKING_LEVEL` | Default `LOW`; use a value supported by the selected model |
 | `NVIDIA_API_KEY` | NVIDIA hosted API key |
 | `AI_NVIDIA_MODEL` | Exact model ID from its NVIDIA catalog API example; no invented default |
@@ -115,10 +117,21 @@ https://supabase.com/dashboard/project/jymjlterjhznsxrwpjqz/functions/secrets
 | `AI_PROTOTYPE_UIDS` | Comma-separated Firebase UIDs of internal testers; mandatory to admit NVIDIA prototype calls |
 | `AI_NVIDIA_BASE_URL` | Production: explicitly configure an HTTPS OpenAI-compatible NIM `/v1` base URL whose service terms permit production. Prototype: defaults to the NVIDIA API catalog endpoint. |
 | `AI_NVIDIA_REASONING_EFFORT` | Optional; only set if the NVIDIA model supports it |
+| `AI_PRIMARY_PROVIDER` | `gemini`, `groq`, or `nvidia` |
+| `AI_SECONDARY_PROVIDER` | Optional second eligible provider |
+| `AI_TERTIARY_PROVIDER` | Optional emergency provider |
 
 Optional limits: `AI_USER_RPM`, `AI_USER_DAILY`, `AI_PROJECT_RPM`,
-`AI_PROJECT_DAILY`. Invalid settings revert to bounded defaults. The function
-reuses the existing `FIREBASE_SERVICE_ACCOUNT_JSON` secret.
+`AI_PROJECT_DAILY`, and `AI_PROJECT_DAILY_COST_USD`. Optional pricing inputs are
+`AI_<PROVIDER>_INPUT_USD_PER_MILLION` and
+`AI_<PROVIDER>_OUTPUT_USD_PER_MILLION`, where provider is `GEMINI`, `GROQ`, or
+`NVIDIA`. Cost figures are estimates from bounded character-based token counts,
+not provider invoices. Invalid settings revert to bounded defaults. The
+function reuses the existing `FIREBASE_SERVICE_ACCOUNT_JSON` secret.
+
+Optional timing controls are `AI_FIRST_TOKEN_TIMEOUT_MS` (1,000-60,000),
+`AI_TOTAL_TIMEOUT_MS` (5,000-120,000), and `AI_FAILOVER_BACKOFF_MS` (0-5,000).
+Invalid timing values are ignored and the bounded task defaults are used.
 
 For the NVIDIA free trial, use `prototype` and only internal tester UIDs in a
 private preview with non-sensitive sample teaching material. NVIDIA trial access
@@ -138,8 +151,8 @@ When both providers are at capacity, return a temporary-unavailability message.
 | `GROQ_API_KEY` | The key generated in Groq Console (not xAI/Grok) |
 | `AI_GROQ_ENABLED` | `true` |
 | `AI_PRIMARY_PROVIDER` | `groq` |
-| `AI_GROQ_CHAT_MODEL` | `openai/gpt-oss-20b` (default for teaching chat and text summaries) |
-| `AI_GROQ_QUIZ_MODEL` | `openai/gpt-oss-120b` (default for quizzes) |
+| `AI_GROQ_CHAT_MODEL` | Required exact chat/text model ID available to the account |
+| `AI_GROQ_QUIZ_MODEL` | Required exact quiz-capable model ID available to the account |
 | `GEMINI_API_KEY` | Gemini Developer API key for the backup |
 | `AI_GEMINI_MODEL` | A model currently available on that project's free tier |
 | `AI_ROUTER_ENABLED` | `true` |
@@ -148,7 +161,25 @@ When both providers are at capacity, return a temporary-unavailability message.
 No tester UID list is required for Groq; existing active-account, role and App
 Check checks still apply. Groq is chosen ahead of Gemini unless primary is
 explicitly Gemini. While Groq is configured, NVIDIA is excluded from that route.
-No Groq configuration means the older NVIDIA/Gemini configuration still works.
+Missing or disabled providers are skipped. Model identifiers are always secure
+server configuration and have no hardcoded production fallback.
+
+## Provider health and monitoring
+
+Each provider/model pair stores privacy-conscious aggregate health in
+`aiProviderState`. The record contains success, failure, rate-limit and failover
+counts, consecutive failures, cooldown time, latency totals, approximate token
+counts and configured cost estimates. It never contains prompts, responses,
+API keys, Firebase tokens or App Check tokens. Only active administrators can
+read these records; all client writes are denied. The existing AI Service
+Gateway admin screen displays these aggregates without exposing configuration
+secrets.
+
+Authentication, missing-model and invalid-endpoint failures establish a long
+circuit-breaker cooldown and continue to another eligible provider. Rate limits,
+timeouts, network errors and 5xx responses use the bounded provider cooldown.
+Invalid client requests, safety blocks and failures after visible output do not
+switch providers. A provider becomes eligible again after its cooldown expires.
 
 Groq uses a fixed HTTPS endpoint, LOW reasoning effort, bounded output, and
 excludes GPT-OSS reasoning from responses. Teaching chat streams. Quizzes use
@@ -178,20 +209,32 @@ model is faster or more accurate.
 ## PowerShell activation
 
 1. Configure server secrets above. Do not paste keys into chat or commit them.
-2. Deploy the new function (Firebase verification is done inside it):
+2. Deploy the admin-read-only provider-health rule:
+
+```powershell
+firebase deploy --only firestore:rules --project soloapp-52a6b
+```
+
+3. Deploy the new function (Firebase verification is done inside it):
 
 ```powershell
 cd C:\caslms-main
 .\scripts\deploy-ai-router.ps1
 ```
 
-3. Build an explicitly enabled preview:
+4. Build an explicitly enabled preview:
 
 ```powershell
 flutter pub get
 .\scripts\build-vercel.ps1 -EnableAiGateway
 if ($?) { npx.cmd vercel deploy --prebuilt }
 ```
+
+`config/production.json` enables the gateway for extracted-text features and
+contains `CASLMS_FIREBASE_AI_MODEL`, the non-secret model identifier used only
+for compatible native PDF/image/video requests through Firebase AI Logic.
+Change that identifier only after verifying the model supports the required
+native media and structured-output capabilities.
 
 Local development:
 

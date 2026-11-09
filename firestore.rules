@@ -936,6 +936,15 @@ service cloud.firestore {
     }
 
     // ============================================================
+    // AI PROVIDER HEALTH (SERVER-WRITTEN, ADMIN-READ-ONLY)
+    // ============================================================
+
+    match /aiProviderState/{stateId} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    // ============================================================
     // LEARNING MATERIALS
     // ============================================================
 

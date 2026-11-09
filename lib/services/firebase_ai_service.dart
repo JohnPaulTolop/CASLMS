@@ -11,23 +11,34 @@ import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 import 'package:flutter/foundation.dart';
 
 import '../config/supabase_config.dart';
+import 'assistant_pdf_text.dart';
 
 class FirebaseAiService {
+  static const String configuredModelId = String.fromEnvironment(
+    'CASLMS_FIREBASE_AI_MODEL',
+  );
+
+  static GenerativeModel _createConfiguredModel({int maxOutputTokens = 1200}) {
+    if (configuredModelId.trim().isEmpty) {
+      throw StateError(
+        'CASLMS Firebase AI model is not configured. Build with '
+        '--dart-define=CASLMS_FIREBASE_AI_MODEL=YOUR_MODEL_ID.',
+      );
+    }
+    return FirebaseAI.googleAI().generativeModel(
+      model: configuredModelId,
+      generationConfig: GenerationConfig(
+        maxOutputTokens: maxOutputTokens,
+        thinkingConfig: ThinkingConfig.withThinkingLevel(ThinkingLevel.low),
+      ),
+    );
+  }
+
   FirebaseAiService({
     GenerativeModel? model,
     FirebaseFirestore? firestore,
     sb.SupabaseClient? supabaseClient,
-  }) : _model =
-           model ??
-           FirebaseAI.googleAI().generativeModel(
-             model: 'gemini-3.7-flash',
-             generationConfig: GenerationConfig(
-               maxOutputTokens: 1200,
-               thinkingConfig: ThinkingConfig.withThinkingLevel(
-                 ThinkingLevel.low,
-               ),
-             ),
-           ),
+  }) : _model = model ?? _createConfiguredModel(),
        _firestore = firestore ?? FirebaseFirestore.instance,
        _supabase = supabaseClient ?? sb.Supabase.instance.client;
 
@@ -215,7 +226,7 @@ POSSIBLE LEARNING OBJECTIVES
         'aiAnalysisSummary': analysis,
         'aiModel': AiRouterService.enabled && prepared.inlinePart == null
             ? 'ai-router'
-            : 'gemini-3.7-flash',
+            : configuredModelId,
         'aiSourceBytes': prepared.sourceBytes,
         'aiInputMode': prepared.inputMode,
         'aiTextExtracted': prepared.textExtracted,
@@ -331,7 +342,7 @@ POSSIBLE LEARNING OBJECTIVES
     );
 
     final GenerativeModel quizModel = FirebaseAI.googleAI().generativeModel(
-      model: 'gemini-3.7-flash',
+      model: configuredModelId,
       generationConfig: GenerationConfig(
         maxOutputTokens: 500 + questionCount * 300,
         thinkingConfig: ThinkingConfig.withThinkingLevel(ThinkingLevel.low),
@@ -493,7 +504,7 @@ Difficulty guidance:
     required String task,
     int? questionCount,
   }) async {
-    if (AiRouterService.enabled && prepared.inlinePart == null) {
+    Future<String> routeExtractedText() async {
       final source = prepared.extractedText ?? '';
       if (source.length + prompt.text.length > 32000) {
         throw FirebaseAiServiceException(
@@ -515,10 +526,27 @@ Difficulty guidance:
         throw FirebaseAiServiceException(error.message, isTemporary: true);
       }
     }
-    final response = await _generateContentBounded(
-      model: model,
-      contents: [_buildContent(prepared, prompt)],
-    );
+
+    if (AiRouterService.enabled && prepared.inlinePart == null) {
+      return routeExtractedText();
+    }
+    late final GenerateContentResponse response;
+    try {
+      response = await _generateContentBounded(
+        model: model,
+        contents: [_buildContent(prepared, prompt)],
+      );
+    } on FirebaseAiServiceException catch (error) {
+      // Native PDFs use Gemini first. When the PDF also contains selectable
+      // text, a temporary multimodal outage can safely reuse the extracted
+      // text through the centralized provider router without resubmission.
+      if (AiRouterService.enabled &&
+          error.isTemporary &&
+          (prepared.extractedText ?? '').trim().isNotEmpty) {
+        return routeExtractedText();
+      }
+      rethrow;
+    }
     if (response.candidates.any(
       (candidate) => candidate.finishReason == FinishReason.maxTokens,
     )) {
@@ -560,12 +588,31 @@ Difficulty guidance:
       case 'pdf':
         _requireInlineSize(bytes, label: 'PDF');
 
+        String? extractedText;
+        if (AiRouterService.enabled && bytes.length <= 5 * 1024 * 1024) {
+          try {
+            final candidate = _normalizeExtractedText(
+              await readAssistantPdf(bytes)
+                  .timeout(const Duration(seconds: 30)),
+            );
+            if (RegExp(r'\S.{20}').hasMatch(candidate)) {
+              extractedText = candidate;
+            }
+          } catch (_) {
+            // Scanned/encrypted PDFs still use the native Gemini path. Text
+            // fallback is advertised only when extraction actually succeeds.
+          }
+        }
+
         return _PreparedAiInput(
           sourceBytes: bytes.length,
           inlinePart: InlineDataPart('application/pdf', bytes),
-          inputMode: 'native_pdf',
-          textExtracted: false,
-          textLength: 0,
+          extractedText: extractedText,
+          inputMode: extractedText == null
+              ? 'native_pdf'
+              : 'native_pdf_with_text_fallback',
+          textExtracted: extractedText != null,
+          textLength: extractedText?.length ?? 0,
         );
 
       // --------------------------------------------------------
