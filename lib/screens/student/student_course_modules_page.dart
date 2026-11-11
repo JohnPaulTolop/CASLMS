@@ -67,6 +67,7 @@ class _StudentCourseModulesScreenState
       AssessmentSubmissionService();
   final EnrollmentService _enrollmentService = EnrollmentService();
   final ProgressService _progressService = ProgressService();
+  final LearningMaterialService _materialService = LearningMaterialService();
   final StudentAssessmentQueryService _assessmentQuery =
       StudentAssessmentQueryService();
   StreamSubscription<List<Map<String, dynamic>>>? _courseColorsSubscription;
@@ -313,28 +314,17 @@ class _StudentCourseModulesScreenState
         final status = (moduleData['status'] ?? '').toString().toLowerCase();
         if (status != 'published') continue;
 
-        final resourcesSnapshot =
-            await CourseContentPaths.resources(
-                  _firestore,
-                  widget.courseId,
-                  moduleDoc.id,
-                )
-                .where('courseId', isEqualTo: widget.courseId)
-                .where('moduleId', isEqualTo: moduleDoc.id)
-                .where('status', isEqualTo: 'published')
-                .where(
-                  'sectionIds',
-                  arrayContainsAny: <String>[
-                    SectionAudienceService.allSections,
-                    sectionId,
-                  ],
-                )
-                .get();
-
-        final resources = <Map<String, dynamic>>[];
-        for (final rDoc in resourcesSnapshot.docs) {
-          resources.add({'id': rDoc.id, ...rDoc.data()});
-        }
+        final resources =
+            (await _materialService.getModuleMaterials(
+              courseId: widget.courseId,
+              moduleId: moduleDoc.id,
+            )).where((resource) {
+              return SectionAudienceService.studentCanAccess(
+                enrollment: enrollmentData,
+                module: {...moduleData, 'id': moduleDoc.id},
+                child: resource,
+              );
+            }).toList();
 
         final assessments = List<Map<String, dynamic>>.from(
           assessmentsByModule[moduleDoc.id] ?? const <Map<String, dynamic>>[],

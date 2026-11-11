@@ -67,6 +67,7 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
 
   final AssessmentSubmissionService _submissionService =
       AssessmentSubmissionService();
+  final LearningMaterialService _materialService = LearningMaterialService();
 
   // ============================================================
   // STATE
@@ -330,36 +331,21 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
       // This query is safe if the collection is empty.
       // ----------------------------------------------------------
 
-      final QuerySnapshot<Map<String, dynamic>> resourceSnapshot =
-          await CourseContentPaths.resources(
-                _firestore,
-                widget.courseId,
-                widget.moduleId,
-              )
-              .where('courseId', isEqualTo: widget.courseId)
-              .where('moduleId', isEqualTo: widget.moduleId)
-              .where('status', isEqualTo: 'published')
-              .where(
-                'sectionIds',
-                arrayContainsAny: <String>[
-                  SectionAudienceService.allSections,
-                  sectionId,
-                ],
-              )
-              .get();
-
-      final List<Map<String, dynamic>> resources = resourceSnapshot.docs
-          .map((document) => {...document.data(), 'id': document.id})
-          .where((resource) {
-            final String status = (resource['status'] ?? 'published')
-                .toString()
-                .trim()
-                .toLowerCase();
-
-            return (resource['courseId'] ?? '').toString() == widget.courseId &&
-                status == 'published';
-          })
-          .toList();
+      final enrollment = <String, dynamic>{
+        ...enrollmentDocument.data()!,
+        'sectionId': sectionId,
+      };
+      final List<Map<String, dynamic>> resources =
+          (await _materialService.getModuleMaterials(
+            courseId: widget.courseId,
+            moduleId: widget.moduleId,
+          )).where((resource) {
+            return SectionAudienceService.studentCanAccess(
+              enrollment: enrollment,
+              module: {...moduleData, 'id': widget.moduleId},
+              child: resource,
+            );
+          }).toList();
 
       if (!mounted) {
         return;

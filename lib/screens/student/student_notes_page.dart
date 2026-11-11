@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/app_colors.dart';
 import '../../services/personal_note_service.dart';
 import 'student_notes.dart';
 
@@ -11,9 +12,11 @@ class StudentNotesScreen extends StatefulWidget {
 }
 
 class _StudentNotesScreenState extends State<StudentNotesScreen> {
-  static const _blue = Color(0xFF2864F0);
-  static const _ink = Color(0xFF101B42);
-  static const _muted = Color(0xFF64719A);
+  Color get _blue => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get _ink => AppColors.resolve(context, AppColors.darkText);
+  Color get _muted => AppColors.resolve(context, AppColors.secondaryText);
+  Color get _surface => AppColors.resolve(context, Colors.white);
+  Color get _border => AppColors.resolve(context, AppColors.inputBorder);
 
   final _service = PersonalNoteService();
   late Stream<List<PersonalStudentNote>> _notesStream;
@@ -43,7 +46,7 @@ class _StudentNotesScreenState extends State<StudentNotesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEAF1FF),
+      backgroundColor: AppColors.resolve(context, AppColors.background),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -122,7 +125,7 @@ class _StudentNotesScreenState extends State<StudentNotesScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _create,
         backgroundColor: _blue,
-        foregroundColor: Colors.white,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         icon: const Icon(Icons.add_rounded),
         label: const Text('New Note'),
       ),
@@ -133,12 +136,16 @@ class _StudentNotesScreenState extends State<StudentNotesScreen> {
     return Container(
       padding: EdgeInsets.all(desktop ? 26 : 20),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .72),
+        color: _surface.withValues(alpha: .94),
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: Colors.white.withValues(alpha: .92)),
+        border: Border.all(color: _border),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4776D9).withValues(alpha: .11),
+            color: Colors.black.withValues(
+              alpha: Theme.of(context).brightness == Brightness.dark
+                  ? .22
+                  : .08,
+            ),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -153,18 +160,14 @@ class _StudentNotesScreenState extends State<StudentNotesScreen> {
               color: _blue.withValues(alpha: .11),
               borderRadius: BorderRadius.circular(18),
             ),
-            child: const Icon(
-              Icons.sticky_note_2_rounded,
-              color: _blue,
-              size: 28,
-            ),
+            child: Icon(Icons.sticky_note_2_rounded, color: _blue, size: 28),
           ),
           const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'My Notes',
                   style: TextStyle(
                     color: _ink,
@@ -178,7 +181,7 @@ class _StudentNotesScreenState extends State<StudentNotesScreen> {
                   count == 1
                       ? '1 private note saved to your account'
                       : '$count private notes saved to your account',
-                  style: const TextStyle(color: _muted, fontSize: 12),
+                  style: TextStyle(color: _muted, fontSize: 12),
                 ),
               ],
             ),
@@ -235,8 +238,13 @@ class _PersonalNoteTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = AppColors.resolve(context, AppColors.primaryBlue);
+    final ink = AppColors.resolve(context, AppColors.darkText);
+    final muted = AppColors.resolve(context, AppColors.secondaryText);
+    final surface = AppColors.resolve(context, Colors.white);
+    final border = AppColors.resolve(context, AppColors.inputBorder);
     return Material(
-      color: Colors.white.withValues(alpha: .84),
+      color: surface,
       borderRadius: BorderRadius.circular(22),
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
@@ -246,10 +254,14 @@ class _PersonalNoteTile extends StatelessWidget {
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white),
+            border: Border.all(color: border),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF4776D9).withValues(alpha: .09),
+                color: Colors.black.withValues(
+                  alpha: Theme.of(context).brightness == Brightness.dark
+                      ? .2
+                      : .07,
+                ),
                 blurRadius: 18,
                 offset: const Offset(0, 8),
               ),
@@ -264,14 +276,10 @@ class _PersonalNoteTile extends StatelessWidget {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEAF1FF),
+                      color: AppColors.resolve(context, AppColors.blueTint),
                       borderRadius: BorderRadius.circular(11),
                     ),
-                    child: const Icon(
-                      Icons.notes_rounded,
-                      color: Color(0xFF2864F0),
-                      size: 19,
-                    ),
+                    child: Icon(Icons.notes_rounded, color: accent, size: 19),
                   ),
                   const Spacer(),
                   PopupMenuButton<String>(
@@ -321,8 +329,8 @@ class _PersonalNoteTile extends StatelessWidget {
                 note.title,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Color(0xFF101B42),
+                style: TextStyle(
+                  color: ink,
                   fontSize: 17,
                   height: 1.25,
                   fontWeight: FontWeight.w800,
@@ -334,20 +342,13 @@ class _PersonalNoteTile extends StatelessWidget {
                   note.content,
                   maxLines: 5,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF56617F),
-                    fontSize: 12.5,
-                    height: 1.5,
-                  ),
+                  style: TextStyle(color: muted, fontSize: 12.5, height: 1.5),
                 ),
               ),
-              const Divider(color: Color(0xFFE2E8F3)),
+              Divider(color: border),
               Text(
                 'Updated ${personalNoteDate(note.updatedAt)}',
-                style: const TextStyle(
-                  color: Color(0xFF64719A),
-                  fontSize: 10.5,
-                ),
+                style: TextStyle(color: muted, fontSize: 10.5),
               ),
             ],
           ),
@@ -367,31 +368,36 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          Icon(
             Icons.note_add_outlined,
             size: 62,
-            color: Color(0xFF2864F0),
+            color: AppColors.resolve(context, AppColors.primaryBlue),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'No personal notes yet',
             style: TextStyle(
-              color: Color(0xFF101B42),
+              color: AppColors.resolve(context, AppColors.darkText),
               fontSize: 20,
               fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 7),
-          const Text(
+          Text(
             'Your notes are private and only visible in your student account.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Color(0xFF64719A)),
+            style: TextStyle(
+              color: AppColors.resolve(context, AppColors.secondaryText),
+            ),
           ),
           const SizedBox(height: 18),
           FilledButton.icon(
             onPressed: onCreate,
             style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF2864F0),
+              backgroundColor: AppColors.resolve(
+                context,
+                AppColors.primaryBlue,
+              ),
             ),
             icon: const Icon(Icons.add_rounded),
             label: const Text('Create Your First Note'),
@@ -410,10 +416,10 @@ class _ErrorState extends StatelessWidget {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(
+        Icon(
           Icons.error_outline_rounded,
           size: 48,
-          color: Color(0xFFDC4C57),
+          color: AppColors.resolve(context, AppColors.error),
         ),
         const SizedBox(height: 12),
         const Text('Unable to load your private notes.'),
@@ -426,13 +432,22 @@ class _ErrorState extends StatelessWidget {
 class _NotesPageBackdrop extends StatelessWidget {
   const _NotesPageBackdrop();
   @override
-  Widget build(BuildContext context) => const DecoratedBox(
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFFEAF2FF), Color(0xFFDCE8FF), Color(0xFFF5F7FF)],
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: dark
+              ? const [
+                  DarkAppColors.background,
+                  DarkAppColors.noticeboard,
+                  DarkAppColors.surface,
+                ]
+              : const [Color(0xFFEAF2FF), Color(0xFFDCE8FF), Color(0xFFF5F7FF)],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

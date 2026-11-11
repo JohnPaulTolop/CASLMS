@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/app_colors.dart';
 import '../../models/admin_records.dart';
+import '../../services/activity_log_service.dart';
 import '../../services/admin_catalog.dart';
 import 'admin_download.dart';
 import 'admin_file_details_page.dart';
@@ -9,6 +11,7 @@ import 'admin_ui.dart';
 
 class AdminActivityLogsScreen extends StatefulWidget {
   const AdminActivityLogsScreen({super.key});
+
   @override
   State<AdminActivityLogsScreen> createState() =>
       _AdminActivityLogsScreenState();
@@ -16,11 +19,7 @@ class AdminActivityLogsScreen extends StatefulWidget {
 
 class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
   static const _pageSize = 50;
-  final _search = TextEditingController();
-  final List<DocumentSnapshot<Map<String, dynamic>>> _cursors = [];
-  String _category = 'all', _period = '30 days';
-  late Stream<QuerySnapshot<Map<String, dynamic>>> _stream;
-  static const _categories = {
+  static const _categories = <String, String>{
     'all': 'All events',
     'login': 'Logins',
     'logout': 'Logouts',
@@ -28,10 +27,19 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
     'material_uploaded': 'Files uploaded',
   };
 
+  final _service = ActivityLogService();
+  final _search = TextEditingController();
+  final List<int?> _cursors = <int?>[null];
+  String _category = 'all';
+  String _period = '30 days';
+  late Future<ActivityLogPage> _page;
+  bool _isMigrating = false;
+  String? _migrationStatus;
+
   @override
   void initState() {
     super.initState();
-    _stream = _query();
+    _page = _loadPage();
   }
 
   @override
@@ -40,11 +48,7 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
     super.dispose();
   }
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> _query() {
-    Query<Map<String, dynamic>> query = FirebaseFirestore.instance.collection(
-      'activityLogs',
-    );
-    if (_category != 'all') query = query.where('type', isEqualTo: _category);
+  Future<ActivityLogPage> _loadPage() {
     final now = DateTime.now();
     final cutoff = switch (_period) {
       'Today' => DateTime(now.year, now.month, now.day),
@@ -52,22 +56,79 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
       '30 days' => now.subtract(const Duration(days: 30)),
       _ => null,
     };
-    if (cutoff != null) {
-      query = query.where(
-        'createdAt',
-        isGreaterThanOrEqualTo: Timestamp.fromDate(cutoff),
-      );
-    }
-    query = query
-        .orderBy('createdAt', descending: true)
-        .orderBy(FieldPath.documentId, descending: true);
-    if (_cursors.isNotEmpty) query = query.startAfterDocument(_cursors.last);
-    return query.limit(_pageSize + 1).snapshots();
+    return _service.listAdmin(
+      category: _category,
+      since: cutoff,
+      cursor: _cursors.last,
+      limit: _pageSize,
+    );
   }
 
   void _resetQuery() {
-    _cursors.clear();
-    _stream = _query();
+    _cursors
+      ..clear()
+      ..add(null);
+    _page = _loadPage();
+  }
+
+  Future<void> _migrateHistory() async {
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import existing activity history?'),
+        content: const Text(
+          'This securely copies legacy Firestore activity logs into Supabase. '
+          'It is safe to run again and does not delete the original records.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
+    if (approved != true || !mounted) return;
+    setState(() {
+      _isMigrating = true;
+      _migrationStatus = 'Preparing import...';
+    });
+    try {
+      final result = await _service.migrateLegacyLogs(
+        onProgress: (copied, scanned) {
+          if (!mounted) return;
+          setState(() {
+            _migrationStatus = 'Imported $copied of $scanned scanned logs';
+          });
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _isMigrating = false;
+        _migrationStatus = null;
+        _resetQuery();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Activity history imported: ${result.copied} valid logs '
+            'from ${result.scanned} scanned records.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isMigrating = false;
+        _migrationStatus = null;
+      });
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Import failed: $error')));
+    }
   }
 
   IconData _icon(String type) => switch (type) {
@@ -78,10 +139,10 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
   };
 
   Future<void> _details(
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+    ActivityLogRecord document,
     AdminCatalog catalog,
   ) async {
-    final row = doc.data();
+    final row = document.data;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -99,7 +160,7 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
                 if (row['title'] != null) 'Title: ${row['title']}',
                 if (row['courseId'] != null) 'Course ID: ${row['courseId']}',
                 if (row['targetId'] != null) 'Source ID: ${row['targetId']}',
-                'Event ID: ${doc.id}',
+                'Event ID: ${document.id}',
               ].join('\n\n'),
             ),
           ),
@@ -142,7 +203,7 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
                       content: SelectableText(
                         course == null
                             ? 'The course associated with this event is no longer available.'
-                            : '${course['code']}\n${course['semester']} · ${course['academicYear']}\nInstructor: ${course['instructorName']}\nStatus: ${course['status']}\n\n${course['description']}',
+                            : '${course['code']}\n${course['semester']} - ${course['academicYear']}\nInstructor: ${course['instructorName']}\nStatus: ${course['status']}\n\n${course['description']}',
                       ),
                       actions: [
                         TextButton(
@@ -175,9 +236,7 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
     );
   }
 
-  Future<void> _export(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> rows,
-  ) async {
+  Future<void> _export(List<ActivityLogRecord> rows) async {
     try {
       await downloadAdminCsv(
         adminCsv([
@@ -193,10 +252,10 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
             'Recorded',
             'Source created',
           ],
-          ...rows.map((doc) {
-            final row = doc.data();
+          ...rows.map((document) {
+            final row = document.data;
             return [
-              doc.id,
+              document.id,
               adminEventLabels[adminText(row['type'])] ?? row['type'],
               row['actorName'],
               row['actorRole'],
@@ -211,7 +270,7 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
             ];
           }),
         ]),
-        'caslms-$_category-page-${_cursors.length + 1}.csv',
+        'caslms-$_category-page-${_cursors.length}.csv',
       );
     } catch (_) {
       if (mounted) {
@@ -228,30 +287,29 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
   Widget build(BuildContext context) {
     final catalog = AdminScope.of(context);
     return Scaffold(
-      backgroundColor: AdminUi.background,
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: _stream,
+      backgroundColor: AppColors.resolve(context, AdminUi.background),
+      body: FutureBuilder<ActivityLogPage>(
+        future: _page,
         builder: (context, snapshot) {
-          final raw = snapshot.data?.docs ?? [];
-          final page = raw.take(_pageSize).toList();
+          final page = snapshot.data?.rows ?? <ActivityLogRecord>[];
           final query = _search.text.trim().toLowerCase();
-          final rows = page
-              .where(
-                (doc) =>
-                    query.isEmpty ||
-                    [
-                      doc.id,
-                      ...[
-                        'actorName',
-                        'actorId',
-                        'actorRole',
-                        'title',
-                        'courseId',
-                        'targetId',
-                      ].map((field) => doc.data()[field]),
-                    ].any((v) => adminText(v).toLowerCase().contains(query)),
-              )
-              .toList();
+          final rows = page.where((document) {
+            final row = document.data;
+            return query.isEmpty ||
+                [
+                  document.id,
+                  ...[
+                    'actorName',
+                    'actorId',
+                    'actorRole',
+                    'title',
+                    'courseId',
+                    'targetId',
+                  ].map((field) => row[field]),
+                ].any(
+                  (value) => adminText(value).toLowerCase().contains(query),
+                );
+          }).toList();
           final waiting = snapshot.connectionState == ConnectionState.waiting;
           return ListView(
             padding: const EdgeInsets.all(24),
@@ -261,6 +319,16 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
                 subtitle: 'Separate account sessions, course creation and instructor uploads.',
                 actions: [
                   OutlinedButton.icon(
+                    onPressed: _isMigrating ? null : _migrateHistory,
+                    icon: _isMigrating
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.cloud_upload_outlined),
+                    label: Text(_migrationStatus ?? 'Import Firestore history'),
+                  ),
+                  OutlinedButton.icon(
                     onPressed: waiting || snapshot.hasError || rows.isEmpty
                         ? null
                         : () => _export(rows),
@@ -269,7 +337,7 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
                   ),
                   IconButton(
                     tooltip: 'Refresh logs',
-                    onPressed: () => setState(() => _stream = _query()),
+                    onPressed: () => setState(() => _page = _loadPage()),
                     icon: const Icon(Icons.refresh_rounded),
                   ),
                 ],
@@ -313,7 +381,10 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
                       ),
                       items: ['Today', '7 days', '30 days', 'All time']
                           .map(
-                            (p) => DropdownMenuItem(value: p, child: Text(p)),
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value),
+                            ),
                           )
                           .toList(),
                       onChanged: (value) => setState(() {
@@ -343,7 +414,7 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
               if (snapshot.hasError)
                 AdminNotice(
                   'Unable to load activity logs. Check your connection and admin access, then retry.',
-                  onRetry: () => setState(() => _stream = _query()),
+                  onRetry: () => setState(() => _page = _loadPage()),
                 )
               else if (waiting)
                 const Padding(
@@ -363,28 +434,23 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
                           runSpacing: 6,
                           children: [
                             Text(
-                              '${_categories[_category]} · ${rows.length} shown',
-                              style: const TextStyle(
+                              '${_categories[_category]} - ${rows.length} shown',
+                              style: TextStyle(
                                 fontWeight: FontWeight.w700,
-                                color: AdminUi.ink,
+                                color: AppColors.resolve(context, AdminUi.ink),
                               ),
                             ),
-                            const AdminBadge('Live updates'),
-                            if (snapshot.data?.metadata.isFromCache == true)
-                              const AdminBadge(
-                                'Cached data',
-                                color: Colors.orange,
-                              ),
+                            const AdminBadge('Supabase'),
                           ],
                         ),
                       ),
                       if (rows.isEmpty)
                         const AdminEmpty(
                           title: 'No matching events',
-                          message: 'Activity history begins with this update. Try another category, period or page. Older course records remain available under Courses.',
+                          message: 'Try another category, period or page. Use Import Firestore history once to copy older activity records.',
                         )
                       else
-                        ...rows.map((doc) => _row(doc, catalog)),
+                        ...rows.map((document) => _row(document, catalog)),
                       const Divider(height: 1),
                       Padding(
                         padding: const EdgeInsets.all(16),
@@ -394,27 +460,30 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(
-                              'Page ${_cursors.length + 1} · up to $_pageSize events',
-                              style: const TextStyle(
+                              'Page ${_cursors.length} - up to $_pageSize events',
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: AdminUi.muted,
+                                color: AppColors.resolve(
+                                  context,
+                                  AdminUi.muted,
+                                ),
                               ),
                             ),
                             OutlinedButton(
-                              onPressed: _cursors.isEmpty
+                              onPressed: _cursors.length <= 1
                                   ? null
                                   : () => setState(() {
                                       _cursors.removeLast();
-                                      _stream = _query();
+                                      _page = _loadPage();
                                     }),
                               child: const Text('Previous'),
                             ),
                             FilledButton(
-                              onPressed: raw.length <= _pageSize
+                              onPressed: snapshot.data?.nextCursor == null
                                   ? null
                                   : () => setState(() {
-                                      _cursors.add(page.last);
-                                      _stream = _query();
+                                      _cursors.add(snapshot.data!.nextCursor);
+                                      _page = _loadPage();
                                     }),
                               child: const Text('Next'),
                             ),
@@ -425,11 +494,11 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
                   ),
                 ),
               const SizedBox(height: 14),
-              const Text(
-                'Logs record successful app sign-ins and explicit logout requests. Closing a browser does not log a logout. Export includes this page’s visible matches; times use your browser’s local timezone.',
+              Text(
+                'Logs record successful app sign-ins and explicit logout requests. Closing a browser does not log a logout. Export includes this page\'s visible matches; times use your browser\'s local timezone.',
                 style: TextStyle(
                   fontSize: 12,
-                  color: AdminUi.muted,
+                  color: AppColors.resolve(context, AdminUi.muted),
                   height: 1.5,
                 ),
               ),
@@ -440,24 +509,22 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
     );
   }
 
-  Widget _row(
-    QueryDocumentSnapshot<Map<String, dynamic>> doc,
-    AdminCatalog catalog,
-  ) {
-    final row = doc.data();
+  Widget _row(ActivityLogRecord document, AdminCatalog catalog) {
+    final row = document.data;
+    final accent = AppColors.resolve(context, AdminUi.accent);
     final actor = adminText(row['actorName']).isEmpty
         ? adminText(row['actorId'])
         : adminText(row['actorName']);
     return InkWell(
-      onTap: () => _details(doc, catalog),
+      onTap: () => _details(document, catalog),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             CircleAvatar(
-              backgroundColor: AdminUi.accent.withValues(alpha: .08),
-              child: Icon(_icon(adminText(row['type'])), color: AdminUi.accent),
+              backgroundColor: accent.withValues(alpha: .12),
+              child: Icon(_icon(adminText(row['type'])), color: accent),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -484,13 +551,19 @@ class _AdminActivityLogsScreenState extends State<AdminActivityLogsScreen> {
                     [
                       adminText(row['actorRole']),
                       if (row['title'] != null) adminText(row['title']),
-                    ].join(' · '),
-                    style: const TextStyle(color: AdminUi.muted, fontSize: 12),
+                    ].join(' - '),
+                    style: TextStyle(
+                      color: AppColors.resolve(context, AdminUi.muted),
+                      fontSize: 12,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     adminTimestamp(row['createdAt']),
-                    style: const TextStyle(color: AdminUi.muted, fontSize: 11),
+                    style: TextStyle(
+                      color: AppColors.resolve(context, AdminUi.muted),
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),

@@ -2863,45 +2863,11 @@ service cloud.firestore {
     }
 
     // ============================================================
-    // ADMIN ACTIVITY HISTORY
-    // Append-only, source-bound app events. No passwords or tokens are stored.
+    // LEGACY ACTIVITY HISTORY
+    // New activity events are stored behind the verified Supabase Edge Function.
+    // Keep legacy documents inaccessible to app clients after migration.
     match /activityLogs/{logId} {
-      function validActor(data) {
-        return isActive() && data.actorId == request.auth.uid &&
-          (
-            (data.actorRole == 'student' && isStudent()) ||
-            (data.actorRole == 'instructor' && isInstructor()) ||
-            (data.actorRole == 'admin' && isAdmin())
-          ) &&
-          data.actorName == currentUser().get('name', '') &&
-          data.createdAt == request.time;
-      }
-      function validSession(data) {
-        return data.keys().hasOnly(['type','actorId','actorName','actorRole','sessionAuthTime','createdAt']) &&
-          data.type in ['login','logout'] &&
-          data.sessionAuthTime is int && data.sessionAuthTime == request.auth.token.auth_time &&
-          logId == data.type + '_' + string(data.sessionAuthTime) + '_' + request.auth.uid;
-      }
-      function validSource(data) {
-        let collection = data.type == 'course_created' ? 'courses' : 'moduleResources';
-        let source = get(/databases/$(database)/documents/$(collection)/$(data.targetId)).data;
-        return (isInstructor() || isAdmin()) && data.keys().hasOnly(['type','actorId','actorName','actorRole','targetId','courseId','title','occurredAt','createdAt']) &&
-          data.type in ['course_created','material_uploaded'] &&
-          data.targetId is string && data.targetId.size() > 0 &&
-          logId == data.type + '_' + data.targetId &&
-          data.title == source.title && data.occurredAt == source.createdAt &&
-          (
-            (data.type == 'course_created' && data.courseId == data.targetId &&
-              (source.instructorId == request.auth.uid || isAdmin())) ||
-            (data.type == 'material_uploaded' && data.courseId == source.courseId &&
-              source.deliveryType == 'uploaded_file' && source.createdBy == request.auth.uid &&
-              (ownsCourse(source.courseId) || isAdmin()))
-          );
-      }
-      allow get, list: if isAdmin();
-      allow create: if validActor(request.resource.data) &&
-        (validSession(request.resource.data) || validSource(request.resource.data));
-      allow update, delete: if false;
+      allow read, write: if false;
     }
 
     // ============================================================

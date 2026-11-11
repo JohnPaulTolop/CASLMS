@@ -74,6 +74,8 @@ Future<void> main() async {
     );
   } catch (e, stack) {
     debugPrint('CASLMS Initialization Error: $e\n$stack');
+    runApp(const _CASLMSInitializationFailureApp());
+    return;
   }
 
   // ============================================================
@@ -81,6 +83,52 @@ Future<void> main() async {
   // ============================================================
 
   runApp(const CASLMSApp());
+}
+
+class _CASLMSInitializationFailureApp extends StatelessWidget {
+  const _CASLMSInitializationFailureApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'SSU CAS E-Learning',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      home: Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: const Padding(
+                padding: EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline_rounded, size: 48),
+                    SizedBox(height: 16),
+                    Text(
+                      'CASLMS could not start securely',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'Refresh the page and try again. If the problem continues, contact the CASLMS administrator.',
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Activates Firebase App Check using the provider appropriate

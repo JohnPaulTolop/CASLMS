@@ -2,10 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../config/supabase_config.dart';
 import '../../core/app_colors.dart';
 import '../../models/admin_records.dart';
 import '../../services/admin_catalog.dart';
+import '../../services/learning_material_service.dart';
 import '../shared/aligned_page_app_bar.dart';
 import '../shared/workspace_shell.dart';
 import '../shared/workspace_widgets.dart';
@@ -38,6 +38,40 @@ class _AdminFileDetailsScreenState extends State<AdminFileDetailsScreen> {
       .snapshots();
   String? _moduleName;
   String? _loadedModule;
+  final _materialService = LearningMaterialService();
+  Future<Uri>? _authorizedUriFuture;
+
+  Future<Uri> _authorizedUri() => _authorizedUriFuture ??= _materialService
+      .createAuthorizedDownloadUri(widget.fileId);
+
+  void _retryAuthorizedUri() {
+    setState(() {
+      _authorizedUriFuture = _materialService.createAuthorizedDownloadUri(
+        widget.fileId,
+      );
+    });
+  }
+
+  Future<void> _openAuthorizedFile() async {
+    try {
+      final authorization = _materialService.createAuthorizedDownloadUri(
+        widget.fileId,
+      );
+      setState(() => _authorizedUriFuture = authorization);
+      await _open(await authorization);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is LearningMaterialException
+                ? error.message
+                : 'Unable to authorize this file. Please retry.',
+          ),
+        ),
+      );
+    }
+  }
 
   Future<void> _loadModule(String id) async {
     if (_loadedModule == id) return;
@@ -159,11 +193,7 @@ class _AdminFileDetailsScreenState extends State<AdminFileDetailsScreen> {
   }
 
   Widget _buildContent(Map<String, dynamic> file, double inset) {
-    final uri = adminMaterialUri(
-      file,
-      SupabaseConfig.projectUrl,
-      SupabaseConfig.learningMaterialsBucket,
-    );
+    final authorizedUri = _authorizedUri();
     final type = adminFileType(file);
     final catalog = widget.catalog;
     final course = catalog.courses[adminText(file['courseId'])];
@@ -238,7 +268,7 @@ class _AdminFileDetailsScreenState extends State<AdminFileDetailsScreen> {
           ],
           const SizedBox(height: 18),
           FilledButton.icon(
-            onPressed: uri == null ? null : () => _open(uri),
+            onPressed: _openAuthorizedFile,
             icon: const Icon(Icons.open_in_new_rounded),
             label: const Text('Open original / save file'),
           ),
@@ -252,40 +282,50 @@ class _AdminFileDetailsScreenState extends State<AdminFileDetailsScreen> {
     );
 
     Widget preview() {
-      if (uri == null) {
-        return const WorkspaceEmptyState(
-          title: 'Preview unavailable',
-          message: 'This record does not have a valid learning-material storage URL.',
-          icon: Icons.visibility_off_outlined,
-        );
-      }
-      if (['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP', 'BMP'].contains(type)) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: InteractiveViewer(
-            minScale: .5,
-            maxScale: 5,
-            child: Image.network(
-              uri.toString(),
-              fit: BoxFit.contain,
-              loadingBuilder: (context, child, progress) => progress == null
-                  ? child
-                  : const Center(child: CircularProgressIndicator()),
-              errorBuilder: (context, error, stack) =>
-                  const WorkspaceEmptyState(
-                    title: 'Image unavailable',
-                    message: 'The stored object may have been removed.',
-                    icon: Icons.broken_image_outlined,
+      return FutureBuilder<Uri>(
+        future: authorizedUri,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError || !snapshot.hasData) {
+            final error = snapshot.error;
+            return WorkspaceErrorState(
+              message: error is LearningMaterialException
+                  ? error.message
+                  : 'Unable to authorize this learning material.',
+              onRetry: _retryAuthorizedUri,
+              retryLabel: 'Retry file access',
+            );
+          }
+          final uri = snapshot.data!;
+          if (['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP', 'BMP'].contains(type)) {
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: InteractiveViewer(
+                minScale: .5,
+                maxScale: 5,
+                child: Image.network(
+                  uri.toString(),
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, progress) => progress == null
+                      ? child
+                      : const Center(child: CircularProgressIndicator()),
+                  errorBuilder: (context, error, stack) => WorkspaceErrorState(
+                    message: 'The secure image preview could not be loaded.',
+                    onRetry: _retryAuthorizedUri,
                   ),
-            ),
-          ),
-        );
-      }
-      if (type == 'PDF') return AdminDocumentFrame(uri: uri);
-      return WorkspaceEmptyState(
-        title: '$type document',
-        message: 'Choose Open original / save file to view this format.',
-        icon: Icons.description_outlined,
+                ),
+              ),
+            );
+          }
+          if (type == 'PDF') return AdminDocumentFrame(uri: uri);
+          return WorkspaceEmptyState(
+            title: '$type document',
+            message: 'Choose Open original / save file to view this format.',
+            icon: Icons.description_outlined,
+          );
+        },
       );
     }
 

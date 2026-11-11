@@ -1,11 +1,19 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/app_colors.dart';
 import '../../services/personal_note_service.dart';
 
-const _notesBlue = Color(0xFF2864F0);
-const _notesInk = Color(0xFF101B42);
-const _notesMuted = Color(0xFF64719A);
+Color _notesBlue(BuildContext context) =>
+    AppColors.resolve(context, AppColors.primaryBlue);
+Color _notesInk(BuildContext context) =>
+    AppColors.resolve(context, AppColors.darkText);
+Color _notesMuted(BuildContext context) =>
+    AppColors.resolve(context, AppColors.secondaryText);
+Color _notesSurface(BuildContext context) =>
+    AppColors.resolve(context, Colors.white);
+Color _notesBorder(BuildContext context) =>
+    AppColors.resolve(context, AppColors.inputBorder);
 
 String personalNoteDate(DateTime? value) {
   if (value == null) return 'Saving...';
@@ -48,17 +56,20 @@ Future<void> showPersonalNoteDetails(
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      backgroundColor: const Color(0xFFF9FBFF),
+      backgroundColor: _notesSurface(dialogContext),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       titlePadding: const EdgeInsets.fromLTRB(24, 22, 12, 8),
       contentPadding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
       actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
       title: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Text(
               'My Note',
-              style: TextStyle(color: _notesInk, fontWeight: FontWeight.w800),
+              style: TextStyle(
+                color: _notesInk(dialogContext),
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
           IconButton(
@@ -76,8 +87,8 @@ Future<void> showPersonalNoteDetails(
             children: [
               Text(
                 note.title,
-                style: const TextStyle(
-                  color: _notesInk,
+                style: TextStyle(
+                  color: _notesInk(dialogContext),
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
                   height: 1.25,
@@ -86,13 +97,16 @@ Future<void> showPersonalNoteDetails(
               const SizedBox(height: 7),
               Text(
                 'Updated ${personalNoteDate(note.updatedAt)}',
-                style: const TextStyle(color: _notesMuted, fontSize: 12),
+                style: TextStyle(
+                  color: _notesMuted(dialogContext),
+                  fontSize: 12,
+                ),
               ),
               const SizedBox(height: 18),
               SelectableText(
                 note.content,
-                style: const TextStyle(
-                  color: Color(0xFF344167),
+                style: TextStyle(
+                  color: _notesInk(dialogContext),
                   height: 1.65,
                   fontSize: 14,
                 ),
@@ -112,7 +126,9 @@ Future<void> showPersonalNoteDetails(
         ),
         FilledButton(
           onPressed: () => Navigator.of(dialogContext).pop(),
-          style: FilledButton.styleFrom(backgroundColor: _notesBlue),
+          style: FilledButton.styleFrom(
+            backgroundColor: _notesBlue(dialogContext),
+          ),
           child: const Text('Done'),
         ),
       ],
@@ -139,7 +155,7 @@ Future<bool> confirmPersonalNoteDelete(
         FilledButton(
           onPressed: () => Navigator.of(dialogContext).pop(true),
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFFDC4C57),
+            backgroundColor: AppColors.resolve(context, AppColors.error),
           ),
           child: const Text('Delete'),
         ),
@@ -265,21 +281,21 @@ class _StudentNotesDashboardSectionState
                   width: 34,
                   height: 34,
                   decoration: BoxDecoration(
-                    color: _notesBlue.withValues(alpha: .11),
+                    color: _notesBlue(context).withValues(alpha: .11),
                     borderRadius: BorderRadius.circular(11),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.sticky_note_2_rounded,
-                    color: _notesBlue,
+                    color: _notesBlue(context),
                     size: 19,
                   ),
                 ),
                 const SizedBox(width: 10),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'My Notes',
                     style: TextStyle(
-                      color: _notesInk,
+                      color: _notesInk(context),
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
                     ),
@@ -429,8 +445,8 @@ class _StudentNotesDashboardSectionState
                     height: 7,
                     decoration: BoxDecoration(
                       color: index == _index
-                          ? _notesBlue
-                          : const Color(0xFFCBD6EA),
+                          ? _notesBlue(context)
+                          : _notesBorder(context),
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
@@ -461,10 +477,15 @@ class _DashboardNoteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = _notesBlue(context);
+    final ink = _notesInk(context);
+    final muted = _notesMuted(context);
+    final surface = _notesSurface(context);
+    final border = _notesBorder(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 4),
       child: Material(
-        color: Colors.white.withValues(alpha: .82),
+        color: surface,
         borderRadius: BorderRadius.circular(22),
         child: InkWell(
           onTap: onOpen,
@@ -477,14 +498,16 @@ class _DashboardNoteCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(22),
               border: Border.all(
-                color: highlighted
-                    ? const Color(0xFF8DAEFF)
-                    : Colors.white.withValues(alpha: .9),
+                color: highlighted ? accent : border,
                 width: highlighted ? 1.5 : 1,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF4776D9).withValues(alpha: .12),
+                  color: Colors.black.withValues(
+                    alpha: Theme.of(context).brightness == Brightness.dark
+                        ? .22
+                        : .08,
+                  ),
                   blurRadius: 22,
                   offset: const Offset(0, 9),
                 ),
@@ -501,13 +524,13 @@ class _DashboardNoteCard extends StatelessWidget {
                         vertical: 5,
                       ),
                       decoration: BoxDecoration(
-                        color: _notesBlue.withValues(alpha: .09),
+                        color: accent.withValues(alpha: .12),
                         borderRadius: BorderRadius.circular(9),
                       ),
                       child: Text(
                         highlighted ? 'New note' : 'Personal note',
-                        style: const TextStyle(
-                          color: _notesBlue,
+                        style: TextStyle(
+                          color: accent,
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
                         ),
@@ -547,8 +570,8 @@ class _DashboardNoteCard extends StatelessWidget {
                   note.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _notesInk,
+                  style: TextStyle(
+                    color: ink,
                     fontSize: 19,
                     fontWeight: FontWeight.w800,
                   ),
@@ -559,40 +582,28 @@ class _DashboardNoteCard extends StatelessWidget {
                     note.content,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF465274),
-                      height: 1.5,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: muted, height: 1.5, fontSize: 13),
                   ),
                 ),
                 Row(
                   children: [
-                    const Icon(
-                      Icons.update_rounded,
-                      size: 15,
-                      color: _notesMuted,
-                    ),
+                    Icon(Icons.update_rounded, size: 15, color: muted),
                     const SizedBox(width: 6),
                     Text(
                       'Updated ${personalNoteDate(note.updatedAt)}',
-                      style: const TextStyle(color: _notesMuted, fontSize: 11),
+                      style: TextStyle(color: muted, fontSize: 11),
                     ),
                     const Spacer(),
-                    const Text(
+                    Text(
                       'Open',
                       style: TextStyle(
-                        color: _notesBlue,
+                        color: accent,
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                     const SizedBox(width: 3),
-                    const Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 15,
-                      color: _notesBlue,
-                    ),
+                    Icon(Icons.arrow_forward_rounded, size: 15, color: accent),
                   ],
                 ),
               ],
@@ -664,7 +675,7 @@ class _PersonalNoteEditorDialogState extends State<_PersonalNoteEditorDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFFF9FBFF),
+      backgroundColor: _notesSurface(context),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       title: Text(widget.note == null ? 'Create a Personal Note' : 'Edit Note'),
       content: SizedBox(
@@ -701,8 +712,8 @@ class _PersonalNoteEditorDialogState extends State<_PersonalNoteEditorDialog> {
                 const SizedBox(height: 8),
                 Text(
                   _error!,
-                  style: const TextStyle(
-                    color: Color(0xFFDC4C57),
+                  style: TextStyle(
+                    color: AppColors.resolve(context, AppColors.error),
                     fontSize: 12,
                   ),
                 ),
@@ -718,14 +729,14 @@ class _PersonalNoteEditorDialogState extends State<_PersonalNoteEditorDialog> {
         ),
         FilledButton.icon(
           onPressed: _saving ? null : _save,
-          style: FilledButton.styleFrom(backgroundColor: _notesBlue),
+          style: FilledButton.styleFrom(backgroundColor: _notesBlue(context)),
           icon: _saving
-              ? const SizedBox(
+              ? SizedBox(
                   width: 15,
                   height: 15,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.onPrimary,
                   ),
                 )
               : const Icon(Icons.save_outlined),
@@ -745,28 +756,31 @@ class _NotesEmpty extends StatelessWidget {
     width: double.infinity,
     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 30),
     decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: .68),
+      color: _notesSurface(context),
       borderRadius: BorderRadius.circular(22),
-      border: Border.all(color: Colors.white.withValues(alpha: .9)),
+      border: Border.all(color: _notesBorder(context)),
     ),
     child: Column(
       children: [
-        const Icon(Icons.note_add_outlined, color: _notesBlue, size: 40),
+        Icon(Icons.note_add_outlined, color: _notesBlue(context), size: 40),
         const SizedBox(height: 10),
-        const Text(
+        Text(
           'Keep your ideas close',
-          style: TextStyle(color: _notesInk, fontWeight: FontWeight.w800),
+          style: TextStyle(
+            color: _notesInk(context),
+            fontWeight: FontWeight.w800,
+          ),
         ),
         const SizedBox(height: 5),
-        const Text(
+        Text(
           'Create a private note and it will appear here automatically.',
           textAlign: TextAlign.center,
-          style: TextStyle(color: _notesMuted, fontSize: 12),
+          style: TextStyle(color: _notesMuted(context), fontSize: 12),
         ),
         const SizedBox(height: 14),
         FilledButton.icon(
           onPressed: onCreate,
-          style: FilledButton.styleFrom(backgroundColor: _notesBlue),
+          style: FilledButton.styleFrom(backgroundColor: _notesBlue(context)),
           icon: const Icon(Icons.add_rounded),
           label: const Text('Create Your First Note'),
         ),
@@ -791,12 +805,16 @@ class _NotesError extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(20),
     decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: .7),
+      color: _notesSurface(context),
       borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: _notesBorder(context)),
     ),
     child: Row(
       children: [
-        const Icon(Icons.error_outline_rounded, color: Color(0xFFDC4C57)),
+        Icon(
+          Icons.error_outline_rounded,
+          color: AppColors.resolve(context, AppColors.error),
+        ),
         const SizedBox(width: 10),
         const Expanded(child: Text('Your notes could not be loaded.')),
         TextButton(onPressed: onRetry, child: const Text('Retry')),

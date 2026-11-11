@@ -194,8 +194,10 @@ class SectionAudienceService {
         return false;
       }
       if (child == null) return true;
+      final moduleId = (module['moduleId'] ?? module['id'] ?? '').toString();
       if (child['courseId'] != courseId ||
-          child['moduleId'] == null ||
+          moduleId.isEmpty ||
+          child['moduleId'] != moduleId ||
           !const <String>['published', 'closed'].contains(child['status']) ||
           !allows(stored(child), sectionId)) {
         return false;

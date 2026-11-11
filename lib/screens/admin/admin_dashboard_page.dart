@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_colors.dart';
 import '../../models/admin_records.dart';
+import '../../services/activity_log_service.dart';
 import '../../services/admin_catalog.dart';
 import '../shared/notification_inbox.dart';
 import '../shared/workspace_widgets.dart';
@@ -41,11 +42,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       .where('aiProcessingStatus', isEqualTo: 'failed')
       .limit(5)
       .snapshots();
-  late final _recentLogs = FirebaseFirestore.instance
-      .collection('activityLogs')
-      .orderBy('createdAt', descending: true)
-      .limit(6)
-      .snapshots();
+  final _activityLogService = ActivityLogService();
+  late Future<ActivityLogPage> _recentLogs = _activityLogService.listAdmin(
+    limit: 6,
+  );
 
   void _go(int index) => widget.onNavigateToTab?.call(index);
   @override
@@ -104,7 +104,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       borderRadius: BorderRadius.circular(12),
                       child: IconButton(
                         tooltip: 'Refresh directory',
-                        onPressed: catalog.start,
+                        onPressed: () {
+                          catalog.start();
+                          setState(() {
+                            _recentLogs = _activityLogService.listAdmin(
+                              limit: 6,
+                            );
+                          });
+                        },
                         icon: const Icon(Icons.refresh_rounded),
                       ),
                     ),
@@ -166,12 +173,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   },
                 ),
                 const SizedBox(height: 26),
-                const Text(
+                Text(
                   'Needs attention',
                   style: TextStyle(
                     fontSize: 19,
                     fontWeight: FontWeight.w700,
-                    color: AdminUi.ink,
+                    color: AppColors.resolve(context, AdminUi.ink),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -346,7 +353,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   ) => DashboardHover(
     accent: color,
     child: Material(
-      color: Colors.white,
+      color: surface,
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         onTap: onTap,
@@ -355,7 +362,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AdminUi.border),
+            border: Border.all(color: borderColor),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -364,11 +371,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 children: [
                   Icon(icon, color: color),
                   const Spacer(),
-                  const Icon(
-                    Icons.north_east_rounded,
-                    color: AdminUi.muted,
-                    size: 16,
-                  ),
+                  Icon(Icons.north_east_rounded, color: textGrey, size: 16),
                 ],
               ),
               const SizedBox(height: 18),
@@ -377,17 +380,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         AdminScope.of(context).error != null)
                     ? '—'
                     : '$value',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.w700,
-                  color: AdminUi.ink,
+                  color: textDark,
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                label,
-                style: const TextStyle(color: AdminUi.muted, fontSize: 12),
-              ),
+              Text(label, style: TextStyle(color: textGrey, fontSize: 12)),
             ],
           ),
         ),
@@ -421,10 +421,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       Expanded(
         child: Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
-            color: AdminUi.ink,
+            color: textDark,
           ),
         ),
       ),
@@ -522,8 +522,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       child: Column(
         children: [
           _panelHeader('Recent activity', 'View logs', () => _go(7)),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: _recentLogs,
+          FutureBuilder<ActivityLogPage>(
+            future: _recentLogs,
             builder: (context, snapshot) {
               if (snapshot.hasError) {
                 return const AdminEmpty(
@@ -537,15 +537,15 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   child: CircularProgressIndicator(),
                 );
               }
-              if (snapshot.data!.docs.isEmpty) {
+              if (snapshot.data!.rows.isEmpty) {
                 return const AdminEmpty(
                   title: 'Activity history starts here',
                   message: 'Future sign-ins, logout requests, course creations and uploads will be recorded.',
                 );
               }
               return Column(
-                children: snapshot.data!.docs.map((doc) {
-                  final row = doc.data();
+                children: snapshot.data!.rows.map((document) {
+                  final row = document.data;
                   return DashboardHover(
                     accent: AdminUi.accent,
                     lift: 2,
@@ -603,9 +603,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'File access is separate from AI processing. Review these materials in the AI monitor.',
-                    style: TextStyle(color: AdminUi.muted, fontSize: 12),
+                    style: TextStyle(color: textGrey, fontSize: 12),
                   ),
                   ...snapshot.data!.docs.map(
                     (doc) => DashboardHover(

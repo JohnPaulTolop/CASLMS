@@ -417,3 +417,13 @@ enabled = true
 # Firebase ID tokens and App Check are verified inside the function. Supabase
 # JWT verification must remain disabled because clients do not use Supabase Auth.
 verify_jwt = false
+
+[functions.activity-logs]
+enabled = true
+# Firebase ID tokens and App Check are verified inside the function.
+verify_jwt = false
+
+[functions.assessment-submission]
+enabled = true
+# Firebase ID tokens and App Check are verified inside the function.
+verify_jwt = false

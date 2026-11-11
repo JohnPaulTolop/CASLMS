@@ -26,6 +26,11 @@ import {
 import {
   createClient,
 } from "npm:@supabase/supabase-js@2";
+import {
+  learningMaterialsBucket,
+  legacyMaterialStoragePath,
+  validMaterialStoragePath,
+} from "./material_storage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -2184,17 +2189,25 @@ async function openLearningMaterialFile(
     const course = await firestore.collection("courses").doc(courseId).get();
     allowed = course.data()?.instructorId === user.uid;
   } else if (role === "student") {
-    const [enrollmentDocument, moduleDocument] = await Promise.all([
+    const [enrollmentDocument, moduleDocument, courseDocument] = await Promise.all([
       firestore.collection("enrollments").doc(`${courseId}_${user.uid}`).get(),
       firestore.collection("modules").doc(moduleId).get(),
+      firestore.collection("courses").doc(courseId).get(),
     ]);
     const enrollment = enrollmentDocument.data();
     const module = moduleDocument.data();
-    allowed = !!enrollment && !!module && canAccessSectionContent({
+    const course = courseDocument.data();
+    const effectiveEnrollment = enrollment && {
+      ...enrollment,
+      sectionId: clean(enrollment.sectionId) || clean(course?.classCode),
+    };
+    allowed = !!effectiveEnrollment && !!module && !!course &&
+      clean(course.status).toLowerCase() === "active" &&
+      canAccessSectionContent({
       studentId: user.uid,
       courseId,
       moduleId,
-      enrollment,
+      enrollment: effectiveEnrollment,
       module,
       child: resource,
     });
@@ -2202,11 +2215,16 @@ async function openLearningMaterialFile(
   if (!allowed) {
     throw new RequestError("This material is not assigned to your section.", 403);
   }
-  const storagePath = clean(resource.storagePath);
-  const storageBucket = clean(resource.storageBucket);
+  const storageBucket = clean(resource.storageBucket) || learningMaterialsBucket;
+  const storagePath = clean(resource.storagePath) ||
+    legacyMaterialStoragePath(
+      resource.fileUrl,
+      requiredSecret("SUPABASE_URL"),
+      learningMaterialsBucket,
+    ) || "";
   if (
-    storageBucket !== "caslms-learning-materials" ||
-    !storagePath.startsWith(`courses/${courseId}/modules/${moduleId}/${resourceId}/`)
+    storageBucket !== learningMaterialsBucket ||
+    !validMaterialStoragePath(storagePath, courseId, moduleId, resourceId)
   ) {
     throw new RequestError("This material has no protected file.", 400);
   }
@@ -2223,19 +2241,6 @@ async function openLearningMaterialFile(
     expiresIn,
     fileName: clean(resource.fileName),
   });
-}
-
-const learningMaterialsBucket = "caslms-learning-materials";
-
-function validMaterialStoragePath(
-  path: string,
-  courseId: string,
-  moduleId: string,
-  resourceId: string,
-): boolean {
-  return path.startsWith(
-    `courses/${courseId}/modules/${moduleId}/${resourceId}/`,
-  ) && !path.includes("..") && !path.endsWith("/");
 }
 
 async function requireOwnedMaterialTarget(

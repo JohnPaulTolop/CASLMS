@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/app_colors.dart';
 import '../../models/admin_records.dart';
 import '../../services/admin_catalog.dart';
 import 'admin_download.dart';
@@ -128,7 +129,7 @@ class _AdminFilesScreenState extends State<AdminFilesScreen> {
             adminText(a.value['code']).compareTo(adminText(b.value['code'])),
       );
     return Scaffold(
-      backgroundColor: AdminUi.background,
+      backgroundColor: AppColors.resolve(context, AdminUi.background),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _stream,
         builder: (context, snapshot) {
@@ -347,9 +348,9 @@ class _AdminFilesScreenState extends State<AdminFilesScreen> {
                           children: [
                             Text(
                               '${files.length} file${files.length == 1 ? '' : 's'} shown',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w700,
-                                color: AdminUi.ink,
+                                color: AppColors.resolve(context, AdminUi.ink),
                               ),
                             ),
                             const AdminBadge('Newest uploaded first'),
@@ -390,8 +391,11 @@ class _AdminFilesScreenState extends State<AdminFilesScreen> {
                           children: [
                             Text(
                               'Page ${_cursors.length + 1} · up to $_pageSize records',
-                              style: const TextStyle(
-                                color: AdminUi.muted,
+                              style: TextStyle(
+                                color: AppColors.resolve(
+                                  context,
+                                  AdminUi.muted,
+                                ),
                                 fontSize: 12,
                               ),
                             ),
@@ -420,11 +424,11 @@ class _AdminFilesScreenState extends State<AdminFilesScreen> {
                   ),
                 ),
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 'Only uploaded learning materials are listed. Export includes the visible matches on this page. Times use your browser’s local timezone.',
                 style: TextStyle(
                   fontSize: 12,
-                  color: AdminUi.muted,
+                  color: AppColors.resolve(context, AdminUi.muted),
                   height: 1.5,
                 ),
               ),
@@ -441,7 +445,9 @@ class _AdminFilesScreenState extends State<AdminFilesScreen> {
   ) => SingleChildScrollView(
     scrollDirection: Axis.horizontal,
     child: DataTable(
-      headingRowColor: const WidgetStatePropertyAll(AdminUi.background),
+      headingRowColor: WidgetStatePropertyAll(
+        AppColors.resolve(context, AdminUi.background),
+      ),
       dataRowMinHeight: 68,
       dataRowMaxHeight: 78,
       columnSpacing: 22,
@@ -476,8 +482,8 @@ class _AdminFilesScreenState extends State<AdminFilesScreen> {
                       adminText(file['fileName']),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AdminUi.muted,
+                      style: TextStyle(
+                        color: AppColors.resolve(context, AdminUi.muted),
                         fontSize: 11,
                       ),
                     ),
@@ -554,7 +560,10 @@ class _AdminFilesScreenState extends State<AdminFilesScreen> {
                     adminText(file['fileName']),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12, color: AdminUi.muted),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.resolve(context, AdminUi.muted),
+                    ),
                   ),
                   const SizedBox(height: 5),
                   Text(
@@ -562,7 +571,10 @@ class _AdminFilesScreenState extends State<AdminFilesScreen> {
                       owner?['name'] ?? 'Account unavailable',
                       course?['code'] ?? 'Course unavailable',
                     ].join(' · '),
-                    style: const TextStyle(fontSize: 12, color: AdminUi.muted),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.resolve(context, AdminUi.muted),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Wrap(
@@ -577,7 +589,10 @@ class _AdminFilesScreenState extends State<AdminFilesScreen> {
                   const SizedBox(height: 8),
                   Text(
                     adminTimestamp(file['createdAt']),
-                    style: const TextStyle(fontSize: 11, color: AdminUi.muted),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.resolve(context, AdminUi.muted),
+                    ),
                   ),
                 ],
               ),
