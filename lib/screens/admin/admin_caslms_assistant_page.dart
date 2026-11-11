@@ -1,4 +1,6 @@
 import '../../core/app_colors.dart';
+import '../shared/workspace_widgets.dart';
+import '../shared/workspace_shell.dart';
 
 import 'package:flutter/material.dart';
 
@@ -15,11 +17,13 @@ class AdminCaslmsAssistantScreen extends StatefulWidget {
 
 class _AdminCaslmsAssistantScreenState
     extends State<AdminCaslmsAssistantScreen> {
-  static const Color primary = AppColors.primaryBlue;
-  static const Color background = Color(0xFFF7F8FC);
-  static const Color darkText = AppColors.darkText;
-  static const Color mutedText = AppColors.secondaryText;
-  static const Color border = Color(0xFFE4E7EF);
+  Color get primary => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get darkText => AppColors.resolve(context, AppColors.darkText);
+  Color get mutedText => AppColors.resolve(context, AppColors.secondaryText);
+  Color get border => AppColors.resolve(context, AppColors.inputBorder);
+  Color get surface => AppColors.resolve(context, Colors.white);
+  Color get blueTint => AppColors.resolve(context, AppColors.blueTint);
 
   final AdminAssistantService _assistant = AdminAssistantService();
   final TextEditingController _messageController = TextEditingController();
@@ -154,88 +158,75 @@ class _AdminCaslmsAssistantScreenState
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final inset = workspaceInset(width);
+
     return Scaffold(
       backgroundColor: background,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        titleSpacing: 20,
-        title: const Row(
-          children: <Widget>[
-            _AssistantAvatar(size: 38),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    'CASLMS Assistant',
-                    style: TextStyle(
-                      color: darkText,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                    ),
+      body: SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1320),
+            child: Column(
+              children: <Widget>[
+                Padding(
+                  padding: EdgeInsets.fromLTRB(inset, 12, inset, 8),
+                  child: WorkspaceHeading(
+                    showEyebrow: false,
+                    title: 'CASLMS Assistant',
+                    subtitle: 'Secure records analysis for students, subjects, applications, and requirements.',
+                    eyebrow: 'ADMINISTRATION',
+                    actions: [
+                      IconButton(
+                        onPressed: _isSending ? null : _clearConversation,
+                        tooltip: 'Clear conversation',
+                        icon: Icon(
+                          Icons.delete_sweep_outlined,
+                          color: darkText,
+                        ),
+                      ),
+                    ],
                   ),
-                  Text(
-                    'Admin records analysis',
-                    style: TextStyle(
-                      color: mutedText,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w500,
-                    ),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(inset, 0, inset, 8),
+                  child: const AssistantScopeBanner(
+                    color: AppColors.primaryBlue,
                   ),
-                ],
-              ),
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: inset),
+                  child: _buildPrivacyNotice(),
+                ),
+                Expanded(child: _buildMessages(inset)),
+                _buildSuggestions(inset),
+                _buildComposer(inset),
+              ],
             ),
-          ],
+          ),
         ),
-        actions: <Widget>[
-          IconButton(
-            onPressed: _isSending ? null : _clearConversation,
-            tooltip: 'Clear conversation',
-            icon: const Icon(Icons.delete_sweep_outlined),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: Column(
-        children: <Widget>[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: AssistantScopeBanner(color: primary),
-          ),
-          _buildPrivacyNotice(),
-          Expanded(child: _buildMessages()),
-          _buildSuggestions(),
-          _buildComposer(),
-        ],
       ),
     );
   }
 
   Widget _buildPrivacyNotice() {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+    return WorkspaceSurface(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-      decoration: BoxDecoration(
-        color: AppColors.blueTint,
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: const Color(0xFFC7D2FE)),
-      ),
-      child: const Row(
+      color: AppColors.resolve(context, AppColors.noticeboard),
+      borderColor: AppColors.resolve(context, AppColors.noticeboard),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Icon(Icons.admin_panel_settings_outlined, color: primary, size: 19),
-          SizedBox(width: 10),
+          Icon(Icons.admin_panel_settings_outlined, color: primary, size: 20),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               'Admin only. Answers use current Firestore records. Always '
               'verify a record before making an official decision.',
               style: TextStyle(
-                color: Color(0xFF3730A3),
-                fontSize: 11.5,
+                color: darkText,
+                fontSize: 12,
                 height: 1.4,
                 fontWeight: FontWeight.w600,
               ),
@@ -246,10 +237,10 @@ class _AdminCaslmsAssistantScreenState
     );
   }
 
-  Widget _buildMessages() {
+  Widget _buildMessages(double inset) {
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
+      padding: EdgeInsets.fromLTRB(inset, 14, inset, 12),
       itemCount: _messages.length + (_isSending ? 1 : 0),
       itemBuilder: (BuildContext context, int index) {
         if (_isSending && index == _messages.length) {
@@ -261,16 +252,16 @@ class _AdminCaslmsAssistantScreenState
     );
   }
 
-  Widget _buildSuggestions() {
+  Widget _buildSuggestions(double inset) {
     if (_messages.length > 2) {
       return const SizedBox.shrink();
     }
 
     return SizedBox(
-      height: 45,
+      height: 48,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: EdgeInsets.symmetric(horizontal: inset, vertical: 4),
         itemCount: _suggestions.length,
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (BuildContext context, int index) {
@@ -278,15 +269,15 @@ class _AdminCaslmsAssistantScreenState
 
           return ActionChip(
             onPressed: _isSending ? null : () => _send(suggestion),
-            avatar: const Icon(Icons.auto_awesome_rounded, size: 16),
+            avatar: Icon(Icons.auto_awesome_rounded, size: 16, color: primary),
             label: Text(suggestion),
-            labelStyle: const TextStyle(
+            labelStyle: TextStyle(
               color: primary,
-              fontSize: 11,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
             ),
-            backgroundColor: Colors.white,
-            side: const BorderSide(color: border),
+            backgroundColor: surface,
+            side: BorderSide(color: border),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -296,13 +287,13 @@ class _AdminCaslmsAssistantScreenState
     );
   }
 
-  Widget _buildComposer() {
+  Widget _buildComposer(double inset) {
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-        decoration: const BoxDecoration(
-          color: Colors.white,
+        padding: EdgeInsets.fromLTRB(inset, 10, inset, 14),
+        decoration: BoxDecoration(
+          color: surface,
           border: Border(top: BorderSide(color: border)),
         ),
         child: Row(
@@ -324,7 +315,7 @@ class _AdminCaslmsAssistantScreenState
                 },
                 decoration: InputDecoration(
                   hintText: 'Ask about a student, subject, or requirement...',
-                  hintStyle: const TextStyle(color: mutedText, fontSize: 12),
+                  hintStyle: TextStyle(color: mutedText, fontSize: 13),
                   filled: true,
                   fillColor: background,
                   contentPadding: const EdgeInsets.symmetric(
@@ -333,15 +324,15 @@ class _AdminCaslmsAssistantScreenState
                   ),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: border),
+                    borderSide: BorderSide(color: border),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: border),
+                    borderSide: BorderSide(color: border),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
-                    borderSide: const BorderSide(color: primary, width: 1.5),
+                    borderSide: BorderSide(color: primary, width: 1.5),
                   ),
                 ),
               ),
@@ -385,16 +376,22 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isUser = message.isUser;
+    final primary = AppColors.resolve(context, AppColors.primaryBlue);
+    final surface = AppColors.resolve(context, Colors.white);
+    final darkText = AppColors.resolve(context, AppColors.darkText);
+    final border = AppColors.resolve(context, AppColors.inputBorder);
+    final error = AppColors.resolve(context, AppColors.error);
+
     final Color bubbleColor = isUser
-        ? _AdminCaslmsAssistantScreenState.primary
+        ? primary
         : message.isError
-        ? const Color(0xFFFFEBEE)
-        : Colors.white;
+        ? error.withValues(alpha: 0.08)
+        : surface;
     final Color textColor = isUser
         ? Colors.white
         : message.isError
-        ? const Color(0xFFB42318)
-        : _AdminCaslmsAssistantScreenState.darkText;
+        ? error
+        : darkText;
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -406,36 +403,36 @@ class _MessageBubble extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             if (!isUser) ...<Widget>[
-              const _AssistantAvatar(size: 31),
-              const SizedBox(width: 9),
+              const _AssistantAvatar(size: 32),
+              const SizedBox(width: 10),
             ],
             Flexible(
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 15,
+                  horizontal: 16,
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
                   color: bubbleColor,
                   borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(17),
-                    topRight: const Radius.circular(17),
-                    bottomLeft: Radius.circular(isUser ? 17 : 4),
-                    bottomRight: Radius.circular(isUser ? 4 : 17),
+                    topLeft: const Radius.circular(18),
+                    topRight: const Radius.circular(18),
+                    bottomLeft: Radius.circular(isUser ? 18 : 4),
+                    bottomRight: Radius.circular(isUser ? 4 : 18),
                   ),
                   border: isUser
                       ? null
                       : Border.all(
                           color: message.isError
-                              ? const Color(0xFFFECACA)
-                              : _AdminCaslmsAssistantScreenState.border,
+                              ? error.withValues(alpha: 0.3)
+                              : border,
                         ),
                 ),
                 child: SelectableText(
                   message.text,
                   style: TextStyle(
                     color: textColor,
-                    fontSize: 13,
+                    fontSize: 13.5,
                     height: 1.48,
                     fontWeight: FontWeight.w500,
                   ),
@@ -460,7 +457,7 @@ class _AssistantAvatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppColors.primaryBlue,
+        color: AppColors.resolve(context, AppColors.primaryBlue),
         borderRadius: BorderRadius.circular(size * 0.34),
       ),
       alignment: Alignment.center,
@@ -478,31 +475,36 @@ class _ThinkingBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Align(
+    final surface = AppColors.resolve(context, Colors.white);
+    final border = AppColors.resolve(context, AppColors.inputBorder);
+    final primary = AppColors.resolve(context, AppColors.primaryBlue);
+
+    return Align(
       alignment: Alignment.centerLeft,
       child: Padding(
-        padding: EdgeInsets.only(bottom: 13),
+        padding: const EdgeInsets.only(bottom: 13),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            _AssistantAvatar(size: 31),
-            SizedBox(width: 9),
+            const _AssistantAvatar(size: 32),
+            const SizedBox(width: 10),
             DecoratedBox(
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.all(Radius.circular(17)),
-                border: Border.fromBorderSide(
-                  BorderSide(color: _AdminCaslmsAssistantScreenState.border),
-                ),
+                color: surface,
+                borderRadius: const BorderRadius.all(Radius.circular(18)),
+                border: Border.fromBorderSide(BorderSide(color: border)),
               ),
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 13,
+                ),
                 child: SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2.2,
-                    color: _AdminCaslmsAssistantScreenState.primary,
+                    color: primary,
                   ),
                 ),
               ),

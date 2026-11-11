@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'course_content_paths.dart';
 import 'notification_service.dart';
 import 'section_audience_service.dart';
 
@@ -261,27 +262,26 @@ class ModuleService {
         sectionIds: sectionIds,
       );
 
-      final DocumentReference<Map<String, dynamic>> document = await _firestore
-          .collection('modules')
-          .add({
-            'courseId': cleanCourseId,
-
-            'title': cleanTitle,
-
-            'description': cleanDescription,
-
-            'order': order,
-
-            'status': cleanStatus,
-
-            'sectionIds': audience,
-
-            'createdBy': instructor.uid,
-
-            'createdAt': FieldValue.serverTimestamp(),
-
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+      final document = _firestore.collection('modules').doc();
+      final scopedDocument = CourseContentPaths.modules(
+        _firestore,
+        cleanCourseId,
+      ).doc(document.id);
+      final data = <String, dynamic>{
+        'courseId': cleanCourseId,
+        'title': cleanTitle,
+        'description': cleanDescription,
+        'order': order,
+        'status': cleanStatus,
+        'sectionIds': audience,
+        'createdBy': instructor.uid,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      final batch = _firestore.batch()
+        ..set(document, data)
+        ..set(scopedDocument, data);
+      await batch.commit();
 
       if (cleanStatus == 'published') {
         await _createPublishedNotificationsBestEffort(document.id);
@@ -348,10 +348,18 @@ class ModuleService {
         }
       }
     }
-    await reference.update({
+    final updates = <String, dynamic>{
       'sectionIds': audience,
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    };
+    final batch = _firestore.batch()
+      ..update(reference, updates)
+      ..set(
+        CourseContentPaths.module(_firestore, courseId, cleanModuleId),
+        {...module, ...updates},
+        SetOptions(merge: true),
+      );
+    await batch.commit();
   }
 
   // ============================================================
@@ -393,11 +401,23 @@ class ModuleService {
         instructorId: instructor.uid,
       );
 
-      await _firestore.collection('modules').doc(cleanModuleId).update({
+      final reference = _firestore.collection('modules').doc(cleanModuleId);
+      final updates = <String, dynamic>{
         'status': cleanStatus,
-
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+      final batch = _firestore.batch()
+        ..update(reference, updates)
+        ..set(
+          CourseContentPaths.module(
+            _firestore,
+            courseId,
+            cleanModuleId,
+          ),
+          {...module, ...updates},
+          SetOptions(merge: true),
+        );
+      await batch.commit();
 
       if (cleanStatus == 'published') {
         await _createPublishedNotificationsBestEffort(cleanModuleId);
@@ -455,7 +475,16 @@ class ModuleService {
         instructorId: instructor.uid,
       );
 
-      await _firestore.collection('modules').doc(cleanModuleId).delete();
+      final batch = _firestore.batch()
+        ..delete(_firestore.collection('modules').doc(cleanModuleId))
+        ..delete(
+          CourseContentPaths.module(
+            _firestore,
+            courseId,
+            cleanModuleId,
+          ),
+        );
+      await batch.commit();
     } on ModuleServiceException {
       rethrow;
     } on FirebaseException catch (e) {

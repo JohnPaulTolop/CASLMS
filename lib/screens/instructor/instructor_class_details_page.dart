@@ -379,13 +379,26 @@ class _InstructorClassDetailsScreenState
         _materials
           ..clear()
           ..addAll(
-            materialSnapshot.docs.map((doc) => {...doc.data(), 'id': doc.id}),
+            SectionAudienceService.filterInstructorChildren(
+              materialSnapshot.docs.map(
+                (doc) => <String, dynamic>{...doc.data(), 'id': doc.id},
+              ),
+              modules,
+              _sectionId,
+            ),
           );
         _materials.sort(
           (a, b) =>
               courseDate(b['createdAt']).compareTo(courseDate(a['createdAt'])),
         );
-        _modules = modules;
+        _modules = modules
+            .where(
+              (module) => SectionAudienceService.visibleInInstructorSection(
+                module,
+                _sectionId,
+              ),
+            )
+            .toList();
         _students = students;
         _courseInvitations = courseInvitations
             .where(
@@ -396,31 +409,34 @@ class _InstructorClassDetailsScreenState
                       _sectionId,
             )
             .toList();
-        _assessments = assessments
-            .where(
-              (assessment) =>
-                  _sectionId == null ||
-                  _sectionId!.isEmpty ||
-                  (assessment['sectionId'] ?? '').toString().isEmpty ||
-                  assessment['sectionId'] == _sectionId,
-            )
-            .toList();
+        _assessments = SectionAudienceService.filterInstructorChildren(
+          assessments,
+          modules,
+          _sectionId,
+        );
         _assessmentSubmissions = assessmentSubmissions
             .where(
               (submission) =>
-                  _sectionId == null ||
-                  _sectionId!.isEmpty ||
-                  ((submission['sectionId'] ?? '').toString().isNotEmpty
-                      ? submission['sectionId'] == _sectionId
-                      : enrollmentSnapshot.docs.any((document) {
-                          final enrollment = document.data();
-                          return enrollment['studentId'] ==
-                                  submission['studentId'] &&
-                              (enrollment['sectionId'] ??
-                                      courseData['classCode'] ??
-                                      '') ==
-                                  _sectionId;
-                        })),
+                  (_sectionId == null ||
+                      _sectionId!.isEmpty ||
+                      ((submission['sectionId'] ?? '').toString().isNotEmpty
+                          ? submission['sectionId'] == _sectionId
+                          : enrollmentSnapshot.docs.any((document) {
+                              final enrollment = document.data();
+                              return enrollment['studentId'] ==
+                                      submission['studentId'] &&
+                                  (enrollment['sectionId'] ??
+                                          courseData['classCode'] ??
+                                          '') ==
+                                      _sectionId;
+                            }))) &&
+                  (_sectionId == null ||
+                      _sectionId!.isEmpty ||
+                      _assessments.any(
+                        (a) =>
+                            (a['assessmentId'] ?? a['id']) ==
+                            submission['assessmentId'],
+                      )),
             )
             .toList();
         _isLoading = false;

@@ -10,7 +10,7 @@ class ThemeNotifier extends ChangeNotifier {
 
   factory ThemeNotifier() => instance;
 
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode = ThemeMode.light;
 
   ThemeMode get themeMode => _themeMode;
 
@@ -18,7 +18,10 @@ class ThemeNotifier extends ChangeNotifier {
     if (newMode == _themeMode) return;
     _themeMode = newMode;
     notifyListeners();
-    await _saveThemeMode(newMode);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('themeMode', newMode.name);
+    } catch (_) {}
   }
 
   Future<void> _loadThemeMode() async {
@@ -27,17 +30,11 @@ class ThemeNotifier extends ChangeNotifier {
       final value = prefs.getString('themeMode');
       if (value == 'dark') {
         _themeMode = ThemeMode.dark;
+        notifyListeners();
       } else if (value == 'light') {
         _themeMode = ThemeMode.light;
+        notifyListeners();
       }
-    } catch (_) {
-      _themeMode = ThemeMode.system;
-    }
-    notifyListeners();
-  }
-
-  Future<void> _saveThemeMode(ThemeMode mode) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('themeMode', mode.name);
+    } catch (_) {}
   }
 }

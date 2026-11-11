@@ -21,65 +21,60 @@ const bool _isUiRedesignMode = bool.fromEnvironment('CASLMS_UI_REDESIGN_MODE');
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ============================================================
-  // FIREBASE
-  // ============================================================
+  try {
+    // ============================================================
+    // FIREBASE
+    // ============================================================
 
-  if (_caslmsLocalIntegration && (kReleaseMode || !kIsWeb)) {
-    throw StateError('Local integration mode supports debug web builds only.');
+    if (_caslmsLocalIntegration && (kReleaseMode || !kIsWeb)) {
+      throw StateError(
+        'Local integration mode supports debug web builds only.',
+      );
+    }
+
+    await Firebase.initializeApp(
+      options: _caslmsLocalIntegration
+          ? const FirebaseOptions(
+              apiKey: 'local-emulator-only',
+              appId: '1:1234567890:web:caslmslocal',
+              messagingSenderId: '1234567890',
+              projectId: 'demo-caslms-ai-integration',
+              authDomain: 'demo-caslms-ai-integration.firebaseapp.com',
+            )
+          : DefaultFirebaseOptions.currentPlatform,
+    );
+
+    if (_caslmsLocalIntegration) {
+      await FirebaseAuth.instance.useAuthEmulator('127.0.0.1', 9099);
+
+      FirebaseFirestore.instance.useFirestoreEmulator('127.0.0.1', 8080);
+
+      debugPrint('CASLMS LOCAL INTEGRATION: Firebase emulators enabled.');
+    }
+
+    // ============================================================
+    // FIREBASE APP CHECK
+    // ============================================================
+
+    if (!_caslmsLocalIntegration) {
+      await _activateFirebaseAppCheck();
+    }
+
+    // ============================================================
+    // SUPABASE
+    // ============================================================
+
+    await Supabase.initialize(
+      url: _caslmsLocalIntegration
+          ? 'http://127.0.0.1:8787'
+          : SupabaseConfig.projectUrl,
+      publishableKey: _caslmsLocalIntegration
+          ? 'local-test-anon-key'
+          : SupabaseConfig.publishableKey,
+    );
+  } catch (e, stack) {
+    debugPrint('CASLMS Initialization Error: $e\n$stack');
   }
-
-  await Firebase.initializeApp(
-    options: _caslmsLocalIntegration
-        ? const FirebaseOptions(
-            apiKey: 'local-emulator-only',
-            appId: '1:1234567890:web:caslmslocal',
-            messagingSenderId: '1234567890',
-            projectId: 'demo-caslms-ai-integration',
-            authDomain: 'demo-caslms-ai-integration.firebaseapp.com',
-          )
-        : DefaultFirebaseOptions.currentPlatform,
-  );
-
-  if (_caslmsLocalIntegration) {
-    await FirebaseAuth.instance.useAuthEmulator('127.0.0.1', 9099);
-
-    FirebaseFirestore.instance.useFirestoreEmulator('127.0.0.1', 8080);
-
-    debugPrint('CASLMS LOCAL INTEGRATION: Firebase emulators enabled.');
-  }
-
-  // ============================================================
-  // FIREBASE APP CHECK
-  // ============================================================
-
-  if (!_caslmsLocalIntegration) {
-    await _activateFirebaseAppCheck();
-  }
-
-  // ============================================================
-  // SUPABASE
-  //
-  // Supabase:
-  // - Learning-material file storage
-  // - Faculty ID document storage
-  // - Edge Functions
-  //
-  // Firebase:
-  // - Authentication
-  // - Firestore
-  // - Firebase AI Logic
-  // - App Check
-  // ============================================================
-
-  await Supabase.initialize(
-    url: _caslmsLocalIntegration
-        ? 'http://127.0.0.1:8787'
-        : SupabaseConfig.projectUrl,
-    publishableKey: _caslmsLocalIntegration
-        ? 'local-test-anon-key'
-        : SupabaseConfig.publishableKey,
-  );
 
   // ============================================================
   // START APP

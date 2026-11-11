@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'course_content_paths.dart';
 import 'notification_service.dart';
 import 'section_audience_service.dart';
 
@@ -428,7 +429,17 @@ class AssessmentService {
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
-    await assessmentDocument.set(data);
+    final createBatch = _firestore.batch()
+      ..set(assessmentDocument, data)
+      ..set(
+        CourseContentPaths.assessments(
+          _firestore,
+          cleanCourseId,
+          cleanModuleId,
+        ).doc(assessmentDocument.id),
+        data,
+      );
+    await createBatch.commit();
 
     if (cleanStatus == 'published') {
       await _createPublishedNotificationsBestEffort(assessmentDocument.id);
@@ -601,26 +612,38 @@ class AssessmentService {
         ? _validateArtifactSubmissionTypes(allowedSubmissionTypes)
         : const <String>[];
 
-    await _firestore
-        .collection(assessmentsCollection)
-        .doc(cleanAssessmentId)
-        .update({
-          'title': cleanTitle,
-          'instructions': cleanInstructions,
-          'assessmentType': _validateAssessmentType(assessmentType),
-          'submissionMethod': cleanSubmissionMethod,
-          'allowedSubmissionTypes': cleanAllowedSubmissionTypes,
-          'submissionTracking': cleanSubmissionMethod == 'google_form'
-              ? 'instructor_verification'
-              : 'verified_artifact',
-          'deliveryType': cleanSubmissionMethod == 'google_form'
-              ? 'external_link'
-              : 'artifact_submission',
-          'externalUrl': cleanExternalUrl,
-          'totalPoints': totalPoints,
-          'dueAt': Timestamp.fromDate(dueAt),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+    final updates = <String, dynamic>{
+      'title': cleanTitle,
+      'instructions': cleanInstructions,
+      'assessmentType': _validateAssessmentType(assessmentType),
+      'submissionMethod': cleanSubmissionMethod,
+      'allowedSubmissionTypes': cleanAllowedSubmissionTypes,
+      'submissionTracking': cleanSubmissionMethod == 'google_form'
+          ? 'instructor_verification'
+          : 'verified_artifact',
+      'deliveryType': cleanSubmissionMethod == 'google_form'
+          ? 'external_link'
+          : 'artifact_submission',
+      'externalUrl': cleanExternalUrl,
+      'totalPoints': totalPoints,
+      'dueAt': Timestamp.fromDate(dueAt),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    final batch = _firestore.batch()
+      ..update(
+        _firestore.collection(assessmentsCollection).doc(cleanAssessmentId),
+        updates,
+      )
+      ..set(
+        CourseContentPaths.assessments(
+          _firestore,
+          courseId,
+          moduleId,
+        ).doc(cleanAssessmentId),
+        {...assessment, ...updates},
+        SetOptions(merge: true),
+      );
+    await batch.commit();
   }
 
   // ============================================================
@@ -657,13 +680,27 @@ class AssessmentService {
       );
     }
 
-    await _firestore
-        .collection(assessmentsCollection)
-        .doc(cleanAssessmentId)
-        .update({
-          'status': cleanStatus,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
+    final courseId = (assessment['courseId'] ?? '').toString().trim();
+    final moduleId = (assessment['moduleId'] ?? '').toString().trim();
+    final updates = <String, dynamic>{
+      'status': cleanStatus,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    final batch = _firestore.batch()
+      ..update(
+        _firestore.collection(assessmentsCollection).doc(cleanAssessmentId),
+        updates,
+      )
+      ..set(
+        CourseContentPaths.assessments(
+          _firestore,
+          courseId,
+          moduleId,
+        ).doc(cleanAssessmentId),
+        {...assessment, ...updates},
+        SetOptions(merge: true),
+      );
+    await batch.commit();
 
     if (cleanStatus == 'published') {
       await _createPublishedNotificationsBestEffort(cleanAssessmentId);
@@ -708,10 +745,20 @@ class AssessmentService {
       moduleId: (assessment['moduleId'] ?? '').toString(),
     );
 
-    await _firestore
-        .collection(assessmentsCollection)
-        .doc(cleanAssessmentId)
-        .delete();
+    final courseId = (assessment['courseId'] ?? '').toString().trim();
+    final moduleId = (assessment['moduleId'] ?? '').toString().trim();
+    final batch = _firestore.batch()
+      ..delete(
+        _firestore.collection(assessmentsCollection).doc(cleanAssessmentId),
+      )
+      ..delete(
+        CourseContentPaths.assessments(
+          _firestore,
+          courseId,
+          moduleId,
+        ).doc(cleanAssessmentId),
+      );
+    await batch.commit();
   }
 }
 

@@ -13,6 +13,7 @@ class InstructorModuleBuilderScreen extends StatefulWidget {
   final String courseTitle;
   final ModuleService? moduleService;
   final String? initialSectionId;
+  final List<String>? initialSectionIds;
   final List<Map<String, dynamic>> sections;
 
   const InstructorModuleBuilderScreen({
@@ -22,6 +23,7 @@ class InstructorModuleBuilderScreen extends StatefulWidget {
     this.courseTitle = '',
     this.moduleService,
     this.initialSectionId,
+    this.initialSectionIds,
     required this.sections,
   });
 
@@ -106,9 +108,11 @@ class _InstructorModuleBuilderScreenState
       setState(() {
         _isPreparing = false;
         _sections = sections;
-        _sectionIds = sections.any((section) => section['id'] == requested)
-            ? <String>[requested]
-            : const <String>[];
+        _sectionIds =
+            widget.initialSectionIds ??
+            (sections.any((section) => section['id'] == requested)
+                ? <String>[requested]
+                : const <String>[]);
       });
     } on ModuleServiceException catch (e) {
       if (!mounted) {

@@ -94,13 +94,28 @@ class _LiveClassesScreenState extends State<LiveClassesScreen> {
       );
       if (!mounted) return;
       if (action == 'join') {
+        final responseLiveClassId = (response['liveClassId'] ?? '')
+            .toString()
+            .trim();
+        final responseSessionId = (response['sessionId'] ?? '')
+            .toString()
+            .trim();
+        final connection = <String, dynamic>{
+          ...response,
+          'liveClassId': responseLiveClassId.isNotEmpty
+              ? responseLiveClassId
+              : (_state?['liveClassId'] ?? '').toString().trim(),
+          'sessionId': responseSessionId.isNotEmpty
+              ? responseSessionId
+              : (session?['sessionId'] ?? '').toString().trim(),
+        };
         _inRoom = true;
         await Navigator.of(context).push(
           GradeRoute<void>(
             builder: (_) => _LiveRoomScreen(
               courseId: widget.courseId,
               sectionId: _state!['sectionId'] as String,
-              connection: response,
+              connection: connection,
             ),
           ),
         );
@@ -747,9 +762,9 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
   final _chatService = MeetingChatService();
   Timer? _poll;
   StreamSubscription<List<MeetingChatMessage>>? _chatSubscription;
+  Stream<List<MeetingChatMessage>>? _panelChatMessages;
   late final String _sessionId;
   late final String _liveClassId;
-  late final Stream<List<MeetingChatMessage>> _chatMessages;
   bool _ending = false;
   bool _checking = false;
   bool _leaving = false;
@@ -765,19 +780,24 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
     super.initState();
     _sessionId = (widget.connection['sessionId'] ?? '').toString();
     _liveClassId = (widget.connection['liveClassId'] ?? '').toString();
-    _chatMessages = _chatService
-        .watchMessages(
-          liveClassId: _liveClassId,
-          courseId: widget.courseId,
-          sectionId: widget.sectionId,
-          sessionId: _sessionId,
-        )
-        .asBroadcastStream();
-    _chatSubscription = _chatMessages.listen(
+    _chatSubscription = _watchChatMessages().listen(
       _trackUnreadMessages,
       onError: (Object _) {},
     );
     _poll = Timer.periodic(const Duration(seconds: 20), (_) => _check());
+  }
+
+  Stream<List<MeetingChatMessage>> _watchChatMessages() {
+    return _chatService.watchMessages(
+      liveClassId: _liveClassId,
+      courseId: widget.courseId,
+      sectionId: widget.sectionId,
+      sessionId: _sessionId,
+    );
+  }
+
+  Stream<List<MeetingChatMessage>> get _visibleChatMessages {
+    return _panelChatMessages ??= _watchChatMessages();
   }
 
   @override
@@ -814,6 +834,7 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
   void _setDesktopChat(bool open) {
     setState(() {
       _desktopChatOpen = open;
+      if (!open) _panelChatMessages = null;
       if (open) _unreadMessages = 0;
     });
   }
@@ -824,6 +845,7 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
       _mobileChatVisible = true;
       _unreadMessages = 0;
     });
+    final messages = _watchChatMessages();
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -833,7 +855,7 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
         heightFactor: .82,
         child: MeetingChatPanel(
           service: _chatService,
-          messages: _chatMessages,
+          messages: messages,
           liveClassId: _liveClassId,
           courseId: widget.courseId,
           sectionId: widget.sectionId,
@@ -1003,7 +1025,7 @@ class _LiveRoomScreenState extends State<_LiveRoomScreen> {
                           ? const SizedBox.shrink()
                           : MeetingChatPanel(
                               service: _chatService,
-                              messages: _chatMessages,
+                              messages: _visibleChatMessages,
                               liveClassId: _liveClassId,
                               courseId: widget.courseId,
                               sectionId: widget.sectionId,

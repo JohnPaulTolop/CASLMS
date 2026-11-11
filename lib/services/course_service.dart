@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'course_content_paths.dart';
 import 'section_audience_service.dart';
 
 class CourseService {
@@ -209,18 +210,18 @@ class CourseService {
       final enrollment = await SectionAudienceService(firestore: _firestore)
           .requireActiveEnrollment(courseId: courseId.trim(), studentId: uid);
       final sectionId = (enrollment['sectionId'] ?? '').toString().trim();
-      final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
-          .collection('modules')
-          .where('courseId', isEqualTo: courseId.trim())
-          .where('status', isEqualTo: 'published')
-          .where(
-            'sectionIds',
-            arrayContainsAny: <String>[
-              SectionAudienceService.allSections,
-              sectionId,
-            ],
-          )
-          .get();
+      final QuerySnapshot<Map<String, dynamic>> snapshot =
+          await CourseContentPaths.modules(_firestore, courseId.trim())
+              .where('courseId', isEqualTo: courseId.trim())
+              .where('status', isEqualTo: 'published')
+              .where(
+                'sectionIds',
+                arrayContainsAny: <String>[
+                  SectionAudienceService.allSections,
+                  sectionId,
+                ],
+              )
+              .get();
 
       final List<Map<String, dynamic>> modules = snapshot.docs
           .map((document) {

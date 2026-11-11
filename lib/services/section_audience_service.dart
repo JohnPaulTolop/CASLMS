@@ -44,6 +44,44 @@ class SectionAudienceService {
         (audience.contains(allSections) || audience.contains(sectionId));
   }
 
+  /// Instructor display filtering only; server authorization remains authoritative.
+  /// All sections keeps every record available for management, including drafts.
+  static bool visibleInInstructorSection(
+    Map<String, dynamic> record,
+    String? sectionId, {
+    Map<String, dynamic>? parent,
+  }) {
+    if (sectionId == null || sectionId.isEmpty) return true;
+    try {
+      if (!allows(stored(record), sectionId)) return false;
+      final singleSection = (record['sectionId'] ?? '').toString();
+      if (singleSection.isNotEmpty && singleSection != sectionId) return false;
+      if (parent == null) return true;
+      return record['courseId'] == parent['courseId'] &&
+          record['moduleId'] == (parent['moduleId'] ?? parent['id']) &&
+          allows(stored(parent), sectionId);
+    } on FormatException {
+      return false;
+    }
+  }
+
+  static List<Map<String, dynamic>> filterInstructorChildren(
+    Iterable<Map<String, dynamic>> records,
+    Iterable<Map<String, dynamic>> modules,
+    String? sectionId,
+  ) {
+    if (sectionId == null || sectionId.isEmpty) return records.toList();
+    final parents = {
+      for (final module in modules)
+        (module['moduleId'] ?? module['id']): module,
+    };
+    return records.where((record) {
+      final parent = parents[record['moduleId']];
+      return parent != null &&
+          visibleInInstructorSection(record, sectionId, parent: parent);
+    }).toList();
+  }
+
   static void assertChild({
     required List<String> parent,
     required List<String> child,
@@ -113,11 +151,31 @@ class SectionAudienceService {
     if (data == null ||
         data['studentId'] != studentId ||
         data['courseId'] != courseId ||
-        data['status'] != 'active' ||
-        (data['sectionId'] ?? '').toString().trim().isEmpty) {
+        data['status'] != 'active') {
       throw const FormatException('An active section enrollment is required.');
     }
-    return <String, dynamic>{...data, 'id': document.id};
+    var sectionId = (data['sectionId'] ?? '').toString().trim();
+    if (sectionId.isEmpty) {
+      final course = await _firestore
+          .collection('courses')
+          .doc(courseId)
+          .get(const GetOptions(source: Source.server));
+      final courseData = course.data();
+      if (courseData?['status'] != 'active') {
+        throw const FormatException(
+          'An active section enrollment is required.',
+        );
+      }
+      sectionId = (courseData?['classCode'] ?? '').toString().trim();
+    }
+    if (sectionId.isEmpty) {
+      throw const FormatException('An active section enrollment is required.');
+    }
+    return <String, dynamic>{
+      ...data,
+      'id': document.id,
+      'sectionId': sectionId,
+    };
   }
 
   static bool studentCanAccess({

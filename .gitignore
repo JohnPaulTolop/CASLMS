@@ -58,3 +58,8 @@ app.*.map.json
 .env*
 
 .vercel
+
+
+# Local Firebase and development configuration
+.firebase-config/
+/config/local.json

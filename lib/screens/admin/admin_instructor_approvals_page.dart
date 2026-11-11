@@ -1,4 +1,6 @@
 import '../../core/app_colors.dart';
+import '../shared/workspace_widgets.dart';
+import '../shared/workspace_shell.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -16,21 +18,16 @@ class AdminInstructorApprovalsScreen extends StatefulWidget {
 
 class _AdminInstructorApprovalsScreenState
     extends State<AdminInstructorApprovalsScreen> {
-  static const Color adminTheme = AppColors.primaryBlue;
-
-  static const Color background = AppColors.background;
-
-  static const Color textDark = AppColors.darkText;
-
-  static const Color textGrey = AppColors.secondaryText;
-
-  static const Color borderColor = AppColors.inputBorder;
-
-  static const Color green = AppColors.green;
-
-  static const Color red = AppColors.error;
-
-  static const Color orange = AppColors.amber;
+  Color get adminTheme => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
+  Color get surface => AppColors.resolve(context, Colors.white);
+  Color get green => AppColors.resolve(context, AppColors.green);
+  Color get red => AppColors.resolve(context, AppColors.error);
+  Color get orange => AppColors.resolve(context, AppColors.amber);
+  Color get blueTint => AppColors.resolve(context, AppColors.blueTint);
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -207,146 +204,183 @@ class _AdminInstructorApprovalsScreenState
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final inset = workspaceInset(width);
+
     return Scaffold(
       backgroundColor: background,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        backgroundColor: background,
-        elevation: 0,
-        titleSpacing: 24,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Instructor Approvals',
-              style: TextStyle(
-                color: textDark,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            Text(
-              'Verify faculty registration requests',
-              style: TextStyle(
-                color: textGrey,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
       body: SafeArea(
-        top: false,
-        child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: _applicationsStream(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting &&
-                !snapshot.hasData) {
-              return const Center(
-                child: CircularProgressIndicator(color: adminTheme),
-              );
-            }
-
-            if (snapshot.hasError) {
-              return _buildError(snapshot.error.toString());
-            }
-
-            final applications = (snapshot.data?.docs ?? const []).map((
-              document,
-            ) {
-              return <String, dynamic>{...document.data(), 'id': document.id};
-            }).toList();
-
-            final pendingCount = applications.where((application) {
-              return _status(application) == 'pending';
-            }).length;
-
-            final filtered = applications.where((application) {
-              return widget.applicationId.isNotEmpty
-                  ? application['id'] == widget.applicationId
-                  : _status(application) == _selectedStatus;
-            }).toList();
-
-            return RefreshIndicator(
-              onRefresh: () async {
-                await _firestore
-                    .collection('instructorApplications')
-                    .limit(1)
-                    .get();
-              },
-              color: adminTheme,
-              child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
-                ),
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1320),
+            child: WorkspaceScrollingBody(
+              header: Column(
                 children: [
-                  _buildSummary(pendingCount, applications.length),
-                  const SizedBox(height: 18),
-                  _buildFilters(),
-                  const SizedBox(height: 18),
-                  if (filtered.isEmpty)
-                    _buildEmptyState()
-                  else
-                    ...filtered.map(_buildApplicationCard),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(inset, 0, inset, 0),
+                    child: WorkspaceHeading(
+                      showEyebrow: false,
+                      title: 'Instructor approvals',
+                      subtitle: 'Verify and review SSU faculty registration applications.',
+                      eyebrow: 'ADMINISTRATION',
+                      actions: [
+                        IconButton(
+                          tooltip: 'Refresh',
+                          onPressed: () => setState(() {}),
+                          icon: Icon(Icons.refresh_rounded, color: textDark),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                 ],
               ),
-            );
-          },
+              body: _buildBody(inset),
+            ),
+          ),
         ),
       ),
     );
   }
 
+  Widget _buildBody(double inset) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _applicationsStream(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
+          return Center(child: CircularProgressIndicator(color: adminTheme));
+        }
+
+        if (snapshot.hasError) {
+          return Padding(
+            padding: EdgeInsets.symmetric(horizontal: inset),
+            child: WorkspaceErrorState(
+              message:
+                  'Unable to load instructor applications.\n${snapshot.error}',
+              onRetry: () => setState(() {}),
+            ),
+          );
+        }
+
+        final applications = (snapshot.data?.docs ?? const []).map((document) {
+          return <String, dynamic>{...document.data(), 'id': document.id};
+        }).toList();
+
+        final pendingCount = applications.where((application) {
+          return _status(application) == 'pending';
+        }).length;
+
+        final filtered = applications.where((application) {
+          return widget.applicationId.isNotEmpty
+              ? application['id'] == widget.applicationId
+              : _status(application) == _selectedStatus;
+        }).toList();
+
+        return RefreshIndicator(
+          onRefresh: () async {
+            await _firestore
+                .collection('instructorApplications')
+                .limit(1)
+                .get();
+          },
+          color: adminTheme,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: BouncingScrollPhysics(),
+            ),
+            padding: EdgeInsets.fromLTRB(inset, 0, inset, 100),
+            children: [
+              _buildSummary(pendingCount, applications.length),
+              const SizedBox(height: 20),
+              _buildFilters(),
+              const SizedBox(height: 18),
+              if (filtered.isEmpty)
+                WorkspaceEmptyState(
+                  title: 'No applications found',
+                  message:
+                      'No instructor applications match the "${_capitalize(_selectedStatus)}" status.',
+                  icon: Icons.how_to_reg_outlined,
+                )
+              else
+                ...filtered.map(_buildApplicationCard),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildSummary(int pendingCount, int totalCount) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.primaryBlue,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(
-              Icons.how_to_reg_rounded,
-              color: Colors.white,
-              size: 28,
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stats = [
+          (
+            Icons.pending_actions_rounded,
+            '$pendingCount',
+            'Pending review',
+            orange,
+            AppColors.resolve(context, AppColors.amberTint),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$pendingCount pending',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
+          (
+            Icons.how_to_reg_rounded,
+            '$totalCount',
+            'Total applications',
+            adminTheme,
+            blueTint,
+          ),
+        ];
+        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        final columns = constraints.maxWidth >= 500 * scale ? 2 : 1;
+        const gap = 12.0;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final stat in stats)
+              SizedBox(
+                width: width,
+                child: WorkspaceSurface(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          WorkspaceIconTile(
+                            icon: stat.$1,
+                            color: stat.$4,
+                            background: stat.$5,
+                            size: 36,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              stat.$2,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -1,
+                                height: 1.1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        stat.$3,
+                        style: TextStyle(fontSize: 12, color: textGrey),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  '$totalCount total instructor applications',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.82),
-                    fontSize: 11.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -364,10 +398,14 @@ class _AdminInstructorApprovalsScreenState
             child: ChoiceChip(
               selected: selected,
               label: Text(_capitalize(status)),
-              selectedColor: adminTheme.withValues(alpha: 0.14),
+              selectedColor: adminTheme.withValues(alpha: 0.12),
               labelStyle: TextStyle(
                 color: selected ? adminTheme : textGrey,
                 fontWeight: FontWeight.w700,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: selected ? adminTheme : borderColor),
               ),
               onSelected: (_) {
                 setState(() {
@@ -383,154 +421,134 @@ class _AdminInstructorApprovalsScreenState
 
   Widget _buildApplicationCard(Map<String, dynamic> application) {
     final String applicantId = _applicantId(application);
-
     final String status = _status(application);
-
     final bool pending = status == 'pending';
-
     final bool busy = _isBusy(applicantId);
-
     final String denialReason = (application['denialReason'] ?? '')
         .toString()
         .trim();
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(
-          color: pending ? orange.withValues(alpha: 0.35) : borderColor,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: adminTheme.withValues(alpha: 0.10),
-                child: Text(
-                  _initials(_name(application)),
-                  style: const TextStyle(
-                    color: adminTheme,
-                    fontWeight: FontWeight.w700,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: WorkspaceSurface(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: adminTheme.withValues(alpha: 0.10),
+                  child: Text(
+                    _initials(_name(application)),
+                    style: TextStyle(
+                      color: adminTheme,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _name(application),
-                      style: const TextStyle(
-                        color: textDark,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      _email(application),
-                      style: const TextStyle(color: textGrey, fontSize: 11.5),
-                    ),
-                  ],
-                ),
-              ),
-              _statusBadge(status),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _detailRow('Faculty ID', _facultyId(application)),
-          _detailRow('Department', _valueOrDefault(application['department'])),
-          _detailRow(
-            'Position / Program',
-            _valueOrDefault(application['course']),
-          ),
-          _detailRow('Submitted', _formatTimestamp(application['submittedAt'])),
-          if (denialReason.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(11),
-              decoration: BoxDecoration(
-                color: red.withValues(alpha: 0.07),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                'Reason: $denialReason',
-                style: const TextStyle(color: red, fontSize: 11.5, height: 1.4),
-              ),
-            ),
-          ],
-          const SizedBox(height: 14),
-          if (busy)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(8),
-                child: CircularProgressIndicator(
-                  color: adminTheme,
-                  strokeWidth: 2.5,
-                ),
-              ),
-            )
-          else if (pending)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: () {
-                    _viewFacultyId(application);
-                  },
-                  icon: const Icon(Icons.visibility_outlined),
-                  label: const Text('View Faculty ID'),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          _denyInstructor(application);
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: red,
-                          side: const BorderSide(color: red),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _name(application),
+                        style: TextStyle(
+                          color: textDark,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
                         ),
-                        icon: const Icon(Icons.close_rounded),
-                        label: const Text('Deny'),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          _approveInstructor(application);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: green,
-                          foregroundColor: Colors.white,
-                        ),
-                        icon: const Icon(Icons.check_rounded),
-                        label: const Text('Approve'),
+                      const SizedBox(height: 3),
+                      Text(
+                        _email(application),
+                        style: TextStyle(color: textGrey, fontSize: 12),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+                _statusBadge(status),
               ],
-            )
-          else
-            OutlinedButton.icon(
-              onPressed: () {
-                _viewFacultyId(application);
-              },
-              icon: const Icon(Icons.visibility_outlined),
-              label: const Text('View Submitted Faculty ID'),
             ),
-        ],
+            const SizedBox(height: 14),
+            _detailRow('Faculty ID', _facultyId(application)),
+            _detailRow(
+              'Department',
+              _valueOrDefault(application['department']),
+            ),
+            _detailRow(
+              'Position / Program',
+              _valueOrDefault(application['course']),
+            ),
+            _detailRow(
+              'Submitted',
+              _formatTimestamp(application['submittedAt']),
+            ),
+            if (denialReason.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  color: red.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'Reason: $denialReason',
+                  style: TextStyle(color: red, fontSize: 12, height: 1.4),
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            if (busy)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: CircularProgressIndicator(
+                    color: adminTheme,
+                    strokeWidth: 2.5,
+                  ),
+                ),
+              )
+            else if (pending)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _viewFacultyId(application),
+                    icon: const Icon(Icons.visibility_outlined, size: 17),
+                    label: const Text('View Faculty ID'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _denyInstructor(application),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: red,
+                      side: BorderSide(color: red.withValues(alpha: 0.5)),
+                    ),
+                    icon: const Icon(Icons.close_rounded, size: 17),
+                    label: const Text('Deny'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () => _approveInstructor(application),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: green,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.check_rounded, size: 17),
+                    label: const Text('Approve'),
+                  ),
+                ],
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: () => _viewFacultyId(application),
+                icon: const Icon(Icons.visibility_outlined, size: 17),
+                label: const Text('View Submitted Faculty ID'),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -542,12 +560,12 @@ class _AdminInstructorApprovalsScreenState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: 125,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 color: textGrey,
-                fontSize: 11,
+                fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -556,9 +574,9 @@ class _AdminInstructorApprovalsScreenState
             child: Text(
               value,
               textAlign: TextAlign.right,
-              style: const TextStyle(
+              style: TextStyle(
                 color: textDark,
-                fontSize: 11.5,
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -585,50 +603,8 @@ class _AdminInstructorApprovalsScreenState
         _capitalize(status),
         style: TextStyle(
           color: color,
-          fontSize: 9.5,
+          fontSize: 10,
           fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 60),
-      child: Column(
-        children: [
-          Icon(Icons.assignment_turned_in_outlined, color: textGrey, size: 48),
-          SizedBox(height: 12),
-          Text(
-            'No applications found',
-            style: TextStyle(color: textGrey, fontWeight: FontWeight.w700),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildError(String error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline_rounded, color: red, size: 50),
-            const SizedBox(height: 12),
-            const Text(
-              'Unable to load instructor applications.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: textDark, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: textGrey, fontSize: 11.5),
-            ),
-          ],
         ),
       ),
     );
@@ -784,17 +760,25 @@ class _DenialReasonDialogState extends State<_DenialReasonDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final surface = AppColors.resolve(context, Colors.white);
+    final textDark = AppColors.resolve(context, AppColors.darkText);
+
     return AlertDialog(
-      title: const Text(
+      backgroundColor: surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(
         'Deny Application',
-        style: TextStyle(fontWeight: FontWeight.w700),
+        style: TextStyle(fontWeight: FontWeight.w700, color: textDark),
       ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Explain why ${widget.instructorName} was not approved.'),
+            Text(
+              'Explain why ${widget.instructorName} was not approved.',
+              style: TextStyle(color: textDark),
+            ),
             const SizedBox(height: 14),
             TextField(
               controller: _reasonController,
@@ -818,7 +802,7 @@ class _DenialReasonDialogState extends State<_DenialReasonDialog> {
           },
           child: const Text('Cancel'),
         ),
-        ElevatedButton(
+        FilledButton(
           onPressed: () {
             final String reason = _reasonController.text.trim();
 
@@ -828,7 +812,7 @@ class _DenialReasonDialogState extends State<_DenialReasonDialog> {
 
             Navigator.of(context).pop(reason);
           },
-          style: ElevatedButton.styleFrom(
+          style: FilledButton.styleFrom(
             backgroundColor: AppColors.error,
             foregroundColor: Colors.white,
           ),

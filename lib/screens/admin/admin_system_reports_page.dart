@@ -1,6 +1,8 @@
 import '../shared/page_loading_state.dart';
 import '../../core/app_colors.dart';
 import '../../models/admin_records.dart';
+import '../shared/workspace_widgets.dart';
+import '../shared/workspace_shell.dart';
 import 'admin_download.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -15,14 +17,16 @@ class AdminSystemReportsScreen extends StatefulWidget {
 }
 
 class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
-  static const Color reportRed = AppColors.error;
-  static const Color background = AppColors.background;
-  static const Color textDark = AppColors.darkText;
-  static const Color textGrey = AppColors.secondaryText;
-  static const Color borderColor = AppColors.inputBorder;
-  static const Color green = AppColors.green;
-  static const Color blue = AppColors.primaryBlue;
-  static const Color orange = AppColors.amber;
+  Color get adminTheme => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get reportRed => AppColors.resolve(context, AppColors.error);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
+  Color get surface => AppColors.resolve(context, Colors.white);
+  Color get green => AppColors.resolve(context, AppColors.green);
+  Color get blue => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get orange => AppColors.resolve(context, AppColors.amber);
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -275,131 +279,92 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return const PageLoadingState();
+    final double inset = workspaceInset(MediaQuery.sizeOf(context).width);
+
     return Scaffold(
       backgroundColor: background,
-      appBar: AppBar(
-        backgroundColor: background,
-        elevation: 0,
-        foregroundColor: textDark,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'System Reports',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-            ),
-            Text(
-              'Current platform metrics',
-              style: TextStyle(
-                fontSize: 12,
-                color: textGrey,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            onPressed: _isLoading ? null : _exportReport,
-            tooltip: 'Download CSV',
-            icon: const Icon(Icons.file_download_outlined, color: reportRed),
-          ),
-          IconButton(
-            onPressed: _isLoading ? null : _loadReport,
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
       body: SafeArea(
-        top: false,
-        child: Align(
-          alignment: Alignment.topCenter,
+        child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: _buildBody(),
+            constraints: const BoxConstraints(maxWidth: 1320),
+            child: WorkspaceScrollingBody(
+              header: Column(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(inset, 0, inset, 0),
+                    child: WorkspaceHeading(
+                      showEyebrow: false,
+                      title: 'System reports',
+                      subtitle: 'Current platform metrics, system activity, and real-time audit logs.',
+                      eyebrow: 'ADMINISTRATION',
+                      actions: [
+                        FilledButton.icon(
+                          onPressed: _isLoading ? null : _exportReport,
+                          icon: const Icon(Icons.download_rounded, size: 18),
+                          label: const Text('Download CSV'),
+                        ),
+                        IconButton(
+                          onPressed: _isLoading ? null : _loadReport,
+                          tooltip: 'Refresh',
+                          icon: Icon(Icons.refresh_rounded, color: textDark),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
+              body: _buildBody(inset),
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(double inset) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: reportRed));
+      return Center(child: CircularProgressIndicator(color: blue));
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.error_outline_rounded,
-                color: reportRed,
-                size: 50,
-              ),
-              const SizedBox(height: 14),
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: textGrey, height: 1.45),
-              ),
-              const SizedBox(height: 18),
-              ElevatedButton.icon(
-                onPressed: _loadReport,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: reportRed,
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Try Again'),
-              ),
-            ],
-          ),
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: inset),
+        child: WorkspaceErrorState(
+          message: _errorMessage!,
+          onRetry: _loadReport,
         ),
       );
     }
 
     return RefreshIndicator(
       onRefresh: _loadReport,
-      color: reportRed,
+      color: blue,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        padding: EdgeInsets.fromLTRB(inset, 0, inset, 40),
         children: [
-          const Text(
+          Text(
             'Metrics describe current records. The timeframe filters the record snapshots below; open Activity logs for session history.',
-            style: TextStyle(color: textGrey, fontSize: 12, height: 1.5),
+            style: TextStyle(color: textGrey, fontSize: 13, height: 1.5),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           _buildTimeframeSelector(),
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
           _buildMetrics(),
-          const SizedBox(height: 28),
-          const Text(
-            'Current record snapshots',
-            style: TextStyle(
-              color: textDark,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-            ),
+          const SizedBox(height: 32),
+          const WorkspaceSectionHeading(
+            title: 'Current record snapshots',
+            subtitle: 'Recent courses created and learning material updates across the platform.',
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           if (_filteredActivities.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Center(
-                child: Text(
-                  'No matching record snapshots for this timeframe.',
-                  style: TextStyle(color: textGrey),
-                ),
-              ),
+            const WorkspaceEmptyState(
+              title: 'No record snapshots',
+              message: 'No matching record snapshots found for this timeframe.',
+              icon: Icons.analytics_outlined,
             )
           else
             ..._filteredActivities.map(_buildActivityCard),
@@ -409,37 +374,35 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
   }
 
   Widget _buildTimeframeSelector() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedTimeframe,
-          isExpanded: true,
-          items: _timeframeOptions.map((value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(
-                value,
-                style: const TextStyle(
-                  color: textDark,
-                  fontWeight: FontWeight.w700,
-                ),
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: _timeframeOptions.map((timeframe) {
+          final isSelected = _selectedTimeframe == timeframe;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(timeframe),
+              selected: isSelected,
+              onSelected: (selected) {
+                if (selected) {
+                  setState(() => _selectedTimeframe = timeframe);
+                }
+              },
+              selectedColor: blue.withValues(alpha: 0.16),
+              backgroundColor: surface,
+              labelStyle: TextStyle(
+                color: isSelected ? blue : textGrey,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 13,
               ),
-            );
-          }).toList(),
-          onChanged: (value) {
-            if (value == null) return;
-
-            setState(() {
-              _selectedTimeframe = value;
-            });
-          },
-        ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: isSelected ? blue : borderColor),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -482,7 +445,7 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 850
+        final columns = constraints.maxWidth >= 900
             ? 4
             : constraints.maxWidth >= 520
             ? 2
@@ -504,43 +467,41 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
   }
 
   Widget _metric(String label, int value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: borderColor),
-      ),
+    return WorkspaceSurface(
+      padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 20),
+          WorkspaceIconTile(
+            icon: icon,
+            color: color,
+            background: color.withValues(alpha: 0.12),
+            size: 44,
           ),
-          const SizedBox(width: 11),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   '$value',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: textDark,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
                   ),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: textGrey,
-                    fontSize: 10,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -556,54 +517,67 @@ class _AdminSystemReportsScreenState extends State<AdminSystemReportsScreen> {
     final icon = item['icon'] is IconData
         ? item['icon'] as IconData
         : Icons.info_outline_rounded;
+    final relativeTime = _formatRelative(item['timestamp']);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(10),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: WorkspaceSurface(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            WorkspaceIconTile(
+              icon: icon,
+              color: color,
+              background: color.withValues(alpha: 0.10),
+              size: 40,
             ),
-            child: Icon(icon, color: color, size: 19),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  (item['title'] ?? '').toString(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: textDark,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    (item['title'] ?? '').toString(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textDark,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    (item['subtitle'] ?? '').toString(),
+                    style: TextStyle(color: textGrey, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            if (relativeTime.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: background,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Text(
+                  relativeTime,
+                  style: TextStyle(
+                    color: textGrey,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  (item['subtitle'] ?? '').toString(),
-                  style: const TextStyle(color: textGrey, fontSize: 10.5),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            _formatRelative(item['timestamp']),
-            style: const TextStyle(color: textGrey, fontSize: 9.5),
-          ),
-        ],
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

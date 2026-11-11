@@ -102,9 +102,9 @@ class AdminPanel extends StatelessWidget {
     width: double.infinity,
     padding: padding,
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: AppColors.resolve(context, Colors.white),
       borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: AdminUi.border),
+      border: Border.all(color: AppColors.resolve(context, AdminUi.border)),
     ),
     child: child,
   );
@@ -115,17 +115,24 @@ class AdminBadge extends StatelessWidget {
   final String label;
   final Color color;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-    decoration: BoxDecoration(
-      color: color.withValues(alpha: .09),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Text(
-      label,
-      style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final resolved = AppColors.resolve(context, color);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: resolved.withValues(alpha: .09),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: resolved,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
 }
 
 class AdminPageHeading extends StatelessWidget {
@@ -145,17 +152,20 @@ class AdminPageHeading extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 27,
               fontWeight: FontWeight.w700,
-              color: AdminUi.ink,
+              color: AppColors.resolve(context, AdminUi.ink),
               letterSpacing: -.7,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: const TextStyle(color: AdminUi.muted, height: 1.5),
+            style: TextStyle(
+              color: AppColors.resolve(context, AdminUi.muted),
+              height: 1.5,
+            ),
           ),
         ],
       );
@@ -187,19 +197,22 @@ class AdminNotice extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
   @override
-  Widget build(BuildContext context) => AdminPanel(
-    child: Wrap(
-      spacing: 12,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        const Icon(Icons.info_outline_rounded, color: AdminUi.muted),
-        Text(message, style: const TextStyle(color: AdminUi.muted)),
-        if (onRetry != null)
-          TextButton(onPressed: onRetry, child: const Text('Retry')),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final muted = AppColors.resolve(context, AdminUi.muted);
+    return AdminPanel(
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Icon(Icons.info_outline_rounded, color: muted),
+          Text(message, style: TextStyle(color: muted)),
+          if (onRetry != null)
+            TextButton(onPressed: onRetry, child: const Text('Retry')),
+        ],
+      ),
+    );
+  }
 }
 
 class AdminEmpty extends StatelessWidget {
@@ -212,28 +225,33 @@ class AdminEmpty extends StatelessWidget {
   final String title, message;
   final IconData icon;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 34, horizontal: 18),
-    child: Column(
-      children: [
-        Icon(icon, color: AdminUi.accent, size: 38),
-        const SizedBox(height: 14),
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 16,
-            color: AdminUi.ink,
-            fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    final accent = AppColors.resolve(context, AdminUi.accent);
+    final ink = AppColors.resolve(context, AdminUi.ink);
+    final muted = AppColors.resolve(context, AdminUi.muted);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 34, horizontal: 18),
+      child: Column(
+        children: [
+          Icon(icon, color: accent, size: 38),
+          const SizedBox(height: 14),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 16,
+              color: ink,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-        ),
-        const SizedBox(height: 7),
-        Text(
-          message,
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: AdminUi.muted, height: 1.5),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(height: 7),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: muted, height: 1.5),
+          ),
+        ],
+      ),
+    );
+  }
 }

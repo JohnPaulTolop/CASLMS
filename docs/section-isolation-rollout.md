@@ -118,4 +118,3 @@ for the registered web/application clients.
 6. If concurrent production writes prevent reversible rollback, restore the
    reviewed Firestore export into a separate recovery project first; do not
    overwrite live data blindly.
-

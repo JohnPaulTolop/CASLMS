@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'course_content_paths.dart';
 import 'section_audience_service.dart';
 
 typedef ProgressRow = Map<String, dynamic>;
@@ -62,7 +63,7 @@ class ProgressService {
 
     // Keep the section in the stream key so transfers update visible work.
     final courseSections = enrollmentStream
-        .map((rows) {
+        .asyncMap((rows) async {
           final sections = <String, String>{};
           for (final row in rows) {
             if (_ProgressCalculator.lower(row['status']) != 'active') {
@@ -70,7 +71,17 @@ class ProgressService {
             }
             final courseId = _ProgressCalculator.text(row['courseId']);
             if (courseId.isEmpty) continue;
-            sections[courseId] = _ProgressCalculator.text(row['sectionId']);
+            var sectionId = _ProgressCalculator.text(row['sectionId']);
+            if (sectionId.isEmpty) {
+              final course = await _firestore
+                  .collection('courses')
+                  .doc(courseId)
+                  .get();
+              sectionId = _ProgressCalculator.text(course.data()?['classCode']);
+            }
+            if (sectionId.isNotEmpty) {
+              sections[courseId] = sectionId;
+            }
           }
           return sections;
         })
@@ -93,25 +104,59 @@ class ProgressService {
     required String courseId,
     required String sectionId,
   }) {
-    Stream<List<ProgressRow>> watchScope(String scope) => _rows(
-      _firestore
-          .collection('assessments')
+    final modules = _rows(
+      CourseContentPaths.modules(_firestore, courseId)
           .where('courseId', isEqualTo: courseId)
-          .where('status', whereIn: const ['published', 'closed'])
+          .where('status', isEqualTo: 'published')
           .where(
             'sectionIds',
             arrayContainsAny: <String>[
               SectionAudienceService.allSections,
               sectionId,
             ],
-          )
-          .where('sectionId', isEqualTo: scope),
+          ),
     );
 
-    if (sectionId.isEmpty) return watchScope('');
+    return _switchLatest(
+      modules.map((visibleModules) {
+        final moduleIds = visibleModules
+            .map((module) => _ProgressCalculator.text(module['id']))
+            .where((moduleId) => moduleId.isNotEmpty)
+            .toSet();
+        if (moduleIds.isEmpty) {
+          return Stream.value(<ProgressRow>[]);
+        }
 
-    return _combineLatest([watchScope(''), watchScope(sectionId)])
-        .map((scopes) => [...scopes[0], ...scopes[1]]);
+        final scopes = <String>['', if (sectionId.isNotEmpty) sectionId];
+        final streams = <Stream<List<ProgressRow>>>[
+          for (final moduleId in moduleIds)
+            for (final scope in scopes)
+              _rows(
+                CourseContentPaths.assessments(_firestore, courseId, moduleId)
+                    .where('courseId', isEqualTo: courseId)
+                    .where('moduleId', isEqualTo: moduleId)
+                    .where('status', whereIn: const ['published', 'closed'])
+                    .where(
+                      'sectionIds',
+                      arrayContainsAny: <String>[
+                        SectionAudienceService.allSections,
+                        sectionId,
+                      ],
+                    )
+                    .where('sectionId', isEqualTo: scope),
+              ),
+        ];
+        return _combineLatest(streams).map((rows) {
+          final merged = <String, ProgressRow>{};
+          for (final scope in rows) {
+            for (final assessment in scope) {
+              merged[_ProgressCalculator.text(assessment['id'])] = assessment;
+            }
+          }
+          return merged.values.toList();
+        });
+      }),
+    );
   }
 
   Stream<ProgressRow> _watchCourses(
@@ -158,8 +203,7 @@ class ProgressService {
 
       streams.add(
         _rows(
-          _firestore
-              .collection('modules')
+          CourseContentPaths.modules(_firestore, courseId)
               .where('courseId', isEqualTo: courseId)
               .where('status', isEqualTo: 'published')
               .where(

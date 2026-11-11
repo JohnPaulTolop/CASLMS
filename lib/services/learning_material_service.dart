@@ -12,6 +12,7 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 import '../config/supabase_config.dart';
+import 'course_content_paths.dart';
 import 'notification_service.dart';
 import 'section_audience_service.dart';
 
@@ -685,7 +686,17 @@ class LearningMaterialService {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      await resourceReference.set(data);
+      final batch = _firestore.batch()
+        ..set(resourceReference, data)
+        ..set(
+          CourseContentPaths.resources(
+            _firestore,
+            cleanCourseId,
+            cleanModuleId,
+          ).doc(resourceId),
+          data,
+        );
+      await batch.commit();
       unawaited(
         ActivityLogService(
           auth: _auth,
@@ -828,7 +839,17 @@ class LearningMaterialService {
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
-    await document.set(data);
+    final batch = _firestore.batch()
+      ..set(document, data)
+      ..set(
+        CourseContentPaths.resources(
+          _firestore,
+          courseId.trim(),
+          moduleId.trim(),
+        ).doc(document.id),
+        data,
+      );
+    await batch.commit();
 
     if (normalizedStatus == 'published') {
       await _createPublishedNotificationsBestEffort(document.id);
@@ -932,6 +953,7 @@ class LearningMaterialService {
 
     Query<Map<String, dynamic>> query = _firestore
         .collection(collectionName)
+        .where('courseId', isEqualTo: cleanCourseId)
         .where('moduleId', isEqualTo: cleanModuleId);
     if (studentSectionId != null) {
       query = query.where(
@@ -1044,6 +1066,7 @@ class LearningMaterialService {
 
     final QuerySnapshot<Map<String, dynamic>> snapshot = await _firestore
         .collection(collectionName)
+        .where('courseId', isEqualTo: cleanCourseId)
         .where('moduleId', isEqualTo: cleanModuleId)
         .get();
 
@@ -1122,7 +1145,17 @@ class LearningMaterialService {
         updates.addAll(_aiMetadataForExternalLink());
       }
 
-      batch.update(document.reference, updates);
+      batch
+        ..update(document.reference, updates)
+        ..set(
+          CourseContentPaths.resources(
+            _firestore,
+            cleanCourseId,
+            cleanModuleId,
+          ).doc(document.id),
+          {...data, ...updates},
+          SetOptions(merge: true),
+        );
 
       updatedCount++;
     }
@@ -1174,11 +1207,24 @@ class LearningMaterialService {
       moduleId: (material['moduleId'] ?? '').toString(),
     );
 
-    await reference.update({
+    final courseId = (material['courseId'] ?? '').toString().trim();
+    final moduleId = (material['moduleId'] ?? '').toString().trim();
+    final updates = <String, dynamic>{
       'status': normalizedStatus,
-
       'updatedAt': FieldValue.serverTimestamp(),
-    });
+    };
+    final batch = _firestore.batch()
+      ..update(reference, updates)
+      ..set(
+        CourseContentPaths.resources(
+          _firestore,
+          courseId,
+          moduleId,
+        ).doc(cleanId),
+        {...material, ...updates},
+        SetOptions(merge: true),
+      );
+    await batch.commit();
 
     if (normalizedStatus == 'published') {
       await _createPublishedNotificationsBestEffort(cleanId);
@@ -1268,7 +1314,18 @@ class LearningMaterialService {
     // REMOVE FIRESTORE METADATA
     // ----------------------------------------------------------
 
-    await resourceReference.delete();
+    final courseId = (material['courseId'] ?? '').toString().trim();
+    final moduleId = (material['moduleId'] ?? '').toString().trim();
+    final batch = _firestore.batch()
+      ..delete(resourceReference)
+      ..delete(
+        CourseContentPaths.resources(
+          _firestore,
+          courseId,
+          moduleId,
+        ).doc(cleanId),
+      );
+    await batch.commit();
   }
 
   // ============================================================

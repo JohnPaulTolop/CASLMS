@@ -139,14 +139,15 @@ class _InstructorModuleDetailScreenState
     }
   }
 
-  List<Map<String, dynamic>> get _visibleAssessments => _assessments
-      .where(
-        (a) =>
-            _activeSectionId == null ||
-            (a['sectionId'] ?? '').toString().isEmpty ||
-            a['sectionId'] == _activeSectionId,
-      )
-      .toList();
+  List<Map<String, dynamic>> _filterContent(
+    List<Map<String, dynamic>> records,
+  ) => SectionAudienceService.filterInstructorChildren(records, [
+    ?_module,
+  ], _activeSectionId);
+  List<Map<String, dynamic>> get _visibleAssessments =>
+      _filterContent(_assessments);
+  List<Map<String, dynamic>> get _visibleMaterials =>
+      _filterContent(_materials);
 
   final Set<String> _busyMaterialIds = {};
 
@@ -215,18 +216,8 @@ class _InstructorModuleDetailScreenState
         throw Exception('This module does not belong to the selected course.');
       }
 
-      // ========================================================
-      // PHASE 7C-6: PREPARE EXISTING MATERIALS FOR AI
-      //
-      // Older materials uploaded before the AI metadata update
-      // are safely backfilled here. Materials that are already
-      // prepared are skipped by the service.
-      // ========================================================
-
-      await _learningMaterialService.prepareModuleMaterialsForAi(
-        courseId: widget.courseId,
-        moduleId: widget.moduleId,
-      );
+      // Opening a module is read-only. Legacy metadata backfills are explicit
+      // maintenance operations and must not block viewing course content.
 
       // ========================================================
       // LEARNING MATERIALS
@@ -2664,15 +2655,13 @@ class _InstructorModuleDetailScreenState
                   ? [true, false]
                   : [false, true])) ...[
             Text(
-              assessmentFirst
-                  ? 'Assessments'
-                  : 'Learning materials • All sections',
+              assessmentFirst ? 'Assessments' : 'Learning materials',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
             if (assessmentFirst) ...[
               Align(
-                alignment: Alignment.centerLeft,
+                alignment: Alignment.centerRight,
                 child: FilledButton.tonalIcon(
                   onPressed: _createAssessment,
                   icon: const Icon(Icons.add_rounded),
@@ -2687,10 +2676,10 @@ class _InstructorModuleDetailScreenState
             ] else ...[
               _buildLearningMaterialHeader(),
               const SizedBox(height: 16),
-              if (_materials.isEmpty)
+              if (_visibleMaterials.isEmpty)
                 _buildEmptyMaterials()
               else
-                ..._materials.map(_buildMaterialCard),
+                ..._visibleMaterials.map(_buildMaterialCard),
             ],
             const SizedBox(height: 28),
           ],

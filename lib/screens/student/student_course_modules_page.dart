@@ -11,11 +11,13 @@ import '../shared/workspace_widgets.dart';
 import '../shared/learner_assistant_page.dart';
 import '../shared/live_classes_page.dart';
 import '../../services/assessment_submission_service.dart';
+import '../../services/course_content_paths.dart';
 import '../../services/enrollment_service.dart';
 import '../../services/progress_service.dart';
 import '../../services/section_audience_service.dart';
 import '../../services/learning_material_service.dart';
 import '../../services/student_roster_service.dart';
+import '../../services/student_assessment_query_service.dart';
 import 'student_ai_quiz_page.dart';
 import '../shared/course_banner.dart';
 import 'student_assessment_submission_page.dart';
@@ -65,6 +67,8 @@ class _StudentCourseModulesScreenState
       AssessmentSubmissionService();
   final EnrollmentService _enrollmentService = EnrollmentService();
   final ProgressService _progressService = ProgressService();
+  final StudentAssessmentQueryService _assessmentQuery =
+      StudentAssessmentQueryService();
   StreamSubscription<List<Map<String, dynamic>>>? _courseColorsSubscription;
   Color _courseColor = AppColors.primaryBlue;
 
@@ -268,41 +272,15 @@ class _StudentCourseModulesScreenState
         );
       }
 
-      final enrollmentDocument = await _firestore
-          .collection('enrollments')
-          .doc('${widget.courseId}_${user.uid}')
-          .get();
-      final enrollmentData = enrollmentDocument.data();
-      if (!enrollmentDocument.exists || enrollmentData == null) {
-        throw EnrollmentServiceException(
-          'Your enrollment record could not be found.',
-        );
-      }
-      if ((enrollmentData['status'] ?? '').toString().toLowerCase() !=
-          'active') {
-        throw EnrollmentServiceException('Your enrollment is not active.');
-      }
+      final enrollmentData = await SectionAudienceService(
+        firestore: _firestore,
+      ).requireActiveEnrollment(courseId: widget.courseId, studentId: user.uid);
       final sectionId = (enrollmentData['sectionId'] ?? '').toString();
 
-      final modulesSnapshot = await _firestore
-          .collection('modules')
-          .where('courseId', isEqualTo: widget.courseId)
-          .where('status', isEqualTo: 'published')
-          .where(
-            'sectionIds',
-            arrayContainsAny: <String>[
-              SectionAudienceService.allSections,
-              sectionId,
-            ],
-          )
-          .get();
-
-      final assessmentSnapshots = await Future.wait(
-        [
-          _firestore
-              .collection('assessments')
+      final modulesSnapshot =
+          await CourseContentPaths.modules(_firestore, widget.courseId)
               .where('courseId', isEqualTo: widget.courseId)
-              .where('status', whereIn: const ['published', 'closed'])
+              .where('status', isEqualTo: 'published')
               .where(
                 'sectionIds',
                 arrayContainsAny: <String>[
@@ -310,36 +288,21 @@ class _StudentCourseModulesScreenState
                   sectionId,
                 ],
               )
-              .where('sectionId', isEqualTo: ''),
-          if (sectionId.isNotEmpty)
-            _firestore
-                .collection('assessments')
-                .where('courseId', isEqualTo: widget.courseId)
-                .where('status', whereIn: const ['published', 'closed'])
-                .where(
-                  'sectionIds',
-                  arrayContainsAny: <String>[
-                    SectionAudienceService.allSections,
-                    sectionId,
-                  ],
-                )
-                .where('sectionId', isEqualTo: sectionId),
-        ].map((query) => query.get()),
+              .get();
+
+      final assessmentDocuments = await _assessmentQuery.getVisibleAssessments(
+        courseId: widget.courseId,
       );
 
       final assessmentsByModule = <String, List<Map<String, dynamic>>>{};
-      final assessmentIds = <String>{};
-      for (final snapshot in assessmentSnapshots) {
-        for (final assessmentDoc in snapshot.docs) {
-          if (!assessmentIds.add(assessmentDoc.id)) continue;
-          final data = assessmentDoc.data();
-          final moduleId = (data['moduleId'] ?? '').toString();
-          if (moduleId.isEmpty) continue;
-          assessmentsByModule.putIfAbsent(moduleId, () => []).add({
-            'id': assessmentDoc.id,
-            ...data,
-          });
-        }
+      for (final assessmentDoc in assessmentDocuments) {
+        final data = assessmentDoc.data();
+        final moduleId = (data['moduleId'] ?? '').toString();
+        if (moduleId.isEmpty) continue;
+        assessmentsByModule.putIfAbsent(moduleId, () => []).add({
+          'id': assessmentDoc.id,
+          ...data,
+        });
       }
 
       if (!mounted) return;
@@ -350,18 +313,23 @@ class _StudentCourseModulesScreenState
         final status = (moduleData['status'] ?? '').toString().toLowerCase();
         if (status != 'published') continue;
 
-        final resourcesSnapshot = await _firestore
-            .collection('moduleResources')
-            .where('moduleId', isEqualTo: moduleDoc.id)
-            .where('status', isEqualTo: 'published')
-            .where(
-              'sectionIds',
-              arrayContainsAny: <String>[
-                SectionAudienceService.allSections,
-                sectionId,
-              ],
-            )
-            .get();
+        final resourcesSnapshot =
+            await CourseContentPaths.resources(
+                  _firestore,
+                  widget.courseId,
+                  moduleDoc.id,
+                )
+                .where('courseId', isEqualTo: widget.courseId)
+                .where('moduleId', isEqualTo: moduleDoc.id)
+                .where('status', isEqualTo: 'published')
+                .where(
+                  'sectionIds',
+                  arrayContainsAny: <String>[
+                    SectionAudienceService.allSections,
+                    sectionId,
+                  ],
+                )
+                .get();
 
         final resources = <Map<String, dynamic>>[];
         for (final rDoc in resourcesSnapshot.docs) {

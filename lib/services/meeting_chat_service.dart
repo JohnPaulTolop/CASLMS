@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -123,20 +125,28 @@ class MeetingChatService {
       }
       final nonce = DateTime.now().microsecondsSinceEpoch.toString();
       final documentId = '${user.uid}_$nonce';
-      await _firestore.collection('meetingMessages').doc(documentId).set({
-        'liveClassId': liveClassId,
-        'courseId': courseId,
-        'sectionId': sectionId,
-        'sessionId': sessionId,
-        'senderId': user.uid,
-        'senderName': identity['name'],
-        'senderRole': identity['role'],
-        'text': clean,
-        'clientNonce': nonce,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      await _firestore
+          .collection('meetingMessages')
+          .doc(documentId)
+          .set({
+            'liveClassId': liveClassId,
+            'courseId': courseId,
+            'sectionId': sectionId,
+            'sessionId': sessionId,
+            'senderId': user.uid,
+            'senderName': identity['name'],
+            'senderRole': identity['role'],
+            'text': clean,
+            'clientNonce': nonce,
+            'createdAt': FieldValue.serverTimestamp(),
+          })
+          .timeout(const Duration(seconds: 15));
     } on MeetingChatException {
       rethrow;
+    } on TimeoutException {
+      throw const MeetingChatException(
+        'The message is taking too long to send. Check your connection and try again.',
+      );
     } on FirebaseException catch (error) {
       throw MeetingChatException(
         error.code == 'permission-denied'
@@ -149,7 +159,7 @@ class MeetingChatService {
   Future<Map<String, String>> _loadIdentity(String uid) async {
     final profile = (await _firestore.collection('users').doc(uid).get())
         .data();
-    final role = (profile?['role'] ?? '').toString();
+    final role = (profile?['role'] ?? '').toString().trim().toLowerCase();
     final name = (profile?['name'] ?? '').toString().trim();
     if (!['student', 'instructor'].contains(role)) {
       throw const MeetingChatException(

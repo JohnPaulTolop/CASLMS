@@ -4,9 +4,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../core/app_colors.dart';
 import '../../models/admin_records.dart';
 import '../../services/admin_catalog.dart';
 import '../shared/notification_inbox.dart';
+import '../shared/workspace_widgets.dart';
+import '../shared/workspace_shell.dart';
 import 'admin_ai_gateway_page.dart';
 import 'admin_file_details_page.dart';
 import 'admin_instructor_approvals_page.dart';
@@ -20,6 +23,13 @@ class AdminDashboardScreen extends StatefulWidget {
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  Color get accent => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
+  Color get surface => AppColors.resolve(context, Colors.white);
+
   late final _recentFiles = FirebaseFirestore.instance
       .collection('moduleResources')
       .where('deliveryType', isEqualTo: 'uploaded_file')
@@ -65,247 +75,263 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         )
         .length;
     return Scaffold(
-      backgroundColor: AdminUi.background,
+      backgroundColor: background,
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            AdminPageHeading(
-              title: 'Administration',
-              subtitle:
-                  'Welcome, ${admin?['name'] ?? 'Administrator'}. Your campus overview is updated live.',
-              actions: [
-                DashboardHover(
-                  accent: AdminUi.accent,
-                  lift: 1.5,
-                  borderRadius: BorderRadius.circular(12),
-                  child: const NotificationBell(),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1320),
+            child: ListView(
+              padding: EdgeInsets.all(
+                workspaceInset(MediaQuery.sizeOf(context).width),
+              ),
+              children: [
+                WorkspaceHeading(
+                  showEyebrow: false,
+                  title: 'Administration',
+                  subtitle:
+                      'Welcome, ${admin?['name'] ?? 'Administrator'}. Your campus overview is updated live.',
+                  eyebrow: 'ADMINISTRATION',
+                  actions: [
+                    DashboardHover(
+                      accent: accent,
+                      lift: 1.5,
+                      borderRadius: BorderRadius.circular(12),
+                      child: const NotificationBell(),
+                    ),
+                    DashboardHover(
+                      accent: accent,
+                      lift: 1.5,
+                      borderRadius: BorderRadius.circular(12),
+                      child: IconButton(
+                        tooltip: 'Refresh directory',
+                        onPressed: catalog.start,
+                        icon: const Icon(Icons.refresh_rounded),
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 22),
+                if (catalog.error != null) ...[
+                  AdminNotice(catalog.error!, onRetry: catalog.start),
+                  const SizedBox(height: 18),
+                ],
+                if (catalog.loading) const LinearProgressIndicator(),
+                LayoutBuilder(
+                  builder: (context, box) {
+                    final columns = box.maxWidth >= 850
+                        ? 4
+                        : box.maxWidth >= 480
+                        ? 2
+                        : 1;
+                    final width = (box.maxWidth - 14 * (columns - 1)) / columns;
+                    return Wrap(
+                      spacing: 14,
+                      runSpacing: 14,
+                      children:
+                          [
+                                _metric(
+                                  'Active students',
+                                  students,
+                                  Icons.groups_outlined,
+                                  Colors.blue,
+                                  () => _go(1),
+                                ),
+                                _metric(
+                                  'Active instructors',
+                                  instructors,
+                                  Icons.badge_outlined,
+                                  Colors.teal,
+                                  () => _go(1),
+                                ),
+                                _metric(
+                                  'Active courses',
+                                  activeCourses,
+                                  Icons.school_outlined,
+                                  accent,
+                                  () => _go(2),
+                                ),
+                                _metric(
+                                  'Awaiting approval',
+                                  catalog.pendingApplications.length,
+                                  Icons.how_to_reg_outlined,
+                                  Colors.orange,
+                                  () => _go(4),
+                                ),
+                              ]
+                              .map(
+                                (card) => SizedBox(width: width, child: card),
+                              )
+                              .toList(),
+                    );
+                  },
+                ),
+                const SizedBox(height: 26),
+                const Text(
+                  'Needs attention',
+                  style: TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w700,
+                    color: AdminUi.ink,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 DashboardHover(
                   accent: AdminUi.accent,
-                  lift: 1.5,
-                  borderRadius: BorderRadius.circular(12),
-                  child: IconButton(
-                    tooltip: 'Refresh directory',
-                    onPressed: catalog.start,
-                    icon: const Icon(Icons.refresh_rounded),
+                  lift: 0,
+                  showBorder: false,
+                  child: AdminPanel(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (catalog.pendingApplications.isNotEmpty) ...[
+                          _attention(
+                            Icons.person_add_alt_1_outlined,
+                            '${catalog.pendingApplications.length} instructor registration(s) awaiting review',
+                            'Approve or reject applications after reviewing their details.',
+                            () => _go(4),
+                          ),
+                          ...catalog.pendingApplications.entries
+                              .take(3)
+                              .map(
+                                (e) => DashboardHover(
+                                  accent: AdminUi.accent,
+                                  lift: 2,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: ListTile(
+                                    contentPadding: const EdgeInsets.only(
+                                      left: 42,
+                                    ),
+                                    title: Text(adminText(e.value['name'])),
+                                    subtitle: Text(
+                                      adminText(e.value['universityId']),
+                                    ),
+                                    trailing: const Icon(Icons.chevron_right),
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            AdminInstructorApprovalsScreen(
+                                              applicationId: e.key,
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                        ],
+                        if (ownershipIssues.isNotEmpty)
+                          _attention(
+                            Icons.person_off_outlined,
+                            '${ownershipIssues.length} active course(s) need an active instructor',
+                            ownershipIssues
+                                .take(3)
+                                .map((e) => adminText(e.value['code']))
+                                .join(' · '),
+                            () => _go(2),
+                          ),
+                        if (unverified > 0)
+                          _attention(
+                            Icons.mark_email_unread_outlined,
+                            '$unverified student account(s) awaiting email verification',
+                            'Review pending accounts in Users. Verification remains required.',
+                            () => _go(1),
+                          ),
+                        if (!catalog.loading &&
+                            catalog.error == null &&
+                            catalog.pendingApplications.isEmpty &&
+                            ownershipIssues.isEmpty &&
+                            unverified == 0)
+                          const AdminEmpty(
+                            title: 'No account or course issues found',
+                            message: 'Pending approvals, unverified accounts and course ownership issues will appear here.',
+                            icon: Icons.task_alt_rounded,
+                          ),
+                        if (catalog.loading)
+                          const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: Text('Checking accounts and courses…'),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                LayoutBuilder(
+                  builder: (context, box) {
+                    final panels = [_uploads(catalog), _activity()];
+                    if (box.maxWidth < 900) {
+                      return Column(
+                        children: [
+                          panels[0],
+                          const SizedBox(height: 18),
+                          panels[1],
+                        ],
+                      );
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: panels[0]),
+                        const SizedBox(width: 18),
+                        Expanded(child: panels[1]),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 22),
+                _failedUploads(catalog),
+                const SizedBox(height: 22),
+                DashboardHover(
+                  accent: AdminUi.accent,
+                  lift: 0,
+                  showBorder: false,
+                  child: AdminPanel(
+                    child: Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        DashboardHover(
+                          accent: AdminUi.accent,
+                          lift: 1.5,
+                          borderRadius: BorderRadius.circular(12),
+                          child: OutlinedButton.icon(
+                            onPressed: () => _go(8),
+                            icon: const Icon(Icons.analytics_outlined),
+                            label: const Text('System reports'),
+                          ),
+                        ),
+                        DashboardHover(
+                          accent: AdminUi.accent,
+                          lift: 1.5,
+                          borderRadius: BorderRadius.circular(12),
+                          child: OutlinedButton.icon(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AdminAIGatewayScreen(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.memory_outlined),
+                            label: const Text('AI processing monitor'),
+                          ),
+                        ),
+                        DashboardHover(
+                          accent: AdminUi.accent,
+                          lift: 1.5,
+                          borderRadius: BorderRadius.circular(12),
+                          child: OutlinedButton.icon(
+                            onPressed: () => _go(3),
+                            icon: const Icon(Icons.settings_outlined),
+                            label: const Text('Platform settings'),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 22),
-            if (catalog.error != null) ...[
-              AdminNotice(catalog.error!, onRetry: catalog.start),
-              const SizedBox(height: 18),
-            ],
-            if (catalog.loading) const LinearProgressIndicator(),
-            LayoutBuilder(
-              builder: (context, box) {
-                final columns = box.maxWidth >= 850
-                    ? 4
-                    : box.maxWidth >= 480
-                    ? 2
-                    : 1;
-                final width = (box.maxWidth - 14 * (columns - 1)) / columns;
-                return Wrap(
-                  spacing: 14,
-                  runSpacing: 14,
-                  children: [
-                    _metric(
-                      'Active students',
-                      students,
-                      Icons.groups_outlined,
-                      Colors.blue,
-                      () => _go(1),
-                    ),
-                    _metric(
-                      'Active instructors',
-                      instructors,
-                      Icons.badge_outlined,
-                      Colors.teal,
-                      () => _go(1),
-                    ),
-                    _metric(
-                      'Active courses',
-                      activeCourses,
-                      Icons.school_outlined,
-                      AdminUi.accent,
-                      () => _go(2),
-                    ),
-                    _metric(
-                      'Awaiting approval',
-                      catalog.pendingApplications.length,
-                      Icons.how_to_reg_outlined,
-                      Colors.orange,
-                      () => _go(4),
-                    ),
-                  ].map((card) => SizedBox(width: width, child: card)).toList(),
-                );
-              },
-            ),
-            const SizedBox(height: 26),
-            const Text(
-              'Needs attention',
-              style: TextStyle(
-                fontSize: 19,
-                fontWeight: FontWeight.w700,
-                color: AdminUi.ink,
-              ),
-            ),
-            const SizedBox(height: 12),
-            DashboardHover(
-              accent: AdminUi.accent,
-              lift: 0,
-              showBorder: false,
-              child: AdminPanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (catalog.pendingApplications.isNotEmpty) ...[
-                      _attention(
-                        Icons.person_add_alt_1_outlined,
-                        '${catalog.pendingApplications.length} instructor registration(s) awaiting review',
-                        'Approve or reject applications after reviewing their details.',
-                        () => _go(4),
-                      ),
-                      ...catalog.pendingApplications.entries
-                          .take(3)
-                          .map(
-                            (e) => DashboardHover(
-                              accent: AdminUi.accent,
-                              lift: 2,
-                              borderRadius: BorderRadius.circular(12),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.only(left: 42),
-                                title: Text(adminText(e.value['name'])),
-                                subtitle: Text(
-                                  adminText(e.value['universityId']),
-                                ),
-                                trailing: const Icon(Icons.chevron_right),
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        AdminInstructorApprovalsScreen(
-                                          applicationId: e.key,
-                                        ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                    ],
-                    if (ownershipIssues.isNotEmpty)
-                      _attention(
-                        Icons.person_off_outlined,
-                        '${ownershipIssues.length} active course(s) need an active instructor',
-                        ownershipIssues
-                            .take(3)
-                            .map((e) => adminText(e.value['code']))
-                            .join(' · '),
-                        () => _go(2),
-                      ),
-                    if (unverified > 0)
-                      _attention(
-                        Icons.mark_email_unread_outlined,
-                        '$unverified student account(s) awaiting email verification',
-                        'Review pending accounts in Users. Verification remains required.',
-                        () => _go(1),
-                      ),
-                    if (!catalog.loading &&
-                        catalog.error == null &&
-                        catalog.pendingApplications.isEmpty &&
-                        ownershipIssues.isEmpty &&
-                        unverified == 0)
-                      const AdminEmpty(
-                        title: 'No account or course issues found',
-                        message: 'Pending approvals, unverified accounts and course ownership issues will appear here.',
-                        icon: Icons.task_alt_rounded,
-                      ),
-                    if (catalog.loading)
-                      const Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Text('Checking accounts and courses…'),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            LayoutBuilder(
-              builder: (context, box) {
-                final panels = [_uploads(catalog), _activity()];
-                if (box.maxWidth < 900) {
-                  return Column(
-                    children: [
-                      panels[0],
-                      const SizedBox(height: 18),
-                      panels[1],
-                    ],
-                  );
-                }
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: panels[0]),
-                    const SizedBox(width: 18),
-                    Expanded(child: panels[1]),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 22),
-            _failedUploads(catalog),
-            const SizedBox(height: 22),
-            DashboardHover(
-              accent: AdminUi.accent,
-              lift: 0,
-              showBorder: false,
-              child: AdminPanel(
-                child: Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    DashboardHover(
-                      accent: AdminUi.accent,
-                      lift: 1.5,
-                      borderRadius: BorderRadius.circular(12),
-                      child: OutlinedButton.icon(
-                        onPressed: () => _go(8),
-                        icon: const Icon(Icons.analytics_outlined),
-                        label: const Text('System reports'),
-                      ),
-                    ),
-                    DashboardHover(
-                      accent: AdminUi.accent,
-                      lift: 1.5,
-                      borderRadius: BorderRadius.circular(12),
-                      child: OutlinedButton.icon(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const AdminAIGatewayScreen(),
-                          ),
-                        ),
-                        icon: const Icon(Icons.memory_outlined),
-                        label: const Text('AI processing monitor'),
-                      ),
-                    ),
-                    DashboardHover(
-                      accent: AdminUi.accent,
-                      lift: 1.5,
-                      borderRadius: BorderRadius.circular(12),
-                      child: OutlinedButton.icon(
-                        onPressed: () => _go(3),
-                        icon: const Icon(Icons.settings_outlined),
-                        label: const Text('Platform settings'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

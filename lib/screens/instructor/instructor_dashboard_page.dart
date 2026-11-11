@@ -15,6 +15,7 @@ import '../../services/instructor_course_service.dart';
 import 'instructor_announcements_page.dart';
 import 'instructor_class_details_page.dart';
 import 'instructor_create_course_page.dart';
+import 'instructor_quick_create_page.dart';
 
 class InstructorDashboardScreen extends StatefulWidget {
   final Function(int)? onNavigateToTab;
@@ -316,6 +317,15 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
     await _loadDashboard();
   }
 
+  Future<void> _quickCreate(InstructorCreateKind kind) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => InstructorQuickCreateScreen(kind: kind),
+      ),
+    );
+    if (mounted) await _loadDashboard();
+  }
+
   // ============================================================
   // OPEN COURSE
   // ============================================================
@@ -377,15 +387,8 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
   Widget build(BuildContext context) => instructorScaffold(
     loading: _isLoading,
     context: context,
-    title: 'Teaching overview',
-    subtitle: 'A clear view of your classroom.',
-    actions: [
-      IconButton(
-        tooltip: 'Refresh overview',
-        onPressed: _isLoading ? null : _loadDashboard,
-        icon: const Icon(Icons.refresh_rounded),
-      ),
-    ],
+    title: '',
+    showHeading: false,
     body: _isLoading
         ? const Center(child: CircularProgressIndicator())
         : _errorMessage != null
@@ -412,12 +415,18 @@ class _InstructorDashboardScreenState extends State<InstructorDashboardScreen> {
               padding: const EdgeInsets.fromLTRB(22, 4, 22, 32),
               child: InstructorDashboardContent(
                 name: _instructorName,
+                onRefresh: _loadDashboard,
                 enrollments: _activeStudentCount,
                 pending: _pendingGradingCount,
                 courseCount: _activeCourseCount,
                 courses: _dashboardCourses,
                 onCourse: _openCourse,
                 onCreate: _openCreateCourse,
+                onCreateModule: () => _quickCreate(InstructorCreateKind.module),
+                onCreateAssessment: () =>
+                    _quickCreate(InstructorCreateKind.assessment),
+                onCreateMaterial: () =>
+                    _quickCreate(InstructorCreateKind.material),
                 onCourses: () => widget.onNavigateToTab?.call(1),
                 onGrade: () => widget.onNavigateToTab?.call(2),
                 onAi: () => widget.onNavigateToTab?.call(6),

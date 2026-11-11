@@ -285,8 +285,14 @@ class InstructorDashboardContent extends StatelessWidget {
     required this.onCalendar,
     required this.onAnnouncements,
     required this.onHelp,
+    this.onRefresh,
+    this.onCreateModule,
+    this.onCreateAssessment,
+    this.onCreateMaterial,
   });
+  final VoidCallback? onRefresh;
   final String name;
+  final VoidCallback? onCreateModule, onCreateAssessment, onCreateMaterial;
   final int enrollments, pending, courseCount;
   final List<Map<String, dynamic>> courses;
   final ValueChanged<Map<String, dynamic>> onCourse;
@@ -303,13 +309,26 @@ class InstructorDashboardContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Welcome back, $name.',
-          style: const TextStyle(
-            fontSize: 25,
-            fontWeight: FontWeight.w700,
-            letterSpacing: -.6,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                'Welcome back, $name.',
+                style: const TextStyle(
+                  fontSize: 25,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -.6,
+                ),
+              ),
+            ),
+            if (onRefresh != null)
+              IconButton(
+                tooltip: 'Refresh overview',
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+          ],
         ),
         const SizedBox(height: 8),
         Text(
@@ -426,12 +445,68 @@ class InstructorDashboardContent extends StatelessWidget {
                     style: TextStyle(fontFamily: 'Roboto'),
                   ),
                 ),
-                FilledButton.tonalIcon(
-                  onPressed: onCreate,
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text(
-                    'Create course',
-                    style: TextStyle(fontFamily: 'Roboto'),
+                PopupMenuButton<String>(
+                  tooltip: 'Create course content',
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'course':
+                        onCreate();
+                        break;
+                      case 'module':
+                        onCreateModule?.call();
+                        break;
+                      case 'assessment':
+                        onCreateAssessment?.call();
+                        break;
+                      case 'material':
+                        onCreateMaterial?.call();
+                        break;
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'course',
+                      child: Text('Create course'),
+                    ),
+                    if (onCreateModule != null)
+                      const PopupMenuItem(
+                        value: 'module',
+                        child: Text('Create module'),
+                      ),
+                    if (onCreateAssessment != null)
+                      const PopupMenuItem(
+                        value: 'assessment',
+                        child: Text('Create assessment'),
+                      ),
+                    if (onCreateMaterial != null)
+                      const PopupMenuItem(
+                        value: 'material',
+                        child: Text('Add learning material'),
+                      ),
+                  ],
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.primary.withValues(alpha: .09),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.add_rounded,
+                          size: 18,
+                          color: colors.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('Create'),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.expand_more_rounded, size: 18),
+                      ],
+                    ),
                   ),
                 ),
               ],

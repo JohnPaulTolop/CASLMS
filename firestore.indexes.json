@@ -5,6 +5,33 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "sectionIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "resources",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sectionIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "courseId", "order": "ASCENDING" },
+        { "fieldPath": "moduleId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "assessments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sectionIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "sectionId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "modules",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sectionIds", "arrayConfig": "CONTAINS" },
         { "fieldPath": "courseId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]
@@ -14,6 +41,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "sectionIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "courseId", "order": "ASCENDING" },
         { "fieldPath": "moduleId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]
@@ -24,6 +52,17 @@
       "fields": [
         { "fieldPath": "sectionIds", "arrayConfig": "CONTAINS" },
         { "fieldPath": "courseId", "order": "ASCENDING" },
+        { "fieldPath": "sectionId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "assessments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sectionIds", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "courseId", "order": "ASCENDING" },
+        { "fieldPath": "moduleId", "order": "ASCENDING" },
         { "fieldPath": "sectionId", "order": "ASCENDING" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]

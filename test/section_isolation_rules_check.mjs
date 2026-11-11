@@ -45,10 +45,20 @@ async function expectStatus(path, method, data, uid, expected, label) {
 }
 
 await fetch(`http://${host}/emulator/v1/projects/${project}/databases/(default)/documents`, {method: 'DELETE'});
-for (const [uid, role] of [['teacher', 'instructor'], ['student4c', 'student'], ['student4d', 'student'],
-  ['archived', 'student'], ['removed', 'student']]) {
-  await seed(`users/${uid}`, {uid, role, status: 'active', email: `${uid}@example.com`});
+for (const [uid, role, status = 'active'] of [['teacher', 'instructor'], ['student4c', 'student'], ['student4d', 'student'],
+  ['archived', 'student'], ['removed', 'student'], ['legacy', 'Student', 'Active']]) {
+  await seed(`users/${uid}`, {uid, role, status, email: `${uid}@example.com`});
 }
+await seed('users/verifiedstudent', {
+  uid: 'verifiedstudent', role: 'student', status: 'active',
+  email: 'verifiedstudent@example.com', authEmail: '10001@caslms.app',
+  emailVerificationRequired: true,
+});
+await seed('users/mismatchedstudent', {
+  uid: 'mismatchedstudent', role: 'student', status: 'active',
+  email: 'different@example.com', authEmail: '10002@caslms.app',
+  emailVerificationRequired: true,
+});
 await seed('courses/course', {instructorId: 'teacher', status: 'active', classCode: '4C'});
 await seed('courseSections/4C', {courseId: 'course', instructorId: 'teacher', status: 'active', name: '4C'});
 await seed('courseSections/4D', {courseId: 'course', instructorId: 'teacher', status: 'active', name: '4D'});
@@ -57,6 +67,7 @@ await seed('enrollments/course_student4c', {courseId: 'course', studentId: 'stud
 await seed('enrollments/course_student4d', {courseId: 'course', studentId: 'student4d', sectionId: '4D', status: 'active'});
 await seed('enrollments/course_archived', {courseId: 'course', studentId: 'archived', sectionId: 'OLD', status: 'active'});
 await seed('enrollments/course_removed', {courseId: 'course', studentId: 'removed', sectionId: '4C', status: 'removed'});
+await seed('enrollments/course_legacy', {courseId: 'course', studentId: 'legacy', status: 'active'});
 await seed('modules/only4c', {courseId: 'course', title: '4C', status: 'published', sectionIds: ['4C']});
 await seed('modules/multiple', {courseId: 'course', title: 'Both', status: 'published', sectionIds: ['4C', '4D']});
 await seed('modules/all', {courseId: 'course', title: 'All', status: 'published', sectionIds: ['*']});
@@ -73,6 +84,7 @@ await expectStatus('modules/multiple', 'GET', undefined, 'student4d', 200, 'mult
 await expectStatus('modules/all', 'GET', undefined, 'student4d', 200, 'all sections includes 4D');
 await expectStatus('modules/draft', 'GET', undefined, 'student4c', 403, 'draft module hidden');
 await expectStatus('modules/legacy', 'GET', undefined, 'student4d', 200, 'legacy missing audience remains shared');
+await expectStatus('modules/only4c', 'GET', undefined, 'legacy', 200, 'legacy enrollment uses original class code');
 await expectStatus('moduleResources/resource4c', 'GET', undefined, 'student4c', 200, '4C reads child');
 await expectStatus('moduleResources/resource4c', 'GET', undefined, 'student4d', 403, '4D cannot read child by ID');
 await expectStatus('moduleResources/expanded', 'GET', undefined, 'student4d', 403, 'child cannot widen parent on read');
@@ -80,6 +92,10 @@ await expectStatus('assessments/single4d', 'GET', undefined, 'student4c', 403, '
 await expectStatus('assessments/single4d', 'GET', undefined, 'student4d', 200, 'existing sectionId allows 4D');
 await expectStatus('modules/all', 'GET', undefined, 'archived', 403, 'archived section is denied');
 await expectStatus('modules/all', 'GET', undefined, 'removed', 403, 'removed enrollment is denied');
+await expectStatus('courses/course', 'GET', undefined, 'verifiedstudent', 200,
+  'verified student may use current profile email when legacy authEmail is stale');
+await expectStatus('courses/course', 'GET', undefined, 'mismatchedstudent', 403,
+  'verified token email must still match a trusted profile email');
 
 await expectStatus('moduleResources/forged', 'PATCH', {
   courseId: 'course', moduleId: 'only4c', createdBy: 'teacher', status: 'published', sectionIds: ['4C', '4D'],
@@ -90,5 +106,42 @@ await expectStatus('modules/only4c', 'PATCH', {
 await expectStatus('modules/malformed', 'PATCH', {
   courseId: 'course', title: 'Bad', status: 'published', sectionIds: ['*', '4C'],
 }, 'teacher', 403, 'mixed wildcard audience rejected');
+
+async function materialQuery(courseId, expected, label) {
+  const filters = [{fieldFilter: {field: {fieldPath: 'moduleId'}, op: 'EQUAL', value: value('only4c')}}];
+  if (courseId !== null) filters.push({fieldFilter: {field: {fieldPath: 'courseId'}, op: 'EQUAL', value: value(courseId)}});
+  const response = await fetch(`${base}:runQuery`, {
+    method: 'POST', headers: {Authorization: `Bearer ${token('teacher')}`, 'Content-Type': 'application/json'},
+    body: JSON.stringify({structuredQuery: {from: [{collectionId: 'moduleResources'}],
+      where: filters.length === 1 ? filters[0] : {compositeFilter: {op: 'AND', filters}}}}),
+  });
+  assert.equal(response.status, expected, `${label}: ${await response.text()}`);
+  checks += 1;
+}
+await materialQuery(null, 403, 'module-only instructor query is denied by course ownership rules');
+await materialQuery('course', 200, 'course-and-module instructor query is authorized');
+await materialQuery('foreign-course', 403, 'foreign course query remains denied');
+
+async function studentMaterialQuery(includeCourseId, expected, label) {
+  const filters = [
+    {fieldFilter: {field: {fieldPath: 'moduleId'}, op: 'EQUAL', value: value('only4c')}},
+    {fieldFilter: {field: {fieldPath: 'status'}, op: 'EQUAL', value: value('published')}},
+    {fieldFilter: {field: {fieldPath: 'sectionIds'}, op: 'ARRAY_CONTAINS_ANY', value: value(['*', '4C'])}},
+  ];
+  if (includeCourseId) {
+    filters.push({fieldFilter: {field: {fieldPath: 'courseId'}, op: 'EQUAL', value: value('course')}});
+  }
+  const response = await fetch(`${base}:runQuery`, {
+    method: 'POST', headers: {Authorization: `Bearer ${token('student4c')}`, 'Content-Type': 'application/json'},
+    body: JSON.stringify({structuredQuery: {
+      from: [{collectionId: 'moduleResources'}],
+      where: {compositeFilter: {op: 'AND', filters}},
+    }}),
+  });
+  assert.equal(response.status, expected, `${label}: ${await response.text()}`);
+  checks += 1;
+}
+await studentMaterialQuery(false, 403, 'student material query requires course scope');
+await studentMaterialQuery(true, 200, 'student course-scoped material query is authorized');
 
 console.log(`Passed ${checks} section-isolation Firestore rule checks against the local emulator.`);

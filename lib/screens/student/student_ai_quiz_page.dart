@@ -1,6 +1,7 @@
 import '../shared/page_loading_state.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_theme.dart';
+import '../../services/course_content_paths.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -225,10 +226,11 @@ class _StudentAiQuizScreenState extends State<StudentAiQuizScreen> {
 
       _checkExistingSubmission(submission.data());
 
-      final assessmentDocument = await _firestore
-          .collection('assessments')
-          .doc(widget.assessmentId)
-          .get();
+      final assessmentDocument = await CourseContentPaths.assessments(
+        _firestore,
+        widget.courseId,
+        widget.moduleId,
+      ).doc(widget.assessmentId).get();
 
       final assessment = assessmentDocument.data();
       _validateAssessment(assessment);

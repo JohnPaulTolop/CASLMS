@@ -1,5 +1,7 @@
 import '../shared/page_loading_state.dart';
 import '../../core/app_colors.dart';
+import '../shared/workspace_widgets.dart';
+import '../shared/workspace_shell.dart';
 
 import 'dart:async';
 
@@ -18,14 +20,16 @@ class AdminCoursesScreen extends StatefulWidget {
 }
 
 class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
-  static const Color adminTheme = AppColors.primaryBlue;
-  static const Color background = AppColors.background;
-  static const Color textDark = AppColors.darkText;
-  static const Color textGrey = AppColors.secondaryText;
-  static const Color borderColor = AppColors.inputBorder;
-  static const Color green = AppColors.green;
-  static const Color orange = AppColors.amber;
-  static const Color red = AppColors.error;
+  Color get adminTheme => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
+  Color get surface => AppColors.resolve(context, Colors.white);
+  Color get green => AppColors.resolve(context, AppColors.green);
+  Color get orange => AppColors.resolve(context, AppColors.amber);
+  Color get red => AppColors.resolve(context, AppColors.error);
+  Color get blueTint => AppColors.resolve(context, AppColors.blueTint);
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -414,92 +418,62 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return const PageLoadingState();
+    final width = MediaQuery.sizeOf(context).width;
+    final inset = workspaceInset(width);
+
     return Scaffold(
       backgroundColor: background,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        backgroundColor: background,
-        elevation: 0,
-        titleSpacing: 24,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Course Administration',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
-                color: textDark,
-              ),
-            ),
-            Text(
-              'Live Courses & Enrollment',
-              style: TextStyle(
-                fontSize: 12,
-                color: textGrey,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            onPressed: _isBusy ? null : _exportCsv,
-            tooltip: 'Copy CSV',
-            icon: const Icon(Icons.download_rounded, color: textDark),
-          ),
-          IconButton(
-            onPressed: _isBusy ? null : _loadCourses,
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded, color: textDark),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
       body: SafeArea(
-        top: false,
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: _buildBody(),
+            constraints: const BoxConstraints(maxWidth: 1320),
+            child: WorkspaceScrollingBody(
+              header: Column(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(inset, 0, inset, 0),
+                    child: WorkspaceHeading(
+                      showEyebrow: false,
+                      title: 'Courses',
+                      subtitle: 'Live academic courses, assigned instructors, and student enrollment counts.',
+                      eyebrow: 'ADMINISTRATION',
+                      actions: [
+                        IconButton(
+                          onPressed: _isBusy ? null : _exportCsv,
+                          tooltip: 'Copy CSV',
+                          icon: Icon(Icons.download_rounded, color: textDark),
+                        ),
+                        IconButton(
+                          onPressed: _isBusy ? null : _loadCourses,
+                          tooltip: 'Refresh',
+                          icon: Icon(Icons.refresh_rounded, color: textDark),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
+              body: _buildBody(inset),
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(double inset) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: adminTheme));
+      return Center(child: CircularProgressIndicator(color: adminTheme));
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline_rounded, color: red, size: 50),
-              const SizedBox(height: 14),
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: textGrey, height: 1.45),
-              ),
-              const SizedBox(height: 18),
-              ElevatedButton.icon(
-                onPressed: _loadCourses,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: adminTheme,
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Try Again'),
-              ),
-            ],
-          ),
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: inset),
+        child: WorkspaceErrorState(
+          message: _errorMessage!,
+          onRetry: _loadCourses,
         ),
       );
     }
@@ -511,120 +485,136 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        padding: EdgeInsets.fromLTRB(inset, 0, inset, 40),
         children: [
           _buildMetrics(),
           const SizedBox(height: 20),
           _buildSearchAndFilter(),
           const SizedBox(height: 18),
           if (_filteredCourses.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 50),
-              child: Center(
-                child: Text(
-                  'No courses match this filter.',
-                  style: TextStyle(
-                    color: textGrey,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+            const WorkspaceEmptyState(
+              title: 'No courses match this filter.',
+              message: 'Try adjusting your search query or status filter.',
+              icon: Icons.menu_book_outlined,
             )
           else
-            ..._filteredCourses.map(_buildCourseCard),
+            ..._filteredCourses.asMap().entries.map(
+              (entry) => _buildCourseCard(entry.value, entry.key),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildMetrics() {
-    return Row(
-      children: [
-        Expanded(
-          child: _metricCard(
-            'Active',
-            '$_activeCourseCount',
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stats = [
+          (
             Icons.library_books_rounded,
+            '$_activeCourseCount',
+            'Active courses',
             adminTheme,
+            blueTint,
           ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _metricCard(
-            'Archived',
-            '$_archivedCourseCount',
+          (
             Icons.inventory_2_outlined,
+            '$_archivedCourseCount',
+            'Archived courses',
             orange,
+            AppColors.resolve(context, AppColors.amberTint),
           ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _metricCard(
-            'Enrollments',
-            '$_totalEnrollments',
+          (
             Icons.groups_rounded,
+            '$_totalEnrollments',
+            'Total enrollments',
             green,
+            AppColors.resolve(context, AppColors.greenTint),
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _metricCard(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 21),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(
-              color: textDark,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(
-              color: textGrey,
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
+        ];
+        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        final columns = constraints.maxWidth >= 760 * scale
+            ? 3
+            : constraints.maxWidth >= 380 * scale
+            ? 2
+            : 1;
+        const gap = 12.0;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final stat in stats)
+              SizedBox(
+                width: width,
+                child: WorkspaceSurface(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          WorkspaceIconTile(
+                            icon: stat.$1,
+                            color: stat.$4,
+                            background: stat.$5,
+                            size: 36,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              stat.$2,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -1,
+                                height: 1.1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        stat.$3,
+                        style: TextStyle(fontSize: 12, color: textGrey),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
   Widget _buildSearchAndFilter() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         TextField(
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
-          },
+          onChanged: (value) => setState(() => _searchQuery = value),
           decoration: InputDecoration(
             hintText: 'Search course, code, or instructor',
             prefixIcon: const Icon(Icons.search_rounded),
             filled: true,
-            fillColor: Colors.white,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: borderColor),
+            fillColor: surface,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
             ),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: borderColor),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: borderColor),
+            ),
           ),
         ),
-        const SizedBox(height: 11),
+        const SizedBox(height: 12),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
@@ -641,11 +631,14 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
                     color: selected ? adminTheme : textGrey,
                     fontWeight: FontWeight.w700,
                   ),
-                  onSelected: (_) {
-                    setState(() {
-                      _selectedStatusFilter = status;
-                    });
-                  },
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: selected ? adminTheme : borderColor,
+                    ),
+                  ),
+                  onSelected: (_) =>
+                      setState(() => _selectedStatusFilter = status),
                 ),
               );
             }).toList(),
@@ -655,93 +648,166 @@ class _AdminCoursesScreenState extends State<AdminCoursesScreen> {
     );
   }
 
-  Widget _buildCourseCard(Map<String, dynamic> course) {
+  Widget _buildCourseCard(Map<String, dynamic> course, int index) {
     final status = _courseStatus(course);
     final active = status == 'active';
+    final summary = courseSummary(course, index);
+    final accent = AppColors.resolve(context, summary.color);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 11),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-        leading: Container(
-          width: 48,
-          height: 48,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: (active ? adminTheme : Colors.grey).withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(13),
-          ),
-          child: Text(
-            _courseCode(course),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: active ? adminTheme : Colors.grey,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        title: Row(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: WorkspaceSurface(
+        padding: EdgeInsets.zero,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Text(
-                _courseTitle(course),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: textDark,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              height: 4,
               decoration: BoxDecoration(
-                color: (active ? green : orange).withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                _capitalize(status),
-                style: TextStyle(
-                  color: active ? green : orange,
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
+                color: active ? accent : textGrey.withValues(alpha: 0.4),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(20),
                 ),
               ),
             ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 5),
-          child: Text(
-            '${_courseCode(course)} • ${_instructorName(course)}\n'
-            'Class code: ${(course['classCode'] ?? 'Not set')} • '
-            '${(course['studentCount'] as num?)?.toInt() ?? 0} active student(s)',
-            style: const TextStyle(color: textGrey, fontSize: 11, height: 1.4),
-          ),
-        ),
-        trailing: PopupMenuButton<String>(
-          enabled: !_isBusy,
-          onSelected: (action) {
-            if (action == 'edit') {
-              _editCourse(course);
-            } else if (action == 'status') {
-              _toggleCourseStatus(course);
-            }
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'edit', child: Text('Edit Course')),
-            PopupMenuItem(
-              value: 'status',
-              child: Text(active ? 'Archive Course' : 'Reactivate Course'),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(summary.icon, color: accent, size: 22),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: accent.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                _courseCode(course),
+                                style: TextStyle(
+                                  color: accent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: (active ? green : orange).withValues(
+                                  alpha: 0.10,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                _capitalize(status),
+                                style: TextStyle(
+                                  color: active ? green : orange,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          _courseTitle(course),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: textDark,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              'Instructor: ${_instructorName(course)}',
+                              style: TextStyle(color: textGrey, fontSize: 12),
+                            ),
+                            Text(
+                              'Class code: ${course['classCode'] ?? 'Not set'}',
+                              style: TextStyle(color: textGrey, fontSize: 12),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.groups_outlined,
+                                  size: 14,
+                                  color: textGrey,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${(course['studentCount'] as num?)?.toInt() ?? 0} active students',
+                                  style: TextStyle(
+                                    color: textGrey,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  PopupMenuButton<String>(
+                    enabled: !_isBusy,
+                    icon: Icon(Icons.more_vert_rounded, color: textGrey),
+                    onSelected: (action) {
+                      if (action == 'edit') {
+                        _editCourse(course);
+                      } else if (action == 'status') {
+                        _toggleCourseStatus(course);
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Text('Edit course'),
+                      ),
+                      PopupMenuItem(
+                        value: 'status',
+                        child: Text(
+                          active ? 'Archive course' : 'Reactivate course',
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -846,9 +912,6 @@ class _AdminCourseEditDialog extends StatefulWidget {
 }
 
 class _AdminCourseEditDialogState extends State<_AdminCourseEditDialog> {
-  static const Color adminTheme = AppColors.primaryBlue;
-  static const Color textGrey = AppColors.secondaryText;
-
   late final TextEditingController _codeController;
   late final TextEditingController _titleController;
   late final TextEditingController _classCodeController;
@@ -909,10 +972,16 @@ class _AdminCourseEditDialogState extends State<_AdminCourseEditDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final surface = AppColors.resolve(context, Colors.white);
+    final textDark = AppColors.resolve(context, AppColors.darkText);
+    final textGrey = AppColors.resolve(context, AppColors.secondaryText);
+
     return AlertDialog(
-      title: const Text(
+      backgroundColor: surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(
         'Edit Course',
-        style: TextStyle(fontWeight: FontWeight.w700),
+        style: TextStyle(fontWeight: FontWeight.w700, color: textDark),
       ),
       content: SingleChildScrollView(
         child: Column(
@@ -960,7 +1029,7 @@ class _AdminCourseEditDialogState extends State<_AdminCourseEditDialog> {
                 },
               )
             else
-              const Text(
+              Text(
                 'No active instructors are available.',
                 style: TextStyle(color: textGrey),
               ),
@@ -972,12 +1041,8 @@ class _AdminCourseEditDialogState extends State<_AdminCourseEditDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
-        ElevatedButton(
+        FilledButton(
           onPressed: _instructors.isEmpty ? null : _save,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: adminTheme,
-            foregroundColor: Colors.white,
-          ),
           child: const Text('Save'),
         ),
       ],

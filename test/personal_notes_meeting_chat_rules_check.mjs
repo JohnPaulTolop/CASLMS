@@ -67,6 +67,15 @@ async function get(uid, path, expected, label) {
   assert.equal(response.status, expected, `${label}: ${await response.text()}`);
   checks += 1;
 }
+async function query(uid, parent, structuredQuery, expected, label) {
+  const response = await fetch(`${base}${parent ? `/${parent}` : ''}:runQuery`, {
+    method: 'POST',
+    headers: {Authorization: `Bearer ${token(uid)}`, 'Content-Type': 'application/json'},
+    body: JSON.stringify({structuredQuery}),
+  });
+  assert.equal(response.status, expected, `${label}: ${await response.text()}`);
+  checks += 1;
+}
 function create(path, data, timestampFields) {
   return {
     update: {name: `${database}/documents/${path}`, fields: fields(data)},
@@ -101,6 +110,12 @@ const notePath = 'users/student/personalNotes/note1';
 const note = {ownerId: 'student', title: 'My reminder', content: 'Review module three.'};
 await commit('student', [create(notePath, note, ['createdAt', 'updatedAt'])], 200, 'student creates own private note');
 await get('student', notePath, 200, 'owner reads private note');
+const orderedNotesQuery = {
+  from: [{collectionId: 'personalNotes'}],
+  orderBy: [{field: {fieldPath: 'updatedAt'}, direction: 'DESCENDING'}],
+};
+await query('student', 'users/student', orderedNotesQuery, 200, 'owner lists ordered private notes');
+await query('other', 'users/student', orderedNotesQuery, 403, 'other student cannot list private notes');
 await get('other', notePath, 403, 'other student cannot read private note');
 await get('teacher', notePath, 403, 'instructor cannot read private note');
 await get('admin', notePath, 403, 'administrator cannot read private note');

@@ -26,24 +26,29 @@ service cloud.firestore {
 
     function isActive() {
       return userExists() &&
-        currentUser().status == 'active' &&
+        currentUser().status in ['active', 'Active', 'ACTIVE'] &&
         (
           currentUser().get('emailVerificationRequired', false) != true ||
           (
             request.auth.token.get('email_verified', false) == true &&
-            request.auth.token.get('email', '') == currentUser().email
+            (
+              request.auth.token.get('email', '') ==
+                currentUser().get('authEmail', '') ||
+              request.auth.token.get('email', '') ==
+                currentUser().get('email', '')
+            )
           )
         );
     }
 
     function isStudent() {
       return isActive() &&
-        currentUser().role == 'student';
+        currentUser().role in ['student', 'Student', 'STUDENT'];
     }
 
     function isInstructor() {
       return isActive() &&
-        currentUser().role == 'instructor';
+        currentUser().role in ['instructor', 'Instructor', 'INSTRUCTOR'];
     }
 
     function validInvitedSection(courseId, sectionId) {
@@ -58,7 +63,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isActive() &&
-        currentUser().role == 'admin';
+        currentUser().role in ['admin', 'Admin', 'ADMIN'];
     }
 
     function isStaff() {
@@ -121,6 +126,14 @@ service cloud.firestore {
       ).data;
     }
 
+    // Enrollments created before section support did not persist sectionId.
+    // Their original course class code remains the canonical legacy section.
+    function activeEnrollmentSection(courseId) {
+      return activeEnrollment(courseId).get('sectionId', '') != ''
+        ? activeEnrollment(courseId).get('sectionId', '')
+        : get(/databases/$(database)/documents/courses/$(courseId)).data.classCode;
+    }
+
     function studentCanReadModuleData(data) {
       let enrollmentPath =
         /databases/$(database)/documents/enrollments/$(data.courseId + '_' + request.auth.uid);
@@ -133,9 +146,9 @@ service cloud.firestore {
         activeEnrollment(data.courseId).status == 'active' &&
         validInvitedSection(
           data.courseId,
-          activeEnrollment(data.courseId).get('sectionId', '')
+          activeEnrollmentSection(data.courseId)
         ) &&
-        audienceAllows(data, activeEnrollment(data.courseId).get('sectionId', ''));
+        audienceAllows(data, activeEnrollmentSection(data.courseId));
     }
 
     function childAudienceFitsModule(data) {
@@ -173,10 +186,10 @@ service cloud.firestore {
         activeEnrollment(data.courseId).status == 'active' &&
         validInvitedSection(
           data.courseId,
-          activeEnrollment(data.courseId).get('sectionId', '')
+          activeEnrollmentSection(data.courseId)
         ) &&
-        audienceAllows(module, activeEnrollment(data.courseId).get('sectionId', '')) &&
-        audienceAllows(data, activeEnrollment(data.courseId).get('sectionId', ''));
+        audienceAllows(module, activeEnrollmentSection(data.courseId)) &&
+        audienceAllows(data, activeEnrollmentSection(data.courseId));
     }
 
     function studentCanReadAssessmentData(data) {
@@ -184,7 +197,57 @@ service cloud.firestore {
         (
           data.get('sectionId', '') == '' ||
           data.get('sectionId', '') ==
-            activeEnrollment(data.courseId).get('sectionId', '')
+            activeEnrollmentSection(data.get('courseId', ''))
+        );
+    }
+
+    // Course-scoped reads keep courseId in the request path. This lets
+    // Firestore prove that every result belongs to one enrolled course instead
+    // of attempting to authorize a cross-course top-level collection query.
+    function scopedAudienceAllows(data, sectionId) {
+      return data.get('sectionIds', []).hasAny(['*', sectionId]);
+    }
+
+    function studentCanReadScopedModule(courseId, data) {
+      let enrollmentPath =
+        /databases/$(database)/documents/enrollments/$(courseId + '_' + request.auth.uid);
+      return isStudent() &&
+        data.get('courseId', '') == courseId &&
+        data.get('status', '') == 'published' &&
+        exists(enrollmentPath) &&
+        activeEnrollment(courseId).get('studentId', '') == request.auth.uid &&
+        activeEnrollment(courseId).get('courseId', '') == courseId &&
+        activeEnrollment(courseId).get('status', '') == 'active' &&
+        validInvitedSection(courseId, activeEnrollmentSection(courseId)) &&
+        scopedAudienceAllows(data, activeEnrollmentSection(courseId));
+    }
+
+    function studentCanReadScopedChild(courseId, moduleId, data) {
+      let module = get(
+        /databases/$(database)/documents/courses/$(courseId)/modules/$(moduleId)
+      ).data;
+      let enrollmentPath =
+        /databases/$(database)/documents/enrollments/$(courseId + '_' + request.auth.uid);
+      return isStudent() &&
+        data.get('courseId', '') == courseId &&
+        data.get('moduleId', '') == moduleId &&
+        data.get('status', '') in ['published', 'closed'] &&
+        module.get('courseId', '') == courseId &&
+        module.get('status', '') == 'published' &&
+        exists(enrollmentPath) &&
+        activeEnrollment(courseId).get('studentId', '') == request.auth.uid &&
+        activeEnrollment(courseId).get('courseId', '') == courseId &&
+        activeEnrollment(courseId).get('status', '') == 'active' &&
+        validInvitedSection(courseId, activeEnrollmentSection(courseId)) &&
+        scopedAudienceAllows(module, activeEnrollmentSection(courseId)) &&
+        scopedAudienceAllows(data, activeEnrollmentSection(courseId));
+    }
+
+    function studentCanReadScopedAssessment(courseId, moduleId, data) {
+      return studentCanReadScopedChild(courseId, moduleId, data) &&
+        (
+          data.get('sectionId', '') == '' ||
+          data.get('sectionId', '') == activeEnrollmentSection(courseId)
         );
     }
 
@@ -307,9 +370,15 @@ service cloud.firestore {
           data.content.size() <= 10000;
       }
 
-      allow get, list: if
+      // The owner path is already fixed by userId. Keeping the ownerId field
+      // check on single-document reads protects against malformed legacy data,
+      // while list access must be path-based so an ordered notes query can be
+      // authorized without an unnecessary ownerId filter.
+      allow get: if
         isNoteOwner() &&
         resource.data.ownerId == userId;
+
+      allow list: if isNoteOwner();
 
       allow create: if
         isNoteOwner() &&
@@ -384,6 +453,81 @@ service cloud.firestore {
         resource.data.instructorId ==
           request.auth.uid
       );
+
+      match /modules/{moduleId} {
+        allow get, list: if
+          canManageCourse(courseId) ||
+          studentCanReadScopedModule(courseId, resource.data);
+
+        allow create: if
+          canManageCourse(courseId) &&
+          request.resource.data.get('courseId', '') == courseId &&
+          validSectionAudience(request.resource.data);
+
+        allow update: if
+          canManageCourse(courseId) &&
+          resource.data.get('courseId', '') == courseId &&
+          request.resource.data.get('courseId', '') == courseId &&
+          validSectionAudience(request.resource.data);
+
+        allow delete: if canManageCourse(courseId);
+
+        match /resources/{resourceId} {
+          allow get, list: if
+            canManageCourse(courseId) ||
+            studentCanReadScopedChild(courseId, moduleId, resource.data);
+
+          allow create, update: if
+            canManageCourse(courseId) &&
+            request.resource.data.get('courseId', '') == courseId &&
+            request.resource.data.get('moduleId', '') == moduleId &&
+            childAudienceFitsModule(request.resource.data);
+
+          allow delete: if canManageCourse(courseId);
+        }
+
+        match /assessments/{assessmentId} {
+          allow get: if
+            canManageCourse(courseId) ||
+            studentCanReadScopedAssessment(courseId, moduleId, resource.data);
+
+          allow list: if
+            canManageCourse(courseId) ||
+            (
+              studentCanReadScopedAssessment(courseId, moduleId, resource.data) &&
+              resource.data.keys().hasAll(['sectionId']) &&
+              resource.data.sectionId is string
+            );
+
+          allow create, update: if
+            canManageCourse(courseId) &&
+            request.resource.data.get('courseId', '') == courseId &&
+            request.resource.data.get('moduleId', '') == moduleId &&
+            childAudienceFitsModule(request.resource.data);
+
+          allow delete: if canManageCourse(courseId);
+        }
+      }
+
+      match /calendarEvents/{eventId} {
+        allow get, list: if
+          resource.data.get('courseId', '') == courseId &&
+          (
+          canManageCourse(courseId) ||
+          (
+            isStudent() &&
+            exists(/databases/$(database)/documents/enrollments/$(courseId + '_' + request.auth.uid)) &&
+            activeEnrollment(courseId).get('studentId', '') == request.auth.uid &&
+            activeEnrollment(courseId).get('courseId', '') == courseId &&
+            activeEnrollment(courseId).get('status', '') == 'active'
+          ));
+
+        allow create, update: if
+          canManageCourse(courseId) &&
+          request.resource.data.get('courseId', '') == courseId;
+
+        allow delete: if canManageCourse(courseId);
+      }
     }
 
     // ============================================================
@@ -2652,7 +2796,10 @@ service cloud.firestore {
           data.sectionId is string && data.sectionId.size() > 0 &&
           data.sessionId is string && data.sessionId.size() > 0 &&
           data.senderId == request.auth.uid &&
-          data.senderRole == currentUser().role &&
+          (
+            (data.senderRole == 'student' && isStudent()) ||
+            (data.senderRole == 'instructor' && isInstructor())
+          ) &&
           data.senderName is string &&
           data.senderName.size() > 0 &&
           data.senderName.size() <= 100 &&
@@ -2721,7 +2868,11 @@ service cloud.firestore {
     match /activityLogs/{logId} {
       function validActor(data) {
         return isActive() && data.actorId == request.auth.uid &&
-          data.actorRole == currentUser().role &&
+          (
+            (data.actorRole == 'student' && isStudent()) ||
+            (data.actorRole == 'instructor' && isInstructor()) ||
+            (data.actorRole == 'admin' && isAdmin())
+          ) &&
           data.actorName == currentUser().get('name', '') &&
           data.createdAt == request.time;
       }
@@ -2751,6 +2902,112 @@ service cloud.firestore {
       allow create: if validActor(request.resource.data) &&
         (validSession(request.resource.data) || validSource(request.resource.data));
       allow update, delete: if false;
+    }
+
+    // ============================================================
+    // CALENDAR EVENTS
+    // ============================================================
+
+    match /calendarEvents/{eventId} {
+      function activeCalendarCourse(courseId) {
+        return courseId != '' && courseExists(courseId) &&
+          get(/databases/$(database)/documents/courses/$(courseId)).data.status == 'active';
+      }
+
+      function enrolledForCalendar(courseId) {
+        let path = /databases/$(database)/documents/enrollments/$(courseId + '_' + request.auth.uid);
+        return isStudent() && exists(path) &&
+          get(path).data.status == 'active' &&
+          get(path).data.courseId == courseId &&
+          get(path).data.studentId == request.auth.uid;
+      }
+
+      function calendarEventReadable(data) {
+        return isActive() &&
+          (
+            isAdmin() ||
+            data.courseId == '' ||
+            (
+              activeCalendarCourse(data.courseId) &&
+              (ownsCourse(data.courseId) || enrolledForCalendar(data.courseId))
+            )
+          );
+      }
+
+      function validCalendarEvent(data) {
+        return data.keys().hasOnly([
+            'title',
+            'description',
+            'courseId',
+            'startAt',
+            'endAt',
+            'allDay',
+            'ownerId',
+            'creatorRole',
+            'createdAt',
+            'updatedAt'
+          ]) &&
+          data.keys().hasAll([
+            'title',
+            'description',
+            'courseId',
+            'startAt',
+            'endAt',
+            'allDay',
+            'ownerId',
+            'creatorRole',
+            'createdAt',
+            'updatedAt'
+          ]) &&
+          data.title is string && data.title.size() > 0 && data.title.size() <= 120 &&
+          data.description is string && data.description.size() <= 1000 &&
+          data.courseId is string &&
+          data.startAt is timestamp && data.endAt is timestamp &&
+          data.endAt >= data.startAt &&
+          data.endAt - data.startAt <= duration.value(31, 'd') &&
+          data.allDay is bool &&
+          data.ownerId is string &&
+          data.creatorRole in ['admin', 'instructor'] &&
+          data.createdAt is timestamp &&
+          data.updatedAt == request.time &&
+          (
+            (isAdmin() && (data.courseId == '' || activeCalendarCourse(data.courseId))) ||
+            (isInstructor() && activeCalendarCourse(data.courseId) && ownsCourse(data.courseId))
+          );
+      }
+
+      allow get, list: if calendarEventReadable(resource.data);
+
+      allow create: if
+        validCalendarEvent(request.resource.data) &&
+        request.resource.data.ownerId == request.auth.uid &&
+        (
+          (isAdmin() && request.resource.data.creatorRole == 'admin') ||
+          (isInstructor() && request.resource.data.creatorRole == 'instructor')
+        ) &&
+        request.resource.data.createdAt == request.time;
+
+      allow update: if
+        validCalendarEvent(request.resource.data) &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        request.resource.data.creatorRole == resource.data.creatorRole &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        (
+          isAdmin() ||
+          (
+            isInstructor() &&
+            resource.data.ownerId == request.auth.uid &&
+            ownsCourse(resource.data.courseId)
+          )
+        );
+
+      allow delete: if
+        isAdmin() ||
+        (
+          isInstructor() &&
+          resource.data.ownerId == request.auth.uid &&
+          ownsCourse(resource.data.courseId)
+        );
     }
 
     // ============================================================

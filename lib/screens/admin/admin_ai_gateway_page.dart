@@ -1,5 +1,8 @@
 import '../shared/page_loading_state.dart';
 import '../../core/app_colors.dart';
+import '../shared/aligned_page_app_bar.dart';
+import '../shared/workspace_widgets.dart';
+import '../shared/workspace_shell.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -12,14 +15,15 @@ class AdminAIGatewayScreen extends StatefulWidget {
 }
 
 class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
-  static const Color adminTheme = Colors.deepPurple;
-  static const Color background = AppColors.background;
-  static const Color textDark = AppColors.darkText;
-  static const Color textGrey = AppColors.secondaryText;
-  static const Color borderColor = AppColors.inputBorder;
-  static const Color green = AppColors.green;
-  static const Color orange = AppColors.amber;
-  static const Color red = AppColors.error;
+  Color get adminTheme => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
+  Color get surface => AppColors.resolve(context, Colors.white);
+  Color get green => AppColors.resolve(context, AppColors.green);
+  Color get orange => AppColors.resolve(context, AppColors.amber);
+  Color get red => AppColors.resolve(context, AppColors.error);
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
@@ -219,82 +223,76 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return const PageLoadingState();
+    final width = MediaQuery.sizeOf(context).width;
+    final inset = workspaceInset(width);
+
     return Scaffold(
       backgroundColor: background,
-      appBar: AppBar(
-        backgroundColor: background,
-        elevation: 0,
-        foregroundColor: textDark,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'AI Service Gateway',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-            ),
-            Text(
-              'Multi-provider routing monitoring',
-              style: TextStyle(
-                fontSize: 12,
-                color: textGrey,
-                fontWeight: FontWeight.w600,
+      appBar: AlignedPageAppBar(
+        maxWidth: 1320,
+        inset: inset,
+        child: AppBar(
+          backgroundColor: background,
+          elevation: 0,
+          foregroundColor: textDark,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'AI Service Gateway',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  color: textDark,
+                ),
               ),
+              Text(
+                'Multi-provider routing monitoring',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: textGrey,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            IconButton(
+              onPressed: _isLoading ? null : _loadAiStatus,
+              tooltip: 'Refresh',
+              icon: Icon(Icons.refresh_rounded, color: textDark),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            onPressed: _isLoading ? null : _loadAiStatus,
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: SafeArea(
         top: false,
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: _buildBody(),
+            constraints: const BoxConstraints(maxWidth: 1320),
+            child: _buildBody(inset),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(double inset) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: adminTheme));
+      return Center(child: CircularProgressIndicator(color: adminTheme));
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline_rounded, color: red, size: 50),
-              const SizedBox(height: 14),
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: textGrey, height: 1.45),
-              ),
-              const SizedBox(height: 18),
-              ElevatedButton.icon(
-                onPressed: _loadAiStatus,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: adminTheme,
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Try Again'),
-              ),
-            ],
-          ),
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: inset),
+        child: WorkspaceErrorState(
+          message: _errorMessage!,
+          onRetry: _loadAiStatus,
         ),
       );
     }
@@ -306,36 +304,34 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        padding: EdgeInsets.fromLTRB(inset, 16, inset, 40),
         children: [
           _buildSecurityBanner(),
           const SizedBox(height: 18),
           _buildModelCard(),
-          const SizedBox(height: 18),
+          const SizedBox(height: 24),
+          const WorkspaceSectionHeading(
+            title: 'Routing Metrics',
+            subtitle: 'Aggregate calls, errors, rate limits, and failovers.',
+          ),
+          const SizedBox(height: 14),
           _buildRouterMetrics(),
-          const SizedBox(height: 18),
+          const SizedBox(height: 28),
           _buildProviderHealth(),
           const SizedBox(height: 28),
-          const Text(
-            'Learning Material AI Activity',
-            style: TextStyle(
-              color: textDark,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-            ),
+          const WorkspaceSectionHeading(
+            title: 'Learning Material AI Activity',
+            subtitle: 'Aggregate processing pipeline status across uploaded learning resources.',
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           _buildMetrics(),
           const SizedBox(height: 28),
-          const Text(
-            'Recent Material AI Activity',
-            style: TextStyle(
-              color: textDark,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-            ),
+          const WorkspaceSectionHeading(
+            title: 'Recent Material AI Activity',
+            subtitle:
+                'Detailed chronological log of material processing events.',
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           if (_activities.isEmpty)
             _buildEmptyActivity()
           else
@@ -346,22 +342,36 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
   }
 
   Widget _buildSecurityBanner() {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: adminTheme.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: adminTheme.withValues(alpha: 0.18)),
-      ),
-      child: const Row(
+    return WorkspaceSurface(
+      padding: const EdgeInsets.all(16),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.security_rounded, color: adminTheme),
-          SizedBox(width: 11),
+          WorkspaceIconTile(
+            icon: Icons.shield_outlined,
+            color: adminTheme,
+            background: adminTheme.withValues(alpha: 0.12),
+            size: 40,
+          ),
+          const SizedBox(width: 14),
           Expanded(
-            child: Text(
-              'CASLMS never exposes or edits provider API keys here. AI credentials and routing configuration remain in Supabase Edge Function secrets, outside the Flutter client.',
-              style: TextStyle(color: textDark, fontSize: 11.5, height: 1.45),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Client Security Boundary',
+                  style: TextStyle(
+                    color: textDark,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'CASLMS never exposes or edits provider API keys here. AI credentials and routing configuration remain in Supabase Edge Function secrets, outside the Flutter client.',
+                  style: TextStyle(color: textGrey, fontSize: 12, height: 1.45),
+                ),
+              ],
             ),
           ),
         ],
@@ -370,54 +380,57 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
   }
 
   Widget _buildModelCard() {
-    return Container(
-      padding: const EdgeInsets.all(17),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-      ),
+    return WorkspaceSurface(
+      padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(11),
-            decoration: BoxDecoration(
-              color: adminTheme.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.auto_awesome_rounded, color: adminTheme),
+          WorkspaceIconTile(
+            icon: Icons.auto_awesome_rounded,
+            color: adminTheme,
+            background: adminTheme.withValues(alpha: 0.12),
+            size: 44,
           ),
-          const SizedBox(width: 13),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Observed Provider Models',
+                Text(
+                  'OBSERVED PROVIDER MODELS',
                   style: TextStyle(
                     color: textGrey,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 4),
                 Text(
                   _model,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: textDark,
-                    fontSize: 14,
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
             ),
           ),
-          const Text(
-            'Secure server routing',
-            style: TextStyle(
-              color: adminTheme,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
+          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: adminTheme.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: adminTheme.withValues(alpha: 0.25)),
+            ),
+            child: Text(
+              'Server routing',
+              style: TextStyle(
+                color: adminTheme,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -426,44 +439,43 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
   }
 
   Widget _buildRouterMetrics() {
-    return Row(
-      children: [
-        Expanded(
-          child: _metric(
-            'AI Success',
-            _routerSuccess,
-            Icons.check_circle_outline_rounded,
-            green,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _metric(
-            'Failures',
-            _routerFailures,
-            Icons.error_outline_rounded,
-            red,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _metric(
-            'Rate Limits',
-            _routerRateLimits,
-            Icons.speed_rounded,
-            orange,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _metric(
-            'Failovers',
-            _routerFailovers,
-            Icons.alt_route_rounded,
-            Colors.blue,
-          ),
-        ),
-      ],
+    final cards = [
+      _metric(
+        'AI Success',
+        _routerSuccess,
+        Icons.check_circle_outline_rounded,
+        green,
+      ),
+      _metric('Failures', _routerFailures, Icons.error_outline_rounded, red),
+      _metric('Rate Limits', _routerRateLimits, Icons.speed_rounded, orange),
+      _metric(
+        'Failovers',
+        _routerFailovers,
+        Icons.alt_route_rounded,
+        Colors.blue,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 900
+            ? 4
+            : constraints.maxWidth >= 520
+            ? 2
+            : 1;
+
+        const spacing = 12.0;
+        final width =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: cards
+              .map((card) => SizedBox(width: width, child: card))
+              .toList(),
+        );
+      },
     );
   }
 
@@ -471,28 +483,16 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Provider Health',
-          style: TextStyle(
-            color: textDark,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-          ),
+        const WorkspaceSectionHeading(
+          title: 'Provider Health',
+          subtitle: 'Runtime telemetry for routed AI model endpoints.',
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         if (_providerStates.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: borderColor),
-            ),
-            child: const Text(
-              'No provider attempt has been recorded yet. Provider cards appear after the first routed AI request.',
-              style: TextStyle(color: textGrey, fontSize: 11.5, height: 1.4),
-            ),
+          const WorkspaceEmptyState(
+            title: 'No provider attempts',
+            message: 'No provider attempt has been recorded yet. Provider cards appear after the first routed AI request.',
+            icon: Icons.hub_outlined,
           )
         else
           LayoutBuilder(
@@ -502,11 +502,12 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
                   : constraints.maxWidth >= 580
                   ? 2
                   : 1;
+              const spacing = 12.0;
               final width =
-                  (constraints.maxWidth - (columns - 1) * 10) / columns;
+                  (constraints.maxWidth - (columns - 1) * spacing) / columns;
               return Wrap(
-                spacing: 10,
-                runSpacing: 10,
+                spacing: spacing,
+                runSpacing: spacing,
                 children: _providerStates
                     .map(
                       (provider) => SizedBox(
@@ -545,13 +546,8 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
         (item['approximateOutputTokens'] as num?)?.toInt() ?? 0;
     final cost = (item['estimatedCostUsd'] as num?)?.toDouble() ?? 0;
 
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: borderColor),
-      ),
+    return WorkspaceSurface(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -566,39 +562,46 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
               Expanded(
                 child: Text(
                   _capitalize(provider),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: textDark,
                     fontWeight: FontWeight.w700,
-                    fontSize: 13,
+                    fontSize: 14,
                   ),
                 ),
               ),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 9.5,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 10,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 7),
+          const SizedBox(height: 8),
           Text(
             model,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: textGrey, fontSize: 10.5),
+            style: TextStyle(color: textGrey, fontSize: 11),
           ),
-          const SizedBox(height: 11),
+          const SizedBox(height: 12),
           Text(
-            '$successes successful  •  $failures failed  •  ${averageLatency}ms average',
-            style: const TextStyle(color: textDark, fontSize: 10.5),
+            '$successes successful  •  $failures failed  •  ${averageLatency}ms avg',
+            style: TextStyle(color: textDark, fontSize: 11),
           ),
           const SizedBox(height: 4),
           Text(
-            'Approx. ${inputTokens + outputTokens} tokens  •  \$${cost.toStringAsFixed(4)} configured cost',
-            style: const TextStyle(color: textGrey, fontSize: 9.5),
+            'Approx. ${inputTokens + outputTokens} tokens  •  \$${cost.toStringAsFixed(4)} cost',
+            style: TextStyle(color: textGrey, fontSize: 10),
           ),
         ],
       ),
@@ -606,63 +609,74 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
   }
 
   Widget _buildMetrics() {
-    return Row(
-      children: [
-        Expanded(
-          child: _metric(
-            'Eligible',
-            _eligible,
-            Icons.description_outlined,
-            Colors.blue,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _metric(
-            'Ready',
-            _ready,
-            Icons.check_circle_outline_rounded,
-            green,
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _metric('Pending', _pending, Icons.schedule_rounded, orange),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _metric('Failed', _failed, Icons.error_outline_rounded, red),
-        ),
-      ],
+    final cards = [
+      _metric('Eligible', _eligible, Icons.description_outlined, Colors.blue),
+      _metric('Ready', _ready, Icons.check_circle_outline_rounded, green),
+      _metric('Pending', _pending, Icons.schedule_rounded, orange),
+      _metric('Failed', _failed, Icons.error_outline_rounded, red),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 900
+            ? 4
+            : constraints.maxWidth >= 520
+            ? 2
+            : 1;
+
+        const spacing = 12.0;
+        final width =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
+
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: cards
+              .map((card) => SizedBox(width: width, child: card))
+              .toList(),
+        );
+      },
     );
   }
 
   Widget _metric(String label, int value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
+    return WorkspaceSurface(
+      padding: const EdgeInsets.all(16),
+      child: Row(
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 5),
-          Text(
-            '$value',
-            style: const TextStyle(
-              color: textDark,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
+          WorkspaceIconTile(
+            icon: icon,
+            color: color,
+            background: color.withValues(alpha: 0.12),
+            size: 44,
           ),
-          Text(
-            label,
-            style: const TextStyle(
-              color: textGrey,
-              fontSize: 9.5,
-              fontWeight: FontWeight.w600,
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$value',
+                  style: TextStyle(
+                    color: textDark,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: textGrey,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ],
@@ -686,90 +700,86 @@ class _AdminAIGatewayScreenState extends State<AdminAIGatewayScreen> {
         .toString();
 
     final creatorName = (item['creatorName'] ?? 'Instructor').toString();
+    final relativeTime = _formatTimestamp(item['activityTimestamp']);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(9),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              status == 'ready'
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: WorkspaceSurface(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            WorkspaceIconTile(
+              icon: status == 'ready'
                   ? Icons.auto_awesome_rounded
                   : status == 'failed'
                   ? Icons.error_outline_rounded
                   : Icons.schedule_rounded,
               color: color,
-              size: 19,
+              background: color.withValues(alpha: 0.10),
+              size: 40,
             ),
-          ),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  fileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: textDark,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    fileName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: textDark,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
                   ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '$creatorName • '
+                    '${status.isEmpty ? 'AI Eligible' : _capitalize(status)}',
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (relativeTime != 'No timestamp') ...[
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  '$creatorName • '
-                  '${status.isEmpty ? 'AI Eligible' : _capitalize(status)}',
+                decoration: BoxDecoration(
+                  color: background,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Text(
+                  relativeTime,
                   style: TextStyle(
-                    color: color,
-                    fontSize: 10.5,
+                    color: textGrey,
+                    fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  _formatTimestamp(item['activityTimestamp']),
-                  style: const TextStyle(color: textGrey, fontSize: 10),
-                ),
-              ],
-            ),
-          ),
-        ],
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildEmptyActivity() {
-    return Container(
-      padding: EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.all(Radius.circular(16)),
-      ),
-      child: Column(
-        children: [
-          Icon(Icons.auto_awesome_outlined, color: textGrey, size: 32),
-          SizedBox(height: 9),
-          Text(
-            'No AI material activity has been recorded yet.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: textGrey),
-          ),
-        ],
-      ),
+    return const WorkspaceEmptyState(
+      title: 'No AI material activity',
+      message: 'No AI material activity has been recorded yet.',
+      icon: Icons.auto_awesome_outlined,
     );
   }
 

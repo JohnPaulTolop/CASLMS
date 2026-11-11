@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/calendar_entry.dart';
+import 'course_content_paths.dart';
 import 'enrollment_service.dart';
 import 'student_assessment_query_service.dart';
 import 'section_audience_service.dart';
@@ -44,9 +45,17 @@ class CalendarService {
                 .get(const GetOptions(source: Source.server)))
             .data();
     _check(id);
+    final profileRole = (profile?['role'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    final profileStatus = (profile?['status'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
     if (!['student', 'instructor', 'admin'].contains(role) ||
-        profile?['role'] != role ||
-        profile?['status'] != 'active') {
+        profileRole != role ||
+        profileStatus != 'active') {
       throw StateError('An active account is required.');
     }
     return id;
@@ -70,8 +79,16 @@ class CalendarService {
     _check(id);
     final entries = <CalendarEntry>[];
     Future<void> readEvents(String? courseId) async {
-      Query<Map<String, dynamic>> query = _db.collection('calendarEvents');
-      if (courseId != null) {
+      Query<Map<String, dynamic>> query;
+      if (role == 'student' && courseId != null && courseId.isNotEmpty) {
+        query = CourseContentPaths.calendarEvents(
+          _db,
+          courseId,
+        ).where('courseId', isEqualTo: courseId);
+      } else {
+        query = _db.collection('calendarEvents');
+      }
+      if (courseId != null && !(role == 'student' && courseId.isNotEmpty)) {
         query = query.where('courseId', isEqualTo: courseId);
       }
       final docs = await query.get(const GetOptions(source: Source.server));
@@ -138,8 +155,7 @@ class CalendarService {
           final enrollment = await SectionAudienceService(firestore: _db)
               .requireActiveEnrollment(courseId: courseId, studentId: id);
           final sectionId = (enrollment['sectionId'] ?? '').toString().trim();
-          modules = await _db
-              .collection('modules')
+          modules = await CourseContentPaths.modules(_db, courseId)
               .where('courseId', isEqualTo: courseId)
               .where('status', isEqualTo: 'published')
               .where(
@@ -325,14 +341,47 @@ class CalendarService {
       'updatedAt': FieldValue.serverTimestamp(),
     };
     if (existing == null) {
-      await _db.collection('calendarEvents').add({
+      final document = _db.collection('calendarEvents').doc();
+      final createData = <String, dynamic>{
         ...data,
         'ownerId': id,
         'creatorRole': role,
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      };
+      final batch = _db.batch()..set(document, createData);
+      if (courseId.isNotEmpty) {
+        batch.set(
+          CourseContentPaths.calendarEvents(_db, courseId).doc(document.id),
+          createData,
+        );
+      }
+      await batch.commit();
     } else {
-      await _db.collection('calendarEvents').doc(existing.id).update(data);
+      final document = _db.collection('calendarEvents').doc(existing.id);
+      final current = await document.get(
+        const GetOptions(source: Source.server),
+      );
+      final currentData = current.data() ?? <String, dynamic>{};
+      final batch = _db.batch()..update(document, data);
+      if (courseId.isNotEmpty) {
+        batch.set(
+          CourseContentPaths.calendarEvents(_db, courseId).doc(existing.id),
+          {...currentData, ...data},
+          SetOptions(merge: true),
+        );
+      }
+      final previousCourseId = (currentData['courseId'] ?? existing.courseId)
+          .toString()
+          .trim();
+      if (previousCourseId.isNotEmpty && previousCourseId != courseId) {
+        batch.delete(
+          CourseContentPaths.calendarEvents(
+            _db,
+            previousCourseId,
+          ).doc(existing.id),
+        );
+      }
+      await batch.commit();
     }
   }
 
@@ -354,6 +403,13 @@ class CalendarService {
     if (role != 'admin' && (role != 'instructor' || event.ownerId != id)) {
       throw StateError('You cannot delete this event.');
     }
-    await _db.collection('calendarEvents').doc(event.id).delete();
+    final batch = _db.batch()
+      ..delete(_db.collection('calendarEvents').doc(event.id));
+    if (event.courseId.isNotEmpty) {
+      batch.delete(
+        CourseContentPaths.calendarEvents(_db, event.courseId).doc(event.id),
+      );
+    }
+    await batch.commit();
   }
 }

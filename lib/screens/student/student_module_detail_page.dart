@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../services/assessment_submission_service.dart';
+import '../../services/course_content_paths.dart';
 import '../../services/student_assessment_query_service.dart';
 import '../../services/learning_material_service.dart';
 import '../../services/section_audience_service.dart';
@@ -196,7 +197,7 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
       if (enrollmentStatus != 'active') {
         throw Exception('Your enrollment in this course is not active.');
       }
-      final sectionId = (enrollmentDocument.data()!['sectionId'] ?? '')
+      var sectionId = (enrollmentDocument.data()!['sectionId'] ?? '')
           .toString()
           .trim();
 
@@ -221,13 +222,20 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
       if (courseStatus != 'active') {
         throw Exception('This course is not currently active.');
       }
+      if (sectionId.isEmpty) {
+        sectionId = (courseData['classCode'] ?? '').toString().trim();
+      }
 
       // ----------------------------------------------------------
       // MODULE
       // ----------------------------------------------------------
 
       final DocumentSnapshot<Map<String, dynamic>> moduleDocument =
-          await _firestore.collection('modules').doc(widget.moduleId).get();
+          await CourseContentPaths.module(
+            _firestore,
+            widget.courseId,
+            widget.moduleId,
+          ).get();
 
       if (!moduleDocument.exists || moduleDocument.data() == null) {
         throw Exception('Module could not be found.');
@@ -323,8 +331,12 @@ class _StudentModuleDetailScreenState extends State<StudentModuleDetailScreen>
       // ----------------------------------------------------------
 
       final QuerySnapshot<Map<String, dynamic>> resourceSnapshot =
-          await _firestore
-              .collection('moduleResources')
+          await CourseContentPaths.resources(
+                _firestore,
+                widget.courseId,
+                widget.moduleId,
+              )
+              .where('courseId', isEqualTo: widget.courseId)
               .where('moduleId', isEqualTo: widget.moduleId)
               .where('status', isEqualTo: 'published')
               .where(

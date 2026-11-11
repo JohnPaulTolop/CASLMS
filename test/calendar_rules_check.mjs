@@ -42,10 +42,11 @@ async function query(uid,courseId,status) {
   const response = await fetch(`${base}:runQuery`,{method:'POST',headers:{Authorization:`Bearer ${token(uid)}`,'Content-Type':'application/json'},body:JSON.stringify({structuredQuery})});
   assert.equal(response.status,status,await response.text()); checks++;
 }
-for (const [uid,role,status] of [['admin','admin','active'],['teacher','instructor','active'],['other','instructor','active'],['student','student','active'],['foreign','student','active'],['inactive','instructor','inactive']]) await seed(`users/${uid}`,{role,status});
+for (const [uid,role,status] of [['admin','admin','active'],['teacher','instructor','active'],['other','instructor','active'],['student','student','active'],['foreign','student','active'],['legacy','Student','Active'],['inactive','instructor','inactive']]) await seed(`users/${uid}`,{role,status});
 await seed('courses/course',{instructorId:'teacher',status:'active'});
 await seed('courses/foreign',{instructorId:'other',status:'active'});
 await seed('enrollments/course_student',{courseId:'course',studentId:'student',status:'active'});
+await seed('enrollments/course_legacy',{courseId:'course',studentId:'legacy',status:'active'});
 await seed('enrollments/foreign_foreign',{courseId:'foreign',studentId:'foreign',status:'active'});
 const event = {title:'Class workshop',description:'Bring your notes',courseId:'course',ownerId:'teacher',creatorRole:'instructor',allDay:false,startAt:new Date('2026-11-06T01:00:00Z'),endAt:new Date('2026-11-06T02:00:00Z')};
 await commit('teacher',[create('owned',event)],200,'Owner creates class event');
@@ -56,6 +57,7 @@ await commit('inactive',[create('inactive',{...event,ownerId:'inactive'})],403,'
 await commit('admin',[create('schoolwide',{...event,courseId:'',ownerId:'admin',creatorRole:'admin'})],200,'Admin publishes schoolwide');
 await commit('other',[create('other-event',{...event,courseId:'foreign',ownerId:'other'})],200,'Other teacher publishes own course');
 await get('student','owned',200); await get('student','schoolwide',200); await get('student','other-event',403);
+await get('legacy','owned',200); await query('legacy','course',200);
 await get('teacher','other-event',403); await get('foreign','owned',403); await get('admin','other-event',200);
 await query('student','',200); await query('student','course',200); await query('student','foreign',403); await query('student',null,403); await query('admin',null,200);
 await commit('teacher',[update('owned',{title:'Updated workshop'})],200,'Owner edits event');

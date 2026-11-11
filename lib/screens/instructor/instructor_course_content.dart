@@ -51,7 +51,7 @@ class _InstructorCourseContentState extends State<InstructorCourseContent>
       children: [
         if (widget.sectionScoped) ...[
           Text(
-            'Module content is shared across all sections.',
+            'Showing modules assigned to this section, including shared modules.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),

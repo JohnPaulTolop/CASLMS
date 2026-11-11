@@ -557,13 +557,13 @@ class WorkspaceSectionHeading extends StatelessWidget {
     super.key,
     required this.title,
     required this.subtitle,
-    required this.action,
-    required this.onAction,
+    this.action,
+    this.onAction,
   });
   final String title;
   final String subtitle;
-  final String action;
-  final VoidCallback onAction;
+  final String? action;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -589,9 +589,12 @@ class WorkspaceSectionHeading extends StatelessWidget {
           ),
         ],
       );
+      if (action == null || onAction == null) {
+        return heading;
+      }
       final button = TextButton.icon(
         onPressed: onAction,
-        label: Text(action),
+        label: Text(action!),
         icon: const Icon(Icons.arrow_forward_rounded, size: 15),
         iconAlignment: IconAlignment.end,
       );

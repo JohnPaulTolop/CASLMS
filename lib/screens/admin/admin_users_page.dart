@@ -1,6 +1,8 @@
 import '../shared/page_loading_state.dart';
 import '../../core/app_colors.dart';
 import '../../services/admin_catalog.dart';
+import '../shared/workspace_widgets.dart';
+import '../shared/workspace_shell.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -18,14 +20,17 @@ class AdminUsersScreen extends StatefulWidget {
 }
 
 class _AdminUsersScreenState extends State<AdminUsersScreen> {
-  static const Color adminTheme = AppColors.primaryBlue;
-  static const Color background = AppColors.background;
-  static const Color textDark = AppColors.darkText;
-  static const Color textGrey = AppColors.secondaryText;
-  static const Color borderColor = AppColors.inputBorder;
-  static const Color green = AppColors.green;
-  static const Color red = AppColors.error;
-  static const Color orange = AppColors.amber;
+  Color get adminTheme => AppColors.resolve(context, AppColors.primaryBlue);
+  Color get background => AppColors.resolve(context, AppColors.background);
+  Color get textDark => AppColors.resolve(context, AppColors.darkText);
+  Color get textGrey => AppColors.resolve(context, AppColors.secondaryText);
+  Color get borderColor => AppColors.resolve(context, AppColors.inputBorder);
+  Color get surface => AppColors.resolve(context, Colors.white);
+  Color get green => AppColors.resolve(context, AppColors.green);
+  Color get red => AppColors.resolve(context, AppColors.error);
+  Color get orange => AppColors.resolve(context, AppColors.amber);
+  Color get purple => AppColors.resolve(context, AppColors.purple);
+  Color get blueTint => AppColors.resolve(context, AppColors.blueTint);
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -247,9 +252,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-          title: const Text(
+          backgroundColor: surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Text(
             'Edit User',
-            style: TextStyle(fontWeight: FontWeight.w700),
+            style: TextStyle(fontWeight: FontWeight.w700, color: textDark),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -296,7 +305,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                     labelText: 'Campus ID',
                     helperText: 'Campus ID, role, and Firebase auth email are protected.',
                   ),
-                  child: Text(_campusId(user)),
+                  child: Text(
+                    _campusId(user),
+                    style: TextStyle(color: textDark),
+                  ),
                 ),
               ],
             ),
@@ -310,7 +322,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
               },
               child: const Text('Cancel'),
             ),
-            ElevatedButton(
+            FilledButton(
               onPressed: () {
                 FocusScope.of(dialogContext).unfocus();
 
@@ -321,10 +333,6 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   'course': newCourse,
                 });
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: adminTheme,
-                foregroundColor: Colors.white,
-              ),
               child: const Text('Save'),
             ),
           ],
@@ -449,9 +457,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 22,
                 MediaQuery.of(context).viewInsets.bottom + 24,
               ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(28),
                   topRight: Radius.circular(28),
                 ),
@@ -461,7 +469,18 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: borderColor,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Text(
                       'Provision User Account',
                       style: TextStyle(
                         color: textDark,
@@ -470,11 +489,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       'Creates a real Firebase Authentication account and Firestore profile.',
                       style: TextStyle(
                         color: textGrey,
-                        fontSize: 11.5,
+                        fontSize: 12,
                         height: 1.4,
                       ),
                     ),
@@ -549,8 +568,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                     const SizedBox(height: 20),
                     SizedBox(
                       width: double.infinity,
-                      height: 52,
-                      child: ElevatedButton(
+                      height: 50,
+                      child: FilledButton(
                         onPressed: () {
                           Navigator.pop(sheetContext, <String, String>{
                             'name': nameController.text,
@@ -562,10 +581,6 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                             'role': selectedRole,
                           });
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: adminTheme,
-                          foregroundColor: Colors.white,
-                        ),
                         child: const Text(
                           'Create Account',
                           style: TextStyle(fontWeight: FontWeight.w700),
@@ -788,101 +803,70 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) return const PageLoadingState();
+    final width = MediaQuery.sizeOf(context).width;
+    final inset = workspaceInset(width);
+
     return Scaffold(
       backgroundColor: background,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        backgroundColor: background,
-        elevation: 0,
-        titleSpacing: 24,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'User Management',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
-                color: textDark,
-              ),
-            ),
-            Text(
-              'Firebase Authentication & Firestore Profiles',
-              style: TextStyle(
-                fontSize: 12,
-                color: textGrey,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            onPressed: _isBusy ? null : _exportCsv,
-            tooltip: 'Copy CSV',
-            icon: const Icon(Icons.download_rounded, color: textDark),
-          ),
-          IconButton(
-            onPressed: _isBusy ? null : _loadUsers,
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded, color: textDark),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      floatingActionButton: _isLoading
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _isBusy ? null : _showCreateUserModal,
-              backgroundColor: adminTheme,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.person_add_alt_1_rounded),
-              label: const Text('Create User'),
-            ),
       body: SafeArea(
-        top: false,
         child: Align(
           alignment: Alignment.topCenter,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: _buildBody(),
+            constraints: const BoxConstraints(maxWidth: 1320),
+            child: WorkspaceScrollingBody(
+              header: Column(
+                children: [
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(inset, 0, inset, 0),
+                    child: WorkspaceHeading(
+                      showEyebrow: false,
+                      title: 'Users',
+                      subtitle: 'Manage student, instructor, and administrator accounts.',
+                      eyebrow: 'ADMINISTRATION',
+                      actions: [
+                        FilledButton.icon(
+                          onPressed: _isBusy ? null : _showCreateUserModal,
+                          icon: const Icon(
+                            Icons.person_add_alt_1_rounded,
+                            size: 18,
+                          ),
+                          label: const Text('Create user'),
+                        ),
+                        IconButton(
+                          onPressed: _isBusy ? null : _exportCsv,
+                          tooltip: 'Copy CSV',
+                          icon: Icon(Icons.download_rounded, color: textDark),
+                        ),
+                        IconButton(
+                          onPressed: _isBusy ? null : _loadUsers,
+                          tooltip: 'Refresh',
+                          icon: Icon(Icons.refresh_rounded, color: textDark),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
+              body: _buildBody(inset),
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(double inset) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: adminTheme));
+      return Center(child: CircularProgressIndicator(color: adminTheme));
     }
 
     if (_errorMessage != null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline_rounded, color: red, size: 50),
-              const SizedBox(height: 14),
-              Text(
-                _errorMessage!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: textGrey, height: 1.45),
-              ),
-              const SizedBox(height: 18),
-              ElevatedButton.icon(
-                onPressed: _loadUsers,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: adminTheme,
-                  foregroundColor: Colors.white,
-                ),
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Try Again'),
-              ),
-            ],
-          ),
+      return Padding(
+        padding: EdgeInsets.symmetric(horizontal: inset),
+        child: WorkspaceErrorState(
+          message: _errorMessage!,
+          onRetry: _loadUsers,
         ),
       );
     }
@@ -894,24 +878,17 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 100),
+        padding: EdgeInsets.fromLTRB(inset, 0, inset, 100),
         children: [
           _buildMetrics(),
           const SizedBox(height: 20),
           _buildSearchAndFilter(),
           const SizedBox(height: 18),
           if (_filteredUsers.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 50),
-              child: Center(
-                child: Text(
-                  'No users match this filter.',
-                  style: TextStyle(
-                    color: textGrey,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+            const WorkspaceEmptyState(
+              title: 'No users match this filter.',
+              message: 'Try adjusting your search query or role filter.',
+              icon: Icons.person_search_outlined,
             )
           else
             ..._filteredUsers.map(_buildUserCard),
@@ -921,102 +898,121 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   Widget _buildMetrics() {
-    return Row(
-      children: [
-        Expanded(
-          child: _metricCard(
-            'Total',
-            '${_users.length}',
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final stats = [
+          (
             Icons.groups_rounded,
+            '${_users.length}',
+            'Total users',
             adminTheme,
+            blueTint,
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _metricCard(
-            'Active',
-            '$_activeUsers',
+          (
             Icons.verified_user_rounded,
+            '$_activeUsers',
+            'Active accounts',
             green,
+            AppColors.resolve(context, AppColors.greenTint),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _metricCard(
-            'Students',
-            '$_studentCount',
+          (
             Icons.school_rounded,
+            '$_studentCount',
+            'Students',
             Colors.blue,
+            blueTint,
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _metricCard(
-            'Faculty',
-            '$_instructorCount',
+          (
             Icons.badge_rounded,
-            Colors.teal,
+            '$_instructorCount',
+            'Faculty',
+            purple,
+            AppColors.resolve(context, AppColors.purpleTint),
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _metricCard(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 5),
-          Text(
-            value,
-            style: const TextStyle(
-              color: textDark,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(
-              color: textGrey,
-              fontSize: 9.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
+        ];
+        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        final columns = constraints.maxWidth >= 760 * scale
+            ? 4
+            : constraints.maxWidth >= 380 * scale
+            ? 2
+            : 1;
+        const gap = 12.0;
+        final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final stat in stats)
+              SizedBox(
+                width: width,
+                child: WorkspaceSurface(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          WorkspaceIconTile(
+                            icon: stat.$1,
+                            color: stat.$4,
+                            background: stat.$5,
+                            size: 36,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              stat.$2,
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -1,
+                                height: 1.1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        stat.$3,
+                        style: TextStyle(fontSize: 12, color: textGrey),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
   Widget _buildSearchAndFilter() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         TextField(
-          onChanged: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
-          },
+          onChanged: (value) => setState(() => _searchQuery = value),
           decoration: InputDecoration(
             hintText: 'Search name, Campus ID, or email',
             prefixIcon: const Icon(Icons.search_rounded),
             filled: true,
-            fillColor: Colors.white,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: borderColor),
+            fillColor: surface,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
             ),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: borderColor),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: borderColor),
+            ),
           ),
         ),
-        const SizedBox(height: 11),
+        const SizedBox(height: 12),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
@@ -1033,11 +1029,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                     color: selected ? adminTheme : textGrey,
                     fontWeight: FontWeight.w700,
                   ),
-                  onSelected: (_) {
-                    setState(() {
-                      _selectedRoleFilter = role;
-                    });
-                  },
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: selected ? adminTheme : borderColor,
+                    ),
+                  ),
+                  onSelected: (_) => setState(() => _selectedRoleFilter = role),
                 ),
               );
             }).toList(),
@@ -1053,85 +1051,139 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     final active = status == 'active';
 
     final Color roleColor = role == 'admin'
-        ? Colors.deepPurple
+        ? purple
         : role == 'instructor'
         ? Colors.teal
-        : Colors.blue;
+        : adminTheme;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 11),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(
-          backgroundColor: roleColor.withValues(alpha: 0.10),
-          child: Text(
-            _initials(_displayName(user)),
-            style: TextStyle(
-              color: roleColor,
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-            ),
-          ),
-        ),
-        title: Row(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: WorkspaceSurface(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: roleColor.withValues(alpha: 0.12),
               child: Text(
-                _displayName(user),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: textDark,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              decoration: BoxDecoration(
-                color: (active ? green : orange).withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                _capitalize(status),
+                _initials(_displayName(user)),
                 style: TextStyle(
-                  color: active ? green : orange,
-                  fontSize: 9.5,
+                  color: roleColor,
                   fontWeight: FontWeight.w700,
+                  fontSize: 13,
                 ),
               ),
             ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 5),
-          child: Text(
-            '${_capitalize(role)} • ${_campusId(user)}\n'
-            '${_contactEmail(user)}\n'
-            'Last login: ${_formatTimestamp(user['lastLoginAt'])}',
-            style: const TextStyle(color: textGrey, fontSize: 11, height: 1.4),
-          ),
-        ),
-        trailing: PopupMenuButton<String>(
-          enabled: !_isBusy,
-          onSelected: (action) {
-            if (action == 'edit') {
-              _editUser(user);
-            } else if (action == 'status') {
-              _toggleStatus(user);
-            }
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'edit', child: Text('Edit User')),
-            PopupMenuItem(
-              value: 'status',
-              child: Text(active ? 'Suspend Account' : 'Reactivate Account'),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _displayName(user),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: textDark,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: (active ? green : orange).withValues(
+                            alpha: 0.10,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _capitalize(status),
+                          style: TextStyle(
+                            color: active ? green : orange,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: roleColor.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _capitalize(role),
+                          style: TextStyle(
+                            color: roleColor,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Campus ID: ${_campusId(user)}  •  ${_contactEmail(user)}',
+                    style: TextStyle(color: textGrey, fontSize: 12),
+                  ),
+                  if ((user['department'] ?? '').toString().isNotEmpty ||
+                      (user['course'] ?? '').toString().isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      [
+                        if ((user['department'] ?? '').toString().isNotEmpty)
+                          user['department'].toString(),
+                        if ((user['course'] ?? '').toString().isNotEmpty)
+                          user['course'].toString(),
+                      ].join(' · '),
+                      style: TextStyle(color: textGrey, fontSize: 11.5),
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Text(
+                    'Last login: ${_formatTimestamp(user['lastLoginAt'])}',
+                    style: TextStyle(
+                      color: textGrey.withValues(alpha: 0.8),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            PopupMenuButton<String>(
+              enabled: !_isBusy,
+              icon: Icon(Icons.more_vert_rounded, color: textGrey),
+              onSelected: (action) {
+                if (action == 'edit') {
+                  _editUser(user);
+                } else if (action == 'status') {
+                  _toggleStatus(user);
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'edit', child: Text('Edit profile')),
+                PopupMenuItem(
+                  value: 'status',
+                  child: Text(
+                    active ? 'Suspend account' : 'Reactivate account',
+                  ),
+                ),
+              ],
             ),
           ],
         ),

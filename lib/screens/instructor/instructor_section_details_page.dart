@@ -1,3 +1,4 @@
+import '../../services/section_audience_service.dart';
 import '../shared/page_loading_state.dart';
 import '../shared/aligned_page_app_bar.dart';
 import '../../core/app_colors.dart';
@@ -177,6 +178,12 @@ class _InstructorSectionDetailsScreenState
 
     final modules = moduleDocuments.docs
         .map((doc) => <String, dynamic>{...doc.data(), 'id': doc.id})
+        .where(
+          (module) => SectionAudienceService.visibleInInstructorSection(
+            module,
+            widget.sectionId,
+          ),
+        )
         .toList();
 
     modules.sort(
@@ -189,12 +196,23 @@ class _InstructorSectionDetailsScreenState
         .map((doc) => <String, dynamic>{...doc.data(), 'id': doc.id})
         .toList();
 
-    final assessments = allAssessments
-        .where((data) => _text(data['sectionId']) == widget.sectionId)
-        .toList();
+    final assessments = SectionAudienceService.filterInstructorChildren(
+      allAssessments,
+      modules,
+      widget.sectionId,
+    );
 
-    final courseWideCount = allAssessments
-        .where((data) => _text(data['sectionId']).isEmpty)
+    final courseWideCount = assessments
+        .where(
+          (data) =>
+              _text(data['sectionId']).isEmpty &&
+              SectionAudienceService.stored(data).contains('*') &&
+              modules.any(
+                (module) =>
+                    module['id'] == data['moduleId'] &&
+                    SectionAudienceService.stored(module).contains('*'),
+              ),
+        )
         .length;
 
     final sectionAssessmentIds = assessments
@@ -1092,7 +1110,7 @@ class _InstructorSectionDetailsScreenState
             children: [
               _sectionHeading(
                 'Learning modules',
-                'Course materials shared across all sections.',
+                'Modules assigned to this section, including shared modules.',
               ),
               const SizedBox(height: 14),
               Container(
@@ -1113,7 +1131,7 @@ class _InstructorSectionDetailsScreenState
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Modules belong to the course rather than an individual section. Changes to shared course modules may affect other sections.',
+                        'A module can serve one or more sections. Changes affect every section assigned to that module.',
                         style: TextStyle(
                           color: Color(0xFF385B7A),
                           fontSize: 12,
@@ -1247,7 +1265,7 @@ class _InstructorSectionDetailsScreenState
                             ),
                             const SizedBox(height: 5),
                             const Text(
-                              'These assessments are shared across sections and are not included in the section-specific assessment list.',
+                              'Shared assessments available to this section are included in the list above.',
                               style: TextStyle(
                                 color: Color(0xFF8A713D),
                                 fontSize: 12,

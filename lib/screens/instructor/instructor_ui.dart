@@ -57,9 +57,10 @@ Widget instructorScaffold({
   String subtitle = '',
   List<Widget>? actions,
   bool loading = false,
+  bool showHeading = true,
 }) {
   if (loading) return const PageLoadingState();
-  final page = title == null
+  final page = title == null || !showHeading
       ? body
       : WorkspaceScrollingBody(
           header: Padding(
